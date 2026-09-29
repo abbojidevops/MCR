@@ -5,6 +5,16 @@ export const metadata: Metadata = {
   title: 'MCR — Missed Call Revenue Recovery for Local Service Businesses',
   description:
     'Turn missed customer calls into booked service jobs automatically with instant SMS text-back and trade-specific qualification.',
+  manifest: '/manifest.json',
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'MCR',
+  },
 };
 
 export default function RootLayout({

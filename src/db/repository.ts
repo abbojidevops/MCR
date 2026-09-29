@@ -126,6 +126,11 @@ class DatabaseRepository {
     }
   }
 
+  public resetDatabase(): void {
+    this.state = this.getInitialState();
+    this.saveToFile();
+  }
+
   // --------------------------------------------------------------------------
   // Multi-Tenant Isolation Enforcer
   // --------------------------------------------------------------------------

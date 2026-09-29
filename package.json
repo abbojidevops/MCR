@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "npx tsx --test tests/mcr.test.ts",
-    "demo": "npx tsx scripts/demo-walkthrough.ts"
+    "demo": "npx tsx scripts/demo-walkthrough.ts",
+    "db:reset": "npx tsx scripts/db-reset.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
