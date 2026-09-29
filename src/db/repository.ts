@@ -542,6 +542,25 @@ class DatabaseRepository {
     return job;
   }
 
+  public updateJob(accountId: string, jobId: string, updates: Partial<JobCard>): JobCard {
+    const job = this.state.jobs.find((j) => j.id === jobId && j.account_id === accountId);
+    if (!job) throw new Error(`Job ${jobId} not found for account ${accountId}`);
+
+    const now = new Date().toISOString();
+    Object.assign(job, updates, { updated_at: now });
+
+    if (updates.status === 'CONTACTED' && !job.contacted_time) {
+      job.contacted_time = now;
+    } else if (updates.status === 'BOOKED' && !job.booked_time) {
+      job.booked_time = now;
+    } else if (updates.status === 'DEAD' && !job.dead_time) {
+      job.dead_time = now;
+    }
+
+    this.saveToFile();
+    return job;
+  }
+
   // --------------------------------------------------------------------------
   // Suppression & Opt-Out
   // --------------------------------------------------------------------------
@@ -676,6 +695,10 @@ class DatabaseRepository {
   // --------------------------------------------------------------------------
   // Subscriptions & Usage
   // --------------------------------------------------------------------------
+  public getPlans(): SubscriptionPlan[] {
+    return this.state.plans;
+  }
+
   public getSubscription(accountId: string): { subscription?: Subscription; plan?: SubscriptionPlan; usage?: UsageRecord } {
     const subscription = this.state.subscriptions.find((s) => s.account_id === accountId);
     const plan = subscription ? this.state.plans.find((p) => p.id === subscription.plan_id) : undefined;

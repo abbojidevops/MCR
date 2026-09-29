@@ -311,30 +311,81 @@ export default function JobsPage() {
               </div>
             )}
 
-            {/* Revenue / Actual Value input */}
-            <div className="mt-4 flex items-center gap-3">
-              <div className="flex-1 text-xs">
-                <label className="block font-semibold text-slate-700">Actual Revenue Booked ($):</label>
-                <input
-                  type="number"
-                  value={actualValueInput}
-                  onChange={(e) => setActualValueInput(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs shadow-sm focus:border-blue-500 focus:outline-none"
-                  placeholder="e.g. 450"
-                />
+            {/* Section 15: Revenue Tracking & Distinction */}
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
+              <span className="font-bold text-xs text-emerald-950 uppercase tracking-wider">Revenue Attribution</span>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
+                  <span className="text-slate-500 block text-[10px]">Estimated Job Value:</span>
+                  <span className="text-base font-bold text-slate-800">${selectedJob.estimated_value || 0}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
+                  <span className="text-emerald-700 block text-[10px] font-bold">Confirmed Actual Revenue:</span>
+                  <span className="text-base font-black text-emerald-600">
+                    ${selectedJob.actual_value !== undefined ? selectedJob.actual_value : '—'}
+                  </span>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const val = parseFloat(actualValueInput);
-                  if (!isNaN(val)) {
-                    handleStatusChange(selectedJob.id, selectedJob.status, val);
-                  }
-                }}
-                className="mt-5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Save Value
-              </button>
+
+              {/* Value Input */}
+              <div className="flex items-center gap-2 pt-1">
+                <div className="flex-1">
+                  <input
+                    type="number"
+                    value={actualValueInput}
+                    onChange={(e) => setActualValueInput(e.target.value)}
+                    placeholder={`Enter actual invoice value (e.g. ${selectedJob.estimated_value || 450})`}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = parseFloat(actualValueInput);
+                    if (!isNaN(val)) {
+                      handleStatusChange(selectedJob.id, selectedJob.status, val);
+                    }
+                  }}
+                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 text-xs shadow-sm transition"
+                >
+                  Save Revenue
+                </button>
+              </div>
+            </div>
+
+            {/* Section 14: Activity Timeline */}
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2.5">
+              <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Recovery Activity Timeline:</span>
+              <div className="space-y-2 text-[11px] text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                  <span><strong>Missed Call:</strong> Received &amp; forwarded via carrier code ({new Date(selectedJob.created_at).toLocaleTimeString()})</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span><strong>Auto Text-Back:</strong> Dispatched in &lt;30 seconds</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                  <span><strong>Customer Responded:</strong> Problem &amp; service address captured</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                  <span><strong>Owner Notified:</strong> Lead alert SMS pushed to contractor phone</span>
+                </div>
+                {selectedJob.contacted_time && (
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                    <span><strong>Contacted:</strong> Technician contacted customer ({new Date(selectedJob.contacted_time).toLocaleTimeString()})</span>
+                  </div>
+                )}
+                {selectedJob.booked_time && (
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+                    <span><strong>Job Booked:</strong> Confirmed on schedule ({new Date(selectedJob.booked_time).toLocaleTimeString()})</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Quick Actions */}

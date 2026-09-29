@@ -16,11 +16,15 @@ import {
   ChevronRight,
   TrendingUp,
   Sparkles,
+  PhoneMissed,
+  MapPin,
+  Flame,
+  Check,
 } from 'lucide-react';
 
 export default function LandingPage() {
   // ROI Calculator State
-  const [avgJobValue, setAvgJobValue] = useState<number>(450);
+  const [avgJobValue, setAvgJobValue] = useState<number>(650);
   const [missedCallsPerMonth, setMissedCallsPerMonth] = useState<number>(35);
   const [recoveryRate, setRecoveryRate] = useState<number>(25);
 
@@ -29,27 +33,47 @@ export default function LandingPage() {
   const mcrSubscription = 149;
   const roiMultiplier = Math.round(potentialRecoveredRevenue / mcrSubscription);
 
+  const targetTrades = [
+    'Plumbers',
+    'HVAC Technicians',
+    'Electricians',
+    'Roofers',
+    'Garage Door Pros',
+    'Locksmiths',
+    'Appliance Repair',
+    'Landscaping',
+    'Pest Control',
+  ];
+
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {/* ---------------- TOP TRUST BANNER ---------------- */}
+      <div className="bg-slate-900 px-4 py-2 text-center text-xs font-medium text-slate-300 sm:px-6">
+        <span className="inline-flex items-center gap-2">
+          <span className="flex h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span>Works with your existing carrier (Verizon, AT&amp;T, T-Mobile) • Setup in under 10 minutes</span>
+        </span>
+      </div>
+
       {/* ---------------- NAVIGATION ---------------- */}
       <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
               <PhoneCall className="h-5 w-5" />
             </div>
             <div>
-              <span className="text-xl font-bold tracking-tight text-slate-900">MCR</span>
+              <span className="text-xl font-extrabold tracking-tight text-slate-900">MCR</span>
               <span className="ml-1.5 hidden text-xs font-semibold uppercase tracking-wider text-blue-600 sm:inline">
                 Missed Call Recovery
               </span>
             </div>
           </div>
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
-            <a href="#problem" className="hover:text-blue-600">The Problem</a>
+          <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">
+            <a href="#propositions" className="hover:text-blue-600">Why MCR</a>
             <a href="#how-it-works" className="hover:text-blue-600">How It Works</a>
-            <a href="#demo" className="hover:text-blue-600">Live Demo</a>
+            <a href="#example-flow" className="hover:text-blue-600">Live Example</a>
             <a href="#calculator" className="hover:text-blue-600">ROI Calculator</a>
             <a href="#pricing" className="hover:text-blue-600">Pricing</a>
           </nav>
@@ -57,13 +81,13 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/dashboard"
-              className="rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
               Demo Dashboard
             </Link>
             <Link
               href="/onboarding"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 transition"
             >
               Start Free Trial <ArrowRight className="h-4 w-4" />
             </Link>
@@ -71,115 +95,162 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* ---------------- HERO SECTION ---------------- */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/50 via-white to-white py-16 sm:py-24">
+      {/* ---------------- HERO SECTION (SECTION 22 & 23) ---------------- */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/60 via-white to-white py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid items-center gap-12 lg:grid-cols-12">
             <div className="lg:col-span-7">
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+              {/* Target Trades Badge */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/80 px-3.5 py-1 text-xs font-semibold text-blue-700">
                 <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
-                Built for Plumbers, HVAC, Electricians & Home Services
+                Built specifically for Trade &amp; Home Service Businesses
               </div>
 
+              {/* Exact Section 22 Headline */}
               <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-                Turn Missed Calls Into <span className="text-blue-600">More Jobs.</span>
+                TURN MISSED CALLS INTO <span className="text-blue-600">MORE JOBS.</span>
               </h1>
 
+              {/* Exact Section 22 Subheadline */}
               <p className="mt-6 text-lg leading-relaxed text-slate-600 sm:text-xl">
-                When you can&apos;t answer the phone, automatically follow up with the caller in under 60 seconds, collect
-                the job details and photos, and put the qualified opportunity directly into your hands.
+                When you can&apos;t answer the phone, MCR automatically follows up with the caller in under 60 seconds,
+                collects the job details, and puts the qualified opportunity into your hands.
               </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Link
-                  href="/onboarding"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-semibold text-white shadow-md hover:bg-blue-700"
-                >
-                  Start Recovering Missed Calls <ArrowRight className="h-5 w-5" />
-                </Link>
-                <a
-                  href="#demo"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3.5 text-base font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  See How It Works
-                </a>
+              {/* Target Trades Pill List */}
+              <div className="mt-6 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+                <span className="font-semibold text-slate-900">For:</span>
+                {targetTrades.map((trade) => (
+                  <span
+                    key={trade}
+                    className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700"
+                  >
+                    {trade}
+                  </span>
+                ))}
               </div>
 
-              <div className="mt-10 flex flex-wrap items-center gap-6 text-xs text-slate-500">
+              {/* Section 22 Primary CTA */}
+              <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition"
+                >
+                  START RECOVERING MISSED CALLS <ArrowRight className="h-5 w-5" />
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-4 text-base font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  View Live Demo Dashboard
+                </Link>
+              </div>
+
+              {/* Section 26 Social Proof & Trust Badges */}
+              <div className="mt-10 grid grid-cols-2 gap-3 text-xs text-slate-600 sm:grid-cols-4">
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  <span>Works with your existing cell phone</span>
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>Works with existing phone</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
                   <span>No carrier switch needed</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" />
-                  <span>14-day free trial</span>
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>TCPA &amp; 10DLC compliant</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>Setup in under 10 min</span>
                 </div>
               </div>
             </div>
 
-            {/* Visual Hero Preview Card */}
-            <div className="lg:col-span-5">
-              <div className="relative mx-auto max-w-sm rounded-3xl border border-slate-800 bg-slate-900 p-4 shadow-2xl">
+            {/* Visual Phone Mockup / Section 25 Preview */}
+            <div className="lg:col-span-5" id="example-flow">
+              <div className="relative mx-auto max-w-sm rounded-3xl border-4 border-slate-800 bg-slate-900 p-4 shadow-2xl">
+                {/* Phone Header */}
                 <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-3 text-xs text-slate-400">
                   <div className="flex items-center gap-2">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="font-medium text-slate-200">MCR Live Call Intercept</span>
+                    <span className="font-semibold text-slate-200">MCR Instant Follow-up</span>
                   </div>
-                  <span>Just now</span>
+                  <span className="font-mono text-[11px] text-slate-400">2:14 PM</span>
                 </div>
 
-                {/* Simulated SMS Thread */}
+                {/* Section 25 Exact Realistic SMS Thread */}
                 <div className="space-y-3 rounded-2xl bg-slate-950 p-4 text-xs font-sans">
-                  <div className="rounded-lg bg-red-950/40 border border-red-800/50 p-2.5 text-red-200">
-                    <div className="font-semibold text-red-400 flex items-center gap-1">
-                      <PhoneCall className="h-3.5 w-3.5" /> Missed Call Detected (Unanswered)
+                  {/* Missed Call Notice */}
+                  <div className="rounded-xl bg-red-950/40 border border-red-800/40 p-2.5 text-red-200">
+                    <div className="font-bold text-red-400 flex items-center gap-1.5">
+                      <PhoneMissed className="h-4 w-4" /> Missed Call Detected (Unanswered)
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">Caller: (217) 555-9821 • Duration: 18s</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Caller: (217) 555-0143 • Unanswered after 4 rings
+                    </div>
                   </div>
 
+                  {/* Auto-SMS 1 */}
                   <div className="flex flex-col items-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-blue-600 p-2.5 text-white">
-                      Apex Plumbing — sorry we missed your call! Are you contacting us about a plumbing emergency?
+                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
+                      Hi, this is Apex Plumbing. Sorry we missed your call! What can we help you with today?
                     </div>
-                    <span className="mt-1 text-[10px] text-slate-500">Sent 42s after call</span>
+                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:14 PM (42s later)</span>
                   </div>
 
+                  {/* Customer Response 1 */}
                   <div className="flex flex-col items-start">
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800 p-2.5 text-slate-200">
-                      Yes! My water heater is leaking all over the basement floor.
+                    <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-100 leading-snug">
+                      Water heater is leaking in the basement, need someone today if possible
                     </div>
-                    <span className="mt-1 text-[10px] text-slate-500">Customer replied</span>
+                    <span className="mt-1 text-[10px] text-slate-400">Customer • 2:15 PM</span>
                   </div>
 
+                  {/* Auto-SMS 2 */}
                   <div className="flex flex-col items-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-blue-600 p-2.5 text-white">
-                      Understood, prioritizing this. What is the service address?
+                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
+                      We can help with that. Is water actively leaking right now? And what&apos;s your address?
                     </div>
+                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:15 PM</span>
                   </div>
 
+                  {/* Customer Response 2 */}
                   <div className="flex flex-col items-start">
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-slate-800 p-2.5 text-slate-200">
-                      123 Main Street, Springfield.
+                    <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-100 leading-snug">
+                      Yes, shut off the valve but there&apos;s standing water. 742 Evergreen Terrace
                     </div>
+                    <span className="mt-1 text-[10px] text-slate-400">Customer • 2:16 PM</span>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/40 p-3 text-emerald-200">
-                    <div className="flex items-center justify-between font-bold text-emerald-400">
-                      <span className="flex items-center gap-1">
-                        <CheckCircle className="h-3.5 w-3.5" /> JOB CARD CREATED
+                  {/* Auto-SMS 3 */}
+                  <div className="flex flex-col items-end">
+                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
+                      Got it. Our tech Mike will call you in 5 minutes to confirm ETA.
+                    </div>
+                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:16 PM</span>
+                  </div>
+
+                  {/* Resulting Qualified Job Card */}
+                  <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200 mt-2">
+                    <div className="flex items-center justify-between font-bold text-emerald-400 text-xs">
+                      <span className="flex items-center gap-1.5 uppercase tracking-wide">
+                        <CheckCircle className="h-4 w-4" /> NEW RECOVERED JOB
                       </span>
-                      <span>$1,850 Est.</span>
+                      <span className="font-mono text-sm font-extrabold text-emerald-300">$450–$800 Est.</span>
                     </div>
-                    <p className="mt-1 text-[11px] text-slate-300">
-                      John Smith • Plumbing Emergency • 123 Main St
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <span className="rounded bg-emerald-600/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                        Lead Notified via Push & SMS
+                    <div className="mt-1.5 space-y-0.5 text-[11px] text-slate-200">
+                      <div className="font-semibold text-white">Water Heater Leak — Emergency</div>
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <MapPin className="h-3 w-3 text-slate-400" /> 742 Evergreen Terrace
+                      </div>
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between border-t border-emerald-800/40 pt-2 text-[10px]">
+                      <span className="rounded bg-red-900/60 px-2 py-0.5 font-bold text-red-200 uppercase">
+                        Emergency
+                      </span>
+                      <span className="font-semibold text-emerald-300">
+                        Pushed to Tech Mike&apos;s Cell
                       </span>
                     </div>
                   </div>
@@ -190,17 +261,79 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- THE PROBLEM ---------------- */}
-      <section id="problem" className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
+      {/* ---------------- SECTION 24: THREE CORE VALUE PROPOSITIONS ---------------- */}
+      <section id="propositions" className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-red-600">The Problem Every Contractor Faces</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">
+              Why Home Service Businesses Choose MCR
+            </h2>
+            <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
+              Built for How Contractors Actually Work
+            </p>
+            <p className="mt-4 text-base text-slate-600">
+              When a customer has a broken furnace, a burst pipe, or a stuck garage door, they don&apos;t wait around.
+              MCR keeps them from calling the next company on Google.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-8 md:grid-cols-3">
+            {/* Value Prop 1 */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+                <Zap className="h-6 w-6" />
+              </div>
+              <h3 className="mt-5 text-lg font-bold text-slate-900">
+                1. NEVER MISS THE OPPORTUNITY
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Follow up while they&apos;re still looking for a contractor, not hours later when they&apos;ve already hired someone else.
+                An automated SMS arrives within 60 seconds of any missed call.
+              </p>
+            </div>
+
+            {/* Value Prop 2 */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                <Wrench className="h-6 w-6" />
+              </div>
+              <h3 className="mt-5 text-lg font-bold text-slate-900">
+                2. QUALIFY THE JOB
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Gather emergency status, service address, and issue description before you call back.
+                Know whether it&apos;s a \$1,200 replacement or a \$150 repair before picking up the phone.
+              </p>
+            </div>
+
+            {/* Value Prop 3 */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                <TrendingUp className="h-6 w-6" />
+              </div>
+              <h3 className="mt-5 text-lg font-bold text-slate-900">
+                3. SEE YOUR RECOVERED REVENUE
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                Know exactly how many jobs and how many dollars came from recovered calls.
+                Separate actual confirmed revenue from pipeline estimates with transparent monthly ROI reports.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- THE PROBLEM IN NUMBERS ---------------- */}
+      <section className="py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-red-600">The Hard Truth</h2>
             <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
               When You Don&apos;t Answer, They Call Your Competitor in 30 Seconds.
             </p>
             <p className="mt-4 text-base text-slate-600">
-              You are driving between jobs, up on a roof, under a sink, or after-hours. You can&apos;t pick up every call.
-              Voicemail doesn&apos;t work anymore — customers rarely leave messages, they just click the next link on Google.
+              Solo operators and field technicians simply cannot answer while driving, under a sink, or after-hours.
+              Voicemail doesn&apos;t cut it anymore — homeowners rarely leave voicemails.
             </p>
           </div>
 
@@ -209,9 +342,9 @@ export default function LandingPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-red-600">
                 <AlertTriangle className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">62% of Contractor Calls Go Unanswered</h3>
+              <h3 className="mt-4 text-lg font-bold text-slate-900">62% of Calls Go Unanswered</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Solo operators and technicians in the field simply cannot physically answer every incoming call while working.
+                Trade contractors miss over half of all inbound calls due to being on job sites or driving between appointments.
               </p>
             </div>
 
@@ -221,93 +354,93 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-lg font-bold text-slate-900">80% Hang Up on Voicemail</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Homeowners with an urgent heating, plumbing, or garage door issue won&apos;t wait for a callback tomorrow.
+                Homeowners with emergency issues will not wait for a callback tomorrow morning. They dial the next Google listing.
               </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
                 <DollarSign className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">$3,000+ Lost Revenue Per Month</h3>
+              <h3 className="mt-4 text-lg font-bold text-slate-900">$3,000+ Lost Every Month</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Losing just 3 or 4 service calls each month costs an average home-service business over $20,000 to $50,000 annually.
+                Missing just 4 or 5 service calls per month bleeds \$30,000+ to \$50,000 in lost revenue every single year.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ---------------- HOW IT WORKS ---------------- */}
-      <section id="how-it-works" className="py-16 sm:py-24">
+      {/* ---------------- HOW IT WORKS (SECTION 24 WORKFLOW) ---------------- */}
+      <section id="how-it-works" className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Simple & Reliable</h2>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Simple &amp; Reliable</h2>
             <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
               How MCR Recovers Your Lost Revenue
             </p>
             <p className="mt-4 text-base text-slate-600">
-              No complicated apps for your callers. No changing your existing phone number. Everything runs seamlessly in the background.
+              No complicated apps for your callers. No changing your existing phone number. Everything runs in the background.
             </p>
           </div>
 
           <div className="mt-16 grid gap-8 md:grid-cols-4">
-            <div className="relative rounded-2xl border border-slate-200 p-6">
+            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 1
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Phone Rings Normally</h3>
               <p className="mt-2 text-sm text-slate-600">
-                A customer calls your current business number. If you&apos;re available, you answer as usual. Nothing changes.
+                A customer calls your current business number. If you are free, answer as normal. Nothing changes.
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 p-6">
+            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 2
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Conditional Forwarding</h3>
               <p className="mt-2 text-sm text-slate-600">
-                If you are busy or don&apos;t answer after 4 rings, your carrier rolls the call over to your dedicated MCR number.
+                If you are busy or can&apos;t answer after 4 rings, your carrier rolls the call over to your dedicated MCR number.
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 p-6">
+            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 3
               </div>
-              <h3 className="mt-4 text-base font-bold text-slate-900">Instant Text-Back & Qualification</h3>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Instant Text-Back &amp; Intake</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Within 60 seconds, MCR texts the caller asking if it&apos;s an emergency, gathering address and photo of the problem.
+                Within 60 seconds, MCR texts the caller asking what they need, gathering emergency status and job location.
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 p-6">
+            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
                 4
               </div>
-              <h3 className="mt-4 text-base font-bold text-slate-900">Job Card & Immediate Alert</h3>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Job Card &amp; Owner Alert</h3>
               <p className="mt-2 text-sm text-slate-600">
-                A structured job card appears on your phone dashboard with one-tap calling, canned SMS replies, and status tracking.
+                A qualified job card lands in your dashboard and sends an instant alert to your cell with one-tap calling.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ---------------- INTERACTIVE ROI CALCULATOR ---------------- */}
+      {/* ---------------- INTERACTIVE ROI CALCULATOR (SECTION 33) ---------------- */}
       <section id="calculator" className="border-t border-slate-100 bg-slate-900 py-16 text-white sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-12 lg:items-center">
             <div className="lg:col-span-6">
               <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-400">
-                <TrendingUp className="h-3.5 w-3.5" /> ROI Calculator
+                <TrendingUp className="h-3.5 w-3.5" /> SECTION 33: ROI CALCULATOR
               </div>
               <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
                 See How Much Revenue You Could Recover Each Month
               </h2>
               <p className="mt-3 text-slate-400">
-                Adjust the sliders based on your business numbers. Recovering even a single job easily pays for your entire year of service.
+                Adjust the sliders based on your business numbers. Recovering even a single job pays for an entire year of MCR.
               </p>
 
               <div className="mt-8 space-y-6">
@@ -318,7 +451,7 @@ export default function LandingPage() {
                   </div>
                   <input
                     type="range"
-                    min="100"
+                    min="150"
                     max="3000"
                     step="50"
                     value={avgJobValue}
@@ -326,9 +459,9 @@ export default function LandingPage() {
                     className="mt-2 w-full accent-blue-500"
                   />
                   <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>$100 (Minor repair)</span>
-                    <span>$1,500</span>
-                    <span>$3,000+ (Replacement/Install)</span>
+                    <span>$150 (Basic service)</span>
+                    <span>$650 (Trade average)</span>
+                    <span>$3,000+ (Install/Replacement)</span>
                   </div>
                 </div>
 
@@ -347,15 +480,15 @@ export default function LandingPage() {
                     className="mt-2 w-full accent-blue-500"
                   />
                   <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>5 calls</span>
-                    <span>50 calls</span>
-                    <span>150 calls</span>
+                    <span>5 calls/mo</span>
+                    <span>35 calls/mo</span>
+                    <span>150 calls/mo</span>
                   </div>
                 </div>
 
                 <div>
                   <div className="flex justify-between text-sm font-medium">
-                    <span>Estimated Text-Back Recovery Rate:</span>
+                    <span>Estimated Close Rate on Recovered Calls:</span>
                     <span className="font-bold text-blue-400">{recoveryRate}%</span>
                   </div>
                   <input
@@ -378,7 +511,9 @@ export default function LandingPage() {
 
             <div className="lg:col-span-6">
               <div className="rounded-3xl border border-slate-800 bg-slate-950 p-8 shadow-2xl">
-                <div className="text-xs uppercase tracking-wider text-slate-400">Illustrative Estimate</div>
+                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                  Estimated Monthly Recovery
+                </div>
                 <div className="mt-4 flex items-baseline gap-2">
                   <span className="text-5xl font-extrabold text-emerald-400">
                     ${potentialRecoveredRevenue.toLocaleString()}
@@ -386,26 +521,33 @@ export default function LandingPage() {
                   <span className="text-slate-400">/ month</span>
                 </div>
                 <p className="mt-2 text-sm text-slate-300">
-                  Potential recovered revenue from ~<strong>{potentialRecoveredJobs} booked jobs</strong> that would have otherwise gone to competitors.
+                  Estimated revenue from ~<strong>{potentialRecoveredJobs} booked jobs</strong> that would have otherwise gone to a competitor.
                 </p>
 
-                <div className="mt-6 border-t border-slate-800 pt-6">
+                <div className="mt-6 border-t border-slate-800 pt-6 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-400">MCR Pro Subscription:</span>
                     <span className="font-semibold text-slate-200">${mcrSubscription}/mo</span>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-sm">
-                    <span className="text-slate-400">Estimated Return on Investment:</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Return on Investment Multiple:</span>
                     <span className="font-bold text-emerald-400">{roiMultiplier}x ROI</span>
                   </div>
                 </div>
 
-                <div className="mt-8">
+                {/* Section 33 Exact Disclaimer */}
+                <div className="mt-6 rounded-xl bg-slate-900 p-3 text-[11px] text-slate-400 border border-slate-800">
+                  <p className="italic">
+                    *Illustrative estimate — actual results vary based on response rate and market.
+                  </p>
+                </div>
+
+                <div className="mt-6">
                   <Link
                     href="/onboarding"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-semibold text-white hover:bg-blue-700"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-bold text-white shadow-lg hover:bg-blue-700 transition"
                   >
-                    Claim Your 14-Day Free Trial <ArrowRight className="h-5 w-5" />
+                    START RECOVERING MISSED CALLS <ArrowRight className="h-5 w-5" />
                   </Link>
                 </div>
               </div>
@@ -480,16 +622,13 @@ export default function LandingPage() {
                   <CheckCircle className="h-4 w-4 text-blue-600" /> Custom trade intake questions
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Photo & MMS collection
-                </li>
-                <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-blue-600" /> Emergency keyword alert escalation
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-blue-600" /> Custom canned SMS replies
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Daily 6 PM & Weekly ROI reports
+                  <CheckCircle className="h-4 w-4 text-blue-600" /> Daily 6 PM &amp; Weekly reports
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-blue-600" /> A2P 10DLC registration included
@@ -497,7 +636,7 @@ export default function LandingPage() {
               </ul>
               <Link
                 href="/onboarding"
-                className="mt-8 block w-full rounded-xl bg-blue-600 py-3 text-center text-sm font-semibold text-white shadow-md hover:bg-blue-700"
+                className="mt-8 block w-full rounded-xl bg-blue-600 py-3 text-center text-sm font-bold text-white shadow-md hover:bg-blue-700 transition"
               >
                 Start 14-Day Free Trial
               </Link>
@@ -506,7 +645,7 @@ export default function LandingPage() {
             {/* Business */}
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
               <h3 className="text-lg font-bold text-slate-900">Business</h3>
-              <p className="mt-1 text-sm text-slate-500">For multi-truck fleets & busy dispatch.</p>
+              <p className="mt-1 text-sm text-slate-500">For multi-truck fleets &amp; busy dispatch.</p>
               <div className="mt-4 flex items-baseline">
                 <span className="text-4xl font-extrabold text-slate-900">$299</span>
                 <span className="ml-1 text-sm text-slate-500">/ month</span>
@@ -516,13 +655,13 @@ export default function LandingPage() {
                   <CheckCircle className="h-4 w-4 text-emerald-600" /> Up to 600 missed calls / mo
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Multiple phone numbers & rollover
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Multiple phone numbers &amp; rollover
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-600" /> Up to 15 team dispatch members
                 </li>
                 <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Priority telecom delivery routing
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /> CRM &amp; Zapier Webhooks
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-emerald-600" /> Dedicated onboarding support
@@ -547,8 +686,8 @@ export default function LandingPage() {
             <span>© 2026 Missed Call Recovery Inc. All rights reserved.</span>
           </div>
           <div className="flex gap-6">
-            <Link href="/dashboard" className="hover:text-slate-900">Dashboard</Link>
-            <Link href="/admin" className="hover:text-slate-900">Admin</Link>
+            <Link href="/dashboard" className="hover:text-slate-900">Demo Dashboard</Link>
+            <Link href="/dashboard/settings" className="hover:text-slate-900">Settings</Link>
             <Link href="/terms" className="hover:text-slate-900">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-slate-900">Privacy Policy</Link>
           </div>

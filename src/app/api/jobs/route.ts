@@ -22,21 +22,23 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { accountId, jobId, status, actualValue, notes } = body;
+    const { accountId, jobId, status, actualValue, estimatedValue, notes } = body;
 
-    if (!jobId || !status) {
-      return NextResponse.json({ error: 'jobId and status are required' }, { status: 400 });
+    if (!jobId) {
+      return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
     }
 
     const targetAccount = accountId || 'acc-apex-plumbing';
-    const updatedJob = db.updateJobStatus(targetAccount, jobId, status as JobStatus, actualValue);
+    const updates: any = {};
+    if (status) updates.status = status as JobStatus;
+    if (actualValue !== undefined) updates.actual_value = Number(actualValue);
+    if (estimatedValue !== undefined) updates.estimated_value = Number(estimatedValue);
+    if (notes !== undefined) updates.notes = notes;
 
-    if (notes !== undefined) {
-      updatedJob.notes = notes;
-    }
+    const updatedJob = db.updateJob(targetAccount, jobId, updates);
 
     // Add audit log
-    db.logAudit(targetAccount, 'UPDATE_JOB_STATUS', { jobId, newStatus: status, actualValue });
+    db.logAudit(targetAccount, 'UPDATE_JOB', { jobId, updates });
 
     return NextResponse.json({ success: true, job: updatedJob });
   } catch (err: any) {
