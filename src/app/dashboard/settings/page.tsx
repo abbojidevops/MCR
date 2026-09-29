@@ -11,6 +11,9 @@ import {
   Plus,
   Trash2,
   CheckCircle,
+  Webhook,
+  Send,
+  ExternalLink,
 } from 'lucide-react';
 import { BusinessProfile, CannedReply, TradeKey } from '@/types';
 
@@ -22,6 +25,31 @@ export default function SettingsPage() {
   const [newBody, setNewBody] = useState('');
   const [toast, setToast] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('https://hooks.zapier.com/hooks/catch/sample/mcr');
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [webhookResult, setWebhookResult] = useState<any>(null);
+
+  const handleTestWebhook = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsTestingWebhook(true);
+    setWebhookResult(null);
+    try {
+      const res = await fetch('/api/integrations/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhookUrl,
+          accountId: 'acc-apex-plumbing'
+        })
+      });
+      const data = await res.json();
+      setWebhookResult(data);
+    } catch (err: any) {
+      setWebhookResult({ success: false, error: err.message });
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -252,6 +280,58 @@ export default function SettingsPage() {
           >
             <Plus className="h-3.5 w-3.5" /> Add Canned Reply
           </button>
+        </form>
+      </div>
+
+      {/* Webhook & CRM Integrations */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Webhook className="h-4 w-4 text-emerald-600" />
+            <h2 className="text-sm font-bold text-slate-900">CRM &amp; Zapier Webhook Forwarding</h2>
+          </div>
+          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+            Real-Time Push
+          </span>
+        </div>
+        <p className="text-xs text-slate-500">
+          Automatically push newly recovered lead details and job cards to your external CRM (ServiceTitan, Housecall Pro, Jobber) or custom Zapier / Make webhook.
+        </p>
+
+        <form onSubmit={handleTestWebhook} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-slate-600 font-medium mb-1">Target Webhook URL (POST)</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                required
+                value={webhookUrl}
+                onChange={(e) => setWebhookUrl(e.target.value)}
+                placeholder="https://hooks.zapier.com/hooks/catch/..."
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={isTestingWebhook}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <Send className="h-3.5 w-3.5" />
+                {isTestingWebhook ? 'Sending...' : 'Test Webhook'}
+              </button>
+            </div>
+          </div>
+
+          {webhookResult && (
+            <div className={`mt-3 rounded-xl border p-3 font-mono text-[11px] ${webhookResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
+              <div className="flex items-center justify-between font-bold mb-1">
+                <span>Status: {webhookResult.statusCode || (webhookResult.success ? '200 OK' : 'Failed')}</span>
+                <span>{webhookResult.success ? 'Payload Dispatched' : 'Error'}</span>
+              </div>
+              <pre className="overflow-x-auto text-[10px] max-h-32 bg-white/70 p-2 rounded border border-slate-200 mt-1">
+                {JSON.stringify(webhookResult.dispatchedPayload || webhookResult, null, 2)}
+              </pre>
+            </div>
+          )}
         </form>
       </div>
     </div>

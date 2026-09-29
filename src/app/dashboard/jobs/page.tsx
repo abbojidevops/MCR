@@ -16,6 +16,7 @@ import {
   AlertCircle,
   ArrowRight,
   Eye,
+  Download,
 } from 'lucide-react';
 import { JobCard, JobStatus } from '@/types';
 
@@ -84,6 +85,15 @@ export default function JobsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href="/api/jobs/export?accountId=acc-apex-plumbing"
+            download
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-500" />
+            <span>Export CSV</span>
+          </a>
+
           <div className="flex rounded-lg border border-slate-200 bg-white p-1 text-xs">
             <button
               onClick={() => setViewMode('kanban')}
