@@ -39,6 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Carrier Forwarding', href: '/dashboard/forwarding', icon: Share2 },
     { label: '10DLC Compliance', href: '/dashboard/compliance', icon: ShieldCheck },
     { label: 'Billing & Usage', href: '/dashboard/billing', icon: CreditCard },
+    { label: 'Settings', href: '/dashboard/settings', icon: ShieldCheck },
     { label: 'Test Simulator', href: '/dashboard/test-mode', icon: FlaskConical },
   ];
 
