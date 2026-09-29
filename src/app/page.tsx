@@ -113,7 +113,7 @@ export default function LandingPage() {
 
               {/* Exact Section 22 Subheadline */}
               <p className="mt-6 text-lg leading-relaxed text-slate-600 sm:text-xl">
-                When you can&apos;t answer the phone, MCR automatically follows up with the caller in under 60 seconds,
+                When you can&apos;t answer the phone, MCR automatically follows up with the caller within seconds,
                 collects the job details, and puts the qualified opportunity into your hands.
               </p>
 
@@ -288,7 +288,7 @@ export default function LandingPage() {
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
                 Follow up while they&apos;re still looking for a contractor, not hours later when they&apos;ve already hired someone else.
-                An automated SMS arrives within 60 seconds of any missed call.
+                An automated SMS arrives automatically after a missed call.
               </p>
             </div>
 
@@ -411,7 +411,7 @@ export default function LandingPage() {
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Instant Text-Back &amp; Intake</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Within 60 seconds, MCR texts the caller asking what they need, gathering emergency status and job location.
+                Within seconds, MCR automatically texts the caller asking what they need, gathering emergency status and job location.
               </p>
             </div>
 
@@ -423,6 +423,71 @@ export default function LandingPage() {
               <p className="mt-2 text-sm text-slate-600">
                 A qualified job card lands in your dashboard and sends an instant alert to your cell with one-tap calling.
               </p>
+            </div>
+          </div>
+
+          {/* Section 19: Full 7-Step Recovery Workflow */}
+          <div className="mt-14 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+            <h3 className="text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+              Complete End-to-End Recovery Sequence
+            </h3>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-bold text-slate-800">
+              <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 shadow-sm">
+                1. MISSED CALL
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900 shadow-sm">
+                2. AUTOMATIC TEXT
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-900 shadow-sm">
+                3. CUSTOMER RESPONDS
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 shadow-sm">
+                4. JOB QUALIFIED
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-purple-900 shadow-sm">
+                5. OWNER NOTIFIED
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900 shadow-sm">
+                6. JOB BOOKED
+              </span>
+              <span className="text-blue-500 font-extrabold text-sm">→</span>
+              <span className="rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-emerald-950 shadow-sm">
+                7. REVENUE TRACKED
+              </span>
+            </div>
+
+            {/* Section 19: Economic Explanation (WITHOUT MCR vs WITH MCR) */}
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-red-200 bg-red-50/60 p-5">
+                <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-red-700">
+                  <span className="flex h-2 w-2 rounded-full bg-red-600"></span>
+                  WITHOUT MCR
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  Missed Call → Unanswered Voicemail → Lost to Competitor
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Customer hangs up within 10 seconds and dials the next Google result. You lose $350–$1,200 in gross margin.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
+                <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-emerald-700">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-600"></span>
+                  WITH MCR
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-800">
+                  Missed Call → Recovery Conversation → Qualified Lead → Booked Job
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Instant text engages the customer immediately, gathers emergency details &amp; address, and secures the dispatch.
+                </p>
+              </div>
             </div>
           </div>
         </div>

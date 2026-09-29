@@ -583,7 +583,7 @@ export default function OnboardingPage() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                 <Check className="h-8 w-8" />
               </div>
-              <h2 className="mt-4 text-2xl font-bold text-slate-900">You&apos;re Ready to Recover Jobs!</h2>
+              <h2 className="mt-4 text-2xl font-bold text-slate-900">Your MCR recovery system is ready.</h2>
               <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
                 Next time you miss a call on your cell phone, MCR will automatically handle it and turn it into a booked job.
               </p>
