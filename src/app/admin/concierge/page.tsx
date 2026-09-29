@@ -71,7 +71,7 @@ export default function ConciergePilotPage() {
   const [manualCallInput, setManualCallInput] = useState({
     pilotId: 'pilot-3',
     callerNumber: '+1 (312) 555-9011',
-    callerName: 'Homeowner',
+    callerName: 'Unknown Caller',
     notes: 'Power flickered in kitchen after thunder',
   });
 

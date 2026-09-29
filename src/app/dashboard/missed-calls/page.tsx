@@ -115,7 +115,7 @@ export default function MissedCallsPage() {
         const q = searchQuery.toLowerCase();
         const phone = c.from_number.toLowerCase();
         const prob = (c.job?.problem || '').toLowerCase();
-        const name = (c.job?.contact?.full_name || '').toLowerCase();
+        const name = (c.job?.contact?.full_name || c.conversation?.contact?.full_name || '').toLowerCase();
         if (!phone.includes(q) && !prob.includes(q) && !name.includes(q)) return false;
       }
 
@@ -244,7 +244,7 @@ export default function MissedCallsPage() {
                         </div>
                         <div>
                           <div className="font-bold text-slate-900">
-                            {call.job?.contact?.full_name || 'Homeowner'}
+                            {call.job?.contact?.full_name || call.conversation?.contact?.full_name || 'Unknown Caller'}
                           </div>
                           <div className="font-mono text-[10px] text-slate-400">{call.from_number}</div>
                         </div>
@@ -305,11 +305,15 @@ export default function MissedCallsPage() {
                           )}
                           <span
                             className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                              call.job.status === 'BOOKED'
+                              call.job.status === 'COMPLETED'
                                 ? 'bg-emerald-100 text-emerald-800'
+                                : call.job.status === 'BOOKED'
+                                ? 'bg-indigo-100 text-indigo-800'
                                 : call.job.status === 'CONTACTED'
                                 ? 'bg-amber-100 text-amber-800'
-                                : 'bg-blue-100 text-blue-800'
+                                : call.job.status === 'NEW'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-slate-100 text-slate-700'
                             }`}
                           >
                             {call.job.status}

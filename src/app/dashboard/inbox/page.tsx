@@ -15,6 +15,11 @@ import {
   ArrowLeft,
   Clock,
   ClipboardList,
+  AlertTriangle,
+  MapPin,
+  DollarSign,
+  Tag,
+  ShieldAlert,
 } from 'lucide-react';
 import { Conversation, Message, CannedReply, JobCard } from '@/types';
 
@@ -111,17 +116,20 @@ export default function InboxPage() {
     }
   };
 
-  // Enrich conversations with matching Job info
+  // Enrich conversations with matching Job info and Customer Identity
   const enrichedConversations = useMemo(() => {
     return conversations.map((conv) => {
       const cleanPhone = (conv.contact?.phone_number || '').replace(/\D/g, '').slice(-10);
       const matchedJob = jobs.find((j) => {
         const jPhone = (j.contact?.phone_number || '').replace(/\D/g, '').slice(-10);
-        return jPhone === cleanPhone;
+        return jPhone === cleanPhone || j.conversation_id === conv.id;
       });
+
+      const customerName = conv.contact?.full_name?.trim() ? conv.contact.full_name : 'Unknown Caller';
 
       return {
         ...conv,
+        customerName,
         job: matchedJob,
         isEmergency: matchedJob?.is_emergency ?? false,
       };
@@ -166,7 +174,7 @@ export default function InboxPage() {
                   <div>
                     <div className="flex items-center gap-1.5">
                       <span className="font-extrabold text-xs text-slate-900">
-                        {conv.contact?.full_name || 'Caller'}
+                        {conv.customerName}
                       </span>
                       {conv.isEmergency && (
                         <span className="flex items-center gap-0.5 rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold text-red-700">
@@ -190,17 +198,21 @@ export default function InboxPage() {
 
                 {/* Section 12: Badges (Intake progress & Job Status) */}
                 <div className="mt-2 flex items-center justify-between text-[10px]">
-                  <span className="text-slate-400">
-                    {conv.job?.address ? `📍 ${conv.job.address.slice(0, 18)}...` : 'Intake Active'}
+                  <span className="text-slate-400 truncate max-w-[140px]">
+                    {conv.job?.address ? `📍 ${conv.job.address}` : 'Intake Active'}
                   </span>
                   {conv.job && (
                     <span
                       className={`rounded px-1.5 py-0.5 font-bold uppercase ${
-                        conv.job.status === 'BOOKED'
+                        conv.job.status === 'COMPLETED'
                           ? 'bg-emerald-100 text-emerald-800'
+                          : conv.job.status === 'BOOKED'
+                          ? 'bg-blue-100 text-blue-800'
                           : conv.job.status === 'CONTACTED'
                           ? 'bg-amber-100 text-amber-800'
-                          : 'bg-blue-100 text-blue-800'
+                          : conv.job.status === 'DEAD'
+                          ? 'bg-slate-100 text-slate-500'
+                          : 'bg-indigo-100 text-indigo-800'
                       }`}
                     >
                       {conv.job.status}
@@ -221,8 +233,8 @@ export default function InboxPage() {
       >
         {activeConv ? (
           <>
-            {/* Thread Header with Customer, Phone, Time, Emergency & Job Status */}
-            <div className="flex items-center justify-between border-b border-slate-200 p-4 bg-white">
+            {/* Thread Header with Customer, Phone, Time */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setMobileDetailView(false)}
@@ -233,24 +245,21 @@ export default function InboxPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-extrabold text-sm text-slate-900">
-                      {activeConv.contact?.full_name || 'Homeowner'}
+                      {activeConv.customerName}
                     </h3>
                     {activeConv.isEmergency && (
-                      <span className="flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-extrabold text-white uppercase">
+                      <span className="flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-extrabold text-white uppercase">
                         <Flame className="h-3 w-3" /> Emergency
                       </span>
                     )}
                     {activeConv.job && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-700">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-700">
                         {activeConv.job.status}
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    Phone: <span className="font-mono text-slate-800">{activeConv.contact?.phone_number}</span>
-                    {activeConv.job?.address && (
-                      <span className="ml-2 text-slate-600">• {activeConv.job.address}</span>
-                    )}
+                  <div className="text-xs text-slate-500 mt-0.5 font-mono">
+                    {activeConv.contact?.phone_number}
                   </div>
                 </div>
               </div>
@@ -261,12 +270,12 @@ export default function InboxPage() {
                     href={`tel:${activeConv.contact.phone_number}`}
                     className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
                   >
-                    <Phone className="h-3.5 w-3.5" /> Call
+                    <Phone className="h-3.5 w-3.5" /> Call Customer
                   </a>
                 )}
                 {activeConv.job && (
                   <Link
-                    href="/dashboard/jobs"
+                    href={`/dashboard/jobs`}
                     className="hidden sm:inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                   >
                     <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> View Job
@@ -275,8 +284,88 @@ export default function InboxPage() {
               </div>
             </div>
 
+            {/* ---------------- SECTION 5: INBOX LEAD SUMMARY ---------------- */}
+            <div className="border-b border-slate-200 bg-slate-50/80 p-3 sm:px-4 text-xs">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Lead Summary &amp; Job Details
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-500">Issue</span>
+                  <span className="font-semibold text-slate-900 truncate block">
+                    {activeConv.job?.problem || activeConv.job?.title || 'General Inbound Inquiry'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-500">Priority</span>
+                  <span className="font-bold flex items-center gap-1">
+                    {activeConv.isEmergency ? (
+                      <span className="text-red-600 flex items-center gap-1 font-bold">
+                        <Flame className="h-3 w-3" /> Emergency
+                      </span>
+                    ) : (
+                      <span className="text-slate-700 font-semibold">Standard Service</span>
+                    )}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-500">Address</span>
+                  <span className="font-medium text-slate-800 truncate block">
+                    {activeConv.job?.address || activeConv.contact?.address || 'Address pending'}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-slate-500">Status</span>
+                  <span className="font-bold uppercase text-blue-700">
+                    {activeConv.job?.status || 'New Lead'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-medium">Estimated Value: </span>
+                    <span className="font-bold text-slate-900">
+                      ${activeConv.job?.estimated_value ?? 650}
+                    </span>
+                  </div>
+                  {activeConv.job?.actual_value !== undefined && (
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-medium">Actual Revenue: </span>
+                      <span className="font-bold text-emerald-600">
+                        ${activeConv.job.actual_value}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {activeConv.contact?.phone_number && (
+                    <a
+                      href={`tel:${activeConv.contact.phone_number}`}
+                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700"
+                    >
+                      <Phone className="h-3 w-3" /> Call Customer
+                    </a>
+                  )}
+                  {activeConv.job && (
+                    <Link
+                      href="/dashboard/jobs"
+                      className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800"
+                    >
+                      <ClipboardList className="h-3 w-3 text-amber-400" /> View Job
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
               {messages.map((msg) => {
                 const isOutbound = msg.direction === 'outbound';
                 return (
@@ -285,7 +374,7 @@ export default function InboxPage() {
                     className={`flex flex-col ${isOutbound ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] sm:max-w-[70%] rounded-2xl p-3 text-xs shadow-sm ${
+                      className={`max-w-[85%] sm:max-w-[70%] rounded-2xl p-3 text-xs shadow-sm ${
                         isOutbound
                           ? 'rounded-tr-sm bg-blue-600 text-white'
                           : 'rounded-tl-sm bg-white text-slate-800 border border-slate-200'
@@ -305,7 +394,7 @@ export default function InboxPage() {
                       )}
                     </div>
                     <span className="mt-1 text-[10px] text-slate-400">
-                      {isOutbound ? 'MCR System / You' : activeConv.contact?.full_name || 'Customer'} •{' '}
+                      {isOutbound ? 'MCR System / You' : activeConv.customerName} •{' '}
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

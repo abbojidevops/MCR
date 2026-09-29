@@ -287,18 +287,22 @@ class DatabaseRepository {
         id: `cont-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
         account_id: accountId,
         phone_number: rawPhone,
-        full_name: fullName || 'Caller',
+        full_name: fullName || 'Unknown Caller',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       this.state.contacts.push(contact);
       this.saveToFile();
-    } else if (fullName && contact.full_name === 'Caller') {
+    } else if (fullName && (contact.full_name === 'Caller' || contact.full_name === 'Unknown Caller' || !contact.full_name)) {
       contact.full_name = fullName;
       contact.updated_at = new Date().toISOString();
       this.saveToFile();
     }
     return contact;
+  }
+
+  public getContact(contactId: string): Contact | undefined {
+    return this.state.contacts.find((c) => c.id === contactId);
   }
 
   // --------------------------------------------------------------------------
@@ -510,11 +514,34 @@ class DatabaseRepository {
   }
 
   public createJob(jobData: Omit<JobCard, 'id' | 'created_at' | 'updated_at'>): JobCard {
+    const now = new Date().toISOString();
+    const defaultRecoverySource = `Missed Call — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
+
+    // Duplicate Prevention: Check if job already exists for this intake session, conversation, or call
+    const existing = this.state.jobs.find(
+      (j) =>
+        j.account_id === jobData.account_id &&
+        ((jobData.intake_session_id && j.intake_session_id === jobData.intake_session_id) ||
+          (jobData.conversation_id && j.conversation_id === jobData.conversation_id) ||
+          (jobData.call_record_id && j.call_record_id === jobData.call_record_id) ||
+          (jobData.contact_id && j.contact_id === jobData.contact_id && j.status === 'NEW'))
+    );
+
+    if (existing) {
+      Object.assign(existing, jobData, {
+        recovery_source: existing.recovery_source || jobData.recovery_source || defaultRecoverySource,
+        updated_at: now,
+      });
+      this.saveToFile();
+      return existing;
+    }
+
     const job: JobCard = {
       id: `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      recovery_source: jobData.recovery_source || defaultRecoverySource,
       ...jobData,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     };
     this.state.jobs.unshift(job);
     this.saveToFile();
@@ -534,6 +561,14 @@ class DatabaseRepository {
     } else if (newStatus === 'BOOKED') {
       if (!job.booked_time) job.booked_time = now;
       if (actualValue !== undefined) job.actual_value = actualValue;
+    } else if (newStatus === 'COMPLETED') {
+      if (!job.completed_time) job.completed_time = now;
+      if (!job.booked_time) job.booked_time = now;
+      if (actualValue !== undefined) {
+        job.actual_value = actualValue;
+      } else if (job.actual_value === undefined) {
+        job.actual_value = job.estimated_value;
+      }
     } else if (newStatus === 'DEAD' && !job.dead_time) {
       job.dead_time = now;
     }
@@ -553,6 +588,14 @@ class DatabaseRepository {
       job.contacted_time = now;
     } else if (updates.status === 'BOOKED' && !job.booked_time) {
       job.booked_time = now;
+    } else if (updates.status === 'COMPLETED') {
+      if (!job.completed_time) job.completed_time = now;
+      if (!job.booked_time) job.booked_time = now;
+      if (updates.actual_value !== undefined) {
+        job.actual_value = updates.actual_value;
+      } else if (job.actual_value === undefined) {
+        job.actual_value = job.estimated_value;
+      }
     } else if (updates.status === 'DEAD' && !job.dead_time) {
       job.dead_time = now;
     }

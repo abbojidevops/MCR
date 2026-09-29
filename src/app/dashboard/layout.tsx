@@ -174,6 +174,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </nav>
 
+        {/* Setup Health Status Widget (Section 17) */}
+        <div className="p-3">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs">
+            <div className="flex items-center justify-between font-bold text-emerald-900 text-[11px]">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> MCR SETUP
+              </span>
+              <span className="rounded bg-emerald-200/60 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800">
+                100% READY
+              </span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-x-1 gap-y-0.5 text-[10px] text-emerald-800 font-medium">
+              <span>✓ Profile</span>
+              <span>✓ Recovery #</span>
+              <span>✓ Forwarding</span>
+              <span>✓ Test Call</span>
+              <span>✓ SMS Auto</span>
+              <span>✓ 10DLC Verified</span>
+            </div>
+          </div>
+        </div>
+
         {/* Quick Simulator CTA */}
         <div className="border-t border-slate-200 p-4">
           <button
@@ -209,6 +231,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Section 14: Demo Mode Badge */}
+            <div className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 shadow-xs">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+              <span>DEMO ACCOUNT</span>
+            </div>
+
             {/* Quick action button */}
             <button
               type="button"

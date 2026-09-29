@@ -21,38 +21,14 @@ import {
   Settings,
   HelpCircle,
   Sparkles,
+  Calendar,
+  Check,
 } from 'lucide-react';
-import { JobCard } from '@/types';
-
-interface DashboardStatsResponse {
-  businessName: string;
-  trade: string;
-  subscriptionMonthlyDollars: number;
-  summary: {
-    missedCallsCount: number;
-    textsDeliveredCount: number;
-    customersRespondedCount: number;
-    qualifiedLeadsCount: number;
-    bookedJobsCount: number;
-    recoveryRatePercent: number;
-    reportedRecoveredRevenue: number;
-    confirmedActualRevenue: number;
-    pipelineEstimatedValue: number;
-    potentialMissedCallValue: number;
-    roiMultiple: number | null;
-  };
-  needsAttention: JobCard[];
-  recentLeads: JobCard[];
-  forwardingStatus: {
-    configured: boolean;
-    carrierName: string;
-    emergencyPhone: string;
-    notificationPhone: string;
-  };
-}
+import { UnifiedMCRMetrics, DateRangePreset, AttentionItem, RecoveredJobAttribution } from '@/lib/metrics';
 
 export default function DashboardOverviewPage() {
-  const [data, setData] = useState<DashboardStatsResponse | null>(null);
+  const [range, setRange] = useState<DateRangePreset>('month');
+  const [data, setData] = useState<UnifiedMCRMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,10 +38,10 @@ export default function DashboardOverviewPage() {
   const [enteredActualValue, setEnteredActualValue] = useState<string>('');
   const [savingValue, setSavingValue] = useState(false);
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = async (selectedRange: DateRangePreset = range) => {
     try {
       setLoading(true);
-      const res = await fetch('/api/dashboard/stats?accountId=acc-apex-plumbing');
+      const res = await fetch(`/api/dashboard/stats?accountId=acc-apex-plumbing&range=${selectedRange}`);
       if (!res.ok) throw new Error('Failed to load dashboard metrics');
       const json = await res.json();
       setData(json);
@@ -80,8 +56,8 @@ export default function DashboardOverviewPage() {
   };
 
   useEffect(() => {
-    fetchDashboardStats();
-  }, []);
+    fetchDashboardStats(range);
+  }, [range]);
 
   const handleSaveActualValue = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,14 +72,14 @@ export default function DashboardOverviewPage() {
           accountId: 'acc-apex-plumbing',
           jobId: selectedJobId,
           actualValue: Number(enteredActualValue),
-          status: 'BOOKED',
+          status: 'COMPLETED',
         }),
       });
       const resData = await res.json();
       if (resData.success) {
         setValueModalOpen(false);
         setEnteredActualValue('');
-        fetchDashboardStats();
+        fetchDashboardStats(range);
       }
     } catch (err) {
       console.error(err);
@@ -112,7 +88,6 @@ export default function DashboardOverviewPage() {
     }
   };
 
-  // Greeting helper based on time of day
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -142,7 +117,7 @@ export default function DashboardOverviewPage() {
         <h3 className="font-bold text-base">Something went wrong while loading your dashboard.</h3>
         <p className="text-xs text-red-600 mt-1">Please check your connection and try again.</p>
         <button
-          onClick={fetchDashboardStats}
+          onClick={() => fetchDashboardStats(range)}
           className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
         >
           Try Again
@@ -151,88 +126,86 @@ export default function DashboardOverviewPage() {
     );
   }
 
-  const { summary, needsAttention, recentLeads } = data;
-
   return (
     <div className="space-y-8">
       {/* ---------------- SECTION 3: DASHBOARD HERO ---------------- */}
       <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/30 p-6 sm:p-8 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-blue-600 mb-1">
-              Missed-Call Revenue Recovery System
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
+                Missed-Call Revenue Recovery System
+              </span>
+              <span className="rounded-full bg-blue-100/70 text-blue-700 px-2 py-0.5 text-[10px] font-bold">
+                {data.periodLabel}
+              </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+            <h1 className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
               {getGreeting()}, {data.businessName} 👋
             </h1>
-            <div className="mt-2 text-lg sm:text-xl font-extrabold text-emerald-700">
+            <div className="mt-2 text-base sm:text-lg font-bold text-slate-800">
               You&apos;ve recovered{' '}
-              <span className="underline decoration-emerald-400 decoration-2 underline-offset-4">
-                {summary.bookedJobsCount} potential jobs
+              <span className="text-emerald-700 font-extrabold underline decoration-emerald-400 decoration-2 underline-offset-4">
+                {data.bookedJobsCount} booked jobs
               </span>{' '}
-              this month.
+              ({data.completedJobsCount} completed) generating{' '}
+              <span className="text-emerald-700 font-extrabold">${data.confirmedActualRevenue.toLocaleString()}</span>{' '}
+              in confirmed revenue.
             </div>
-            <p className="mt-1 text-xs sm:text-sm text-slate-500">
-              Here&apos;s how MCR is turning missed calls into booked opportunities.
-            </p>
           </div>
 
-          {/* Quick Actions (Section 21) */}
-          <div className="flex flex-wrap gap-2 pt-2 lg:pt-0">
-            <Link
-              href="/dashboard/missed-calls"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition"
-            >
-              <PhoneCall className="h-3.5 w-3.5 text-blue-600" />
-              <span>Missed Calls</span>
-            </Link>
-            <Link
-              href="/dashboard/inbox"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition"
-            >
-              <MessageSquare className="h-3.5 w-3.5 text-indigo-600" />
-              <span>Open Inbox</span>
-            </Link>
-            <Link
-              href="/dashboard/jobs?status=NEW"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 transition"
-            >
-              <ClipboardList className="h-3.5 w-3.5 text-amber-600" />
-              <span>New Leads</span>
-            </Link>
+          {/* Date Range Selector (Section 10) */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-xl border border-slate-200 bg-white p-1 text-xs shadow-xs">
+              {(
+                [
+                  { label: 'Today', value: 'today' },
+                  { label: 'Yesterday', value: 'yesterday' },
+                  { label: 'This Week', value: 'week' },
+                  { label: 'This Month', value: 'month' },
+                  { label: 'All Time', value: 'all' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => setRange(tab.value)}
+                  className={`rounded-lg px-2.5 py-1.5 font-bold transition text-xs ${
+                    range === tab.value
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
             <button
               onClick={() => setValueModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
             >
               <PlusCircle className="h-3.5 w-3.5" />
-              <span>Add Job Value</span>
+              <span>Record Job Revenue</span>
             </button>
-            <Link
-              href="/dashboard/settings"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 transition"
-              title="Business Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </Link>
           </div>
         </div>
       </div>
 
-      {/* ---------------- SECTION 4: PRIMARY 4 KPI CARDS ---------------- */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {/* ---------------- SECTION 4 & 11: PRIMARY KPI CARDS ---------------- */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {/* Card 1: Missed Calls */}
         <Link
           href="/dashboard/missed-calls"
           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-400 hover:shadow-md transition"
         >
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Missed Calls</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Missed Calls</span>
             <div className="rounded-lg bg-red-50 p-2 text-red-600">
               <PhoneCall className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-3 text-3xl font-black text-slate-900">{summary.missedCallsCount}</div>
-          <p className="mt-1 text-xs text-slate-500 font-medium">Calls your team didn&apos;t answer</p>
+          <div className="mt-3 text-3xl font-black text-slate-900">{data.missedCallsCount}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">Unanswered calls in period</p>
         </Link>
 
         {/* Card 2: Leads Recovered */}
@@ -241,88 +214,105 @@ export default function DashboardOverviewPage() {
           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-indigo-400 hover:shadow-md transition"
         >
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Leads Recovered</span>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Leads Recovered</span>
             <div className="rounded-lg bg-indigo-50 p-2 text-indigo-600">
               <MessageSquare className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-3 text-3xl font-black text-indigo-600">{summary.customersRespondedCount}</div>
-          <p className="mt-1 text-xs text-slate-500 font-medium">Customers who responded</p>
+          <div className="mt-3 text-3xl font-black text-indigo-600">{data.customersRespondedCount}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">Text-back conversations</p>
         </Link>
 
         {/* Card 3: Jobs Booked */}
         <Link
           href="/dashboard/jobs"
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-emerald-400 hover:shadow-md transition"
+          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-400 hover:shadow-md transition"
         >
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Jobs Booked</span>
-            <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Jobs Booked</span>
+            <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
               <CheckCircle className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-3 text-3xl font-black text-emerald-600">{summary.bookedJobsCount}</div>
-          <p className="mt-1 text-xs text-slate-500 font-medium">Recovered leads marked booked</p>
+          <div className="mt-3 text-3xl font-black text-blue-600">{data.bookedJobsCount}</div>
+          <p className="mt-1 text-[11px] text-slate-500 font-medium">{data.completedJobsCount} already completed</p>
         </Link>
 
-        {/* Card 4: Estimated Revenue Recovered */}
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5 shadow-sm relative group">
+        {/* Card 4: Estimated Pipeline (Strictly separated) */}
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/30 p-5 shadow-sm">
+          <div className="flex items-center justify-between text-blue-800">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-900">
+              Estimated Pipeline
+            </span>
+            <div className="rounded-lg bg-blue-100 p-2 text-blue-700">
+              <ClipboardList className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-3xl font-black text-blue-800">
+            ${data.pipelineEstimatedValue.toLocaleString()}
+          </div>
+          <p className="mt-1 text-[11px] text-blue-900/70 font-medium">
+            Active unclosed leads
+          </p>
+        </div>
+
+        {/* Card 5: Confirmed Actual Revenue (Section 8) */}
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
           <div className="flex items-center justify-between text-emerald-800">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
-                Estimated Revenue Recovered
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-950">
+                Actual Revenue
               </span>
-              <div className="cursor-help text-emerald-600" title="Calculated from actual confirmed job invoices and estimated ticket sizes for recovered leads.">
+              <div className="cursor-help text-emerald-700" title="Confirmed invoiced amount recorded for completed jobs. Never mixed with pipeline estimates.">
                 <Info className="h-3.5 w-3.5" />
               </div>
             </div>
-            <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-              <TrendingUp className="h-4 w-4" />
+            <div className="rounded-lg bg-emerald-100 p-2 text-emerald-800">
+              <DollarSign className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3 text-3xl font-black text-emerald-700">
-            {summary.reportedRecoveredRevenue > 0
-              ? `$${summary.reportedRecoveredRevenue.toLocaleString()}`
-              : 'Revenue tracking not configured'}
+            ${data.confirmedActualRevenue.toLocaleString()}
           </div>
-          <p className="mt-1 text-xs text-emerald-800/80 font-medium">
-            Based on reported/estimated job value
+          <p className="mt-1 text-[11px] text-emerald-800 font-medium">
+            Confirmed completed revenue
           </p>
         </div>
       </div>
 
-      {/* ---------------- SECTION 5: ROI SECTION & SECTION 7: RECOVERY RATE ---------------- */}
+      {/* ---------------- SECTION 12 & 13: SOFTWARE RETURN & RECOVERY RATE ---------------- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* ROI Card (Section 5) */}
-        <div className="sm:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-900 to-slate-900 text-white p-6 shadow-md">
+        {/* Software Return Card (Section 13) */}
+        <div className="sm:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 shadow-md">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-widest text-blue-300">
-                MCR IS WORKING FOR YOU
-              </span>
-              <h2 className="mt-1 text-2xl font-black tracking-tight">
-                {summary.roiMultiple !== null && summary.roiMultiple > 0 ? (
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-300">
+                <Sparkles className="h-3 w-3" /> Section 13: Software Return
+              </div>
+              <h2 className="mt-2 text-2xl font-black tracking-tight">
+                {data.softwareReturnMultiple !== null && data.softwareReturnMultiple > 0 ? (
                   <>
-                    <span className="text-emerald-400 font-extrabold">{summary.roiMultiple}× ROI</span> on your
-                    monthly software
+                    <span className="text-emerald-400 font-extrabold">{data.softwareReturnMultiple}× Software Return</span> on your MCR subscription
                   </>
                 ) : (
-                  'ROI will appear once your first recovered job is recorded.'
+                  'Software return will calculate as soon as your first completed revenue is logged.'
                 )}
               </h2>
               <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-300">
                 <div>
-                  <span className="text-slate-400">MCR subscription:</span>{' '}
-                  <strong className="text-white">${data.subscriptionMonthlyDollars}/month</strong>
+                  <span className="text-slate-400">Subscription:</span>{' '}
+                  <strong className="text-white">${data.subscriptionMonthlyDollars}/mo</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400">Reported recovered revenue:</span>{' '}
-                  <strong className="text-emerald-400">${summary.reportedRecoveredRevenue.toLocaleString()}</strong>
+                  <span className="text-slate-400">Confirmed Actual Revenue:</span>{' '}
+                  <strong className="text-emerald-400">${data.confirmedActualRevenue.toLocaleString()}</strong>
                 </div>
-                {summary.roiMultiple !== null && (
+                {data.softwareReturnMultiple !== null && (
                   <div>
-                    <span className="text-slate-400">Revenue / subscription:</span>{' '}
-                    <strong className="text-emerald-400 font-bold">{summary.roiMultiple}×</strong>
+                    <span className="text-slate-400">Formula:</span>{' '}
+                    <span className="font-mono text-xs text-emerald-300">
+                      ${data.confirmedActualRevenue} ÷ ${data.subscriptionMonthlyDollars} = {data.softwareReturnMultiple}×
+                    </span>
                   </div>
                 )}
               </div>
@@ -331,212 +321,181 @@ export default function DashboardOverviewPage() {
               onClick={() => setValueModalOpen(true)}
               className="self-start sm:self-center shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md transition"
             >
-              + Record Job Value
+              + Record Job Revenue
             </button>
           </div>
         </div>
 
-        {/* Recovery Rate Card (Section 7) */}
+        {/* Recovery Rate Card (Section 12) */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-slate-500">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Recovery Rate</span>
-              <div className="cursor-help text-slate-400" title="Calculated as: Booked jobs ÷ total missed calls. Reflects your team's measured conversion performance.">
+              <div
+                className="cursor-help text-slate-400"
+                title="Formula: (Booked + Completed Recovered Jobs) ÷ (Eligible Missed Calls). Reflects true conversion."
+              >
                 <Info className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-3 text-3xl font-black text-slate-900">{summary.recoveryRatePercent}%</div>
+            <div className="mt-3 text-3xl font-black text-slate-900">{data.recoveryRatePercent}%</div>
             <p className="mt-1 text-xs text-slate-500 font-medium">Booked jobs ÷ eligible missed calls</p>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-            <span>Team conversion rate</span>
-            <span className="font-bold text-slate-700">{summary.bookedJobsCount} of {summary.missedCallsCount} calls</span>
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Measured conversion:</span>
+            <span className="font-bold text-slate-900">
+              {data.bookedJobsCount} of {data.missedCallsCount} calls
+            </span>
           </div>
         </div>
       </div>
 
-      {/* ---------------- SECTION 6: RECOVERY FUNNEL ---------------- */}
+      {/* ---------------- SECTION 7: RECOVERY FUNNEL ---------------- */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Missed Call Recovery Funnel</h2>
+            <h2 className="text-base font-bold text-slate-900">Section 7: Recovery Funnel</h2>
             <p className="text-xs text-slate-500">
-              Live conversion progression from unanswered caller to booked revenue. Click any stage to inspect.
+              Single-source conversion flow from initial missed call through completed revenue.
             </p>
           </div>
-          <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 self-start">
-            {summary.recoveryRatePercent}% Overall Conversion
+          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 self-start">
+            {data.recoveryRatePercent}% Overall Conversion
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
-          {/* Funnel 1: Missed Calls */}
-          <Link
-            href="/dashboard/missed-calls"
-            className="group flex flex-col rounded-xl border border-slate-200 bg-slate-50/70 p-3 hover:border-blue-400 hover:bg-blue-50/40 transition"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-blue-600">
-              1. Missed Calls
-            </span>
-            <span className="mt-2 text-2xl font-black text-slate-900">{summary.missedCallsCount}</span>
-            <span className="mt-1 text-[11px] text-slate-500">Inbound calls</span>
-          </Link>
-
-          {/* Funnel 2: Texts Delivered */}
-          <div className="flex flex-col rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              2. Texts Sent
-            </span>
-            <span className="mt-2 text-2xl font-black text-slate-900">{summary.textsDeliveredCount}</span>
-            <span className="mt-1 text-[11px] text-emerald-600 font-medium">&lt;60s text-back</span>
-          </div>
-
-          {/* Funnel 3: Customers Responded */}
-          <Link
-            href="/dashboard/inbox"
-            className="group flex flex-col rounded-xl border border-slate-200 bg-slate-50/70 p-3 hover:border-indigo-400 hover:bg-indigo-50/40 transition"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-indigo-600">
-              3. Responded
-            </span>
-            <span className="mt-2 text-2xl font-black text-indigo-600">{summary.customersRespondedCount}</span>
-            <span className="mt-1 text-[11px] text-slate-500">Texted back</span>
-          </Link>
-
-          {/* Funnel 4: Qualified Leads */}
-          <Link
-            href="/dashboard/jobs"
-            className="group flex flex-col rounded-xl border border-slate-200 bg-slate-50/70 p-3 hover:border-amber-400 hover:bg-amber-50/40 transition"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-amber-600">
-              4. Qualified
-            </span>
-            <span className="mt-2 text-2xl font-black text-slate-900">{summary.qualifiedLeadsCount}</span>
-            <span className="mt-1 text-[11px] text-slate-500">Issue &amp; address</span>
-          </Link>
-
-          {/* Funnel 5: Booked Jobs */}
-          <Link
-            href="/dashboard/jobs"
-            className="group flex flex-col rounded-xl border border-emerald-300 bg-emerald-50/60 p-3 hover:border-emerald-500 hover:bg-emerald-100/50 transition"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-              5. Booked Jobs
-            </span>
-            <span className="mt-2 text-2xl font-black text-emerald-700">{summary.bookedJobsCount}</span>
-            <span className="mt-1 text-[11px] text-emerald-600 font-medium">Scheduled</span>
-          </Link>
-
-          {/* Funnel 6: Reported Job Value */}
-          <div className="flex flex-col rounded-xl border border-emerald-400 bg-emerald-600 text-white p-3">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-100">
-              6. Recovered Value
-            </span>
-            <span className="mt-2 text-2xl font-black text-white">
-              ${summary.reportedRecoveredRevenue.toLocaleString()}
-            </span>
-            <span className="mt-1 text-[11px] text-emerald-100 font-medium">In your pocket</span>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-2">
+          {data.funnel.map((stage, idx) => (
+            <div
+              key={stage.key}
+              className={`flex flex-col rounded-xl border p-3 transition ${
+                stage.key === 'actual_revenue'
+                  ? 'border-emerald-500 bg-emerald-600 text-white'
+                  : stage.key === 'completed'
+                  ? 'border-emerald-300 bg-emerald-50/70 text-slate-900'
+                  : 'border-slate-200 bg-slate-50/60 text-slate-900'
+              }`}
+            >
+              <span
+                className={`text-[9px] font-bold uppercase tracking-wider ${
+                  stage.key === 'actual_revenue' ? 'text-emerald-100' : 'text-slate-400'
+                }`}
+              >
+                {idx + 1}. {stage.label}
+              </span>
+              <span className="mt-2 text-2xl font-black">
+                {stage.key === 'actual_revenue' ? `$${(stage.valueDollars || 0).toLocaleString()}` : stage.count}
+              </span>
+              <span
+                className={`mt-1 text-[10px] font-medium ${
+                  stage.key === 'actual_revenue' ? 'text-emerald-100' : 'text-slate-500'
+                }`}
+              >
+                {idx === 0 ? 'Inbound' : `${stage.conversionFromPrev}% step`}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* ---------------- SECTION 8 & 9: 🔥 NEEDS YOUR ATTENTION SECTION ---------------- */}
+      {/* ---------------- SECTION 6: 🔥 NEEDS YOUR ATTENTION SECTION ---------------- */}
       <div className="rounded-2xl border-2 border-red-200 bg-white p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-red-100 pb-3">
           <div className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 font-bold">
               <Flame className="h-4 w-4 text-red-600 animate-pulse" />
             </span>
-            <h2 className="text-base font-extrabold text-slate-900">Needs Your Attention</h2>
+            <h2 className="text-base font-extrabold text-slate-900">NEEDS YOUR ATTENTION</h2>
           </div>
           <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
-            {needsAttention.length} Pending Actions
+            {data.needsAttention.length} Leads Requiring Human Action
           </span>
         </div>
 
-        {needsAttention.length === 0 ? (
+        {data.needsAttention.length === 0 ? (
           <div className="p-6 text-center text-slate-500 text-xs">
             <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
             <p className="font-bold text-slate-800">All caught up!</p>
-            <p className="mt-0.5 text-slate-400">No urgent emergency leads or unanswered customer queries.</p>
+            <p className="mt-0.5 text-slate-400">No uncontacted emergency leads or unanswered customer queries.</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {needsAttention.map((lead) => {
-              const isEmergency = lead.is_emergency;
-              return (
-                <div
-                  key={lead.id}
-                  className={`rounded-2xl border p-4 transition-all ${
-                    isEmergency
-                      ? 'border-red-300 bg-red-50/40 ring-1 ring-red-200'
-                      : 'border-slate-200 bg-slate-50/40 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {isEmergency ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-extrabold text-white uppercase tracking-wider">
-                          <Flame className="h-3 w-3" /> EMERGENCY
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
-                          New Lead
-                        </span>
-                      )}
-                      <h3 className="font-extrabold text-sm text-slate-900">{lead.title}</h3>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400">Estimated Ticket:</span>
-                      <strong className="text-slate-900 font-bold">${lead.estimated_value}</strong>
-                    </div>
+            {data.needsAttention.map((item) => (
+              <div
+                key={item.id}
+                className={`rounded-2xl border p-4 transition-all ${
+                  item.isEmergency
+                    ? 'border-red-300 bg-red-50/40 ring-1 ring-red-200'
+                    : 'border-slate-200 bg-slate-50/50'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    {item.isEmergency ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-extrabold text-white uppercase tracking-wider">
+                        <Flame className="h-3 w-3" /> EMERGENCY
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
+                        {item.status}
+                      </span>
+                    )}
+                    <h3 className="font-extrabold text-sm text-slate-900">
+                      {item.customerName}
+                    </h3>
+                    <span className="text-xs text-slate-400 font-mono">({item.phone})</span>
                   </div>
 
-                  {lead.problem && (
-                    <p className="mt-2 text-xs text-slate-700 bg-white/80 p-2.5 rounded-xl border border-slate-200">
-                      <strong>Customer message:</strong> &ldquo;{lead.problem}&rdquo;
-                    </p>
+                  <span className="text-xs text-slate-400">Waiting: <strong>{item.timeSince}</strong></span>
+                </div>
+
+                <div className="mt-2 text-xs text-slate-800 bg-white p-2.5 rounded-xl border border-slate-200">
+                  <div className="font-semibold text-slate-900">Issue: &ldquo;{item.issue}&rdquo;</div>
+                  {item.address && (
+                    <div className="text-slate-500 text-[11px] mt-0.5">📍 Address: {item.address}</div>
                   )}
-
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 border-t border-slate-100 pt-2.5">
-                    <div>
-                      <strong>Caller:</strong> {lead.contact?.full_name || 'Homeowner'} ({lead.contact?.phone_number || 'Phone captured'})
-                      {lead.address && <span className="ml-3">📍 {lead.address}</span>}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {lead.contact?.phone_number && (
-                        <a
-                          href={`tel:${lead.contact.phone_number}`}
-                          className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-700 shadow-sm"
-                        >
-                          <Phone className="h-3.5 w-3.5" /> Call Customer
-                        </a>
-                      )}
-                      <Link
-                        href="/dashboard/inbox"
-                        className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 font-bold text-slate-700 hover:bg-slate-50"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5 text-blue-600" /> Open Conversation
-                      </Link>
-                    </div>
+                  <div className="text-blue-700 text-[11px] mt-1 font-semibold">
+                    👉 Recommended Action: {item.recommendedAction}
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Section 6 Exact Three Buttons: CALL CUSTOMER, VIEW CONVERSATION, VIEW JOB */}
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs pt-1">
+                  {item.phone && (
+                    <a
+                      href={`tel:${item.phone}`}
+                      className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3.5 py-1.5 font-bold text-white hover:bg-emerald-700 shadow-xs"
+                    >
+                      <Phone className="h-3.5 w-3.5" /> CALL CUSTOMER
+                    </a>
+                  )}
+                  <Link
+                    href="/dashboard/inbox"
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5 text-blue-600" /> VIEW CONVERSATION
+                  </Link>
+                  <Link
+                    href="/dashboard/jobs"
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    <ClipboardList className="h-3.5 w-3.5 text-amber-600" /> VIEW JOB
+                  </Link>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* ---------------- SECTION 10: RECENT RECOVERED LEADS & REVENUE BREAKDOWN ---------------- */}
+      {/* ---------------- SECTION 10 & 16: RECENT LEADS & REVENUE ATTRIBUTION ---------------- */}
       <div className="grid gap-6 lg:grid-cols-12">
-        {/* Recent Recovered Leads (8 cols) */}
+        {/* Recent Recovered Leads Table (8 cols) */}
         <div className="lg:col-span-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-100 pb-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">Recent Recovered Leads</h2>
-              <p className="text-xs text-slate-500">Opportunities captured automatically from missed calls.</p>
+              <p className="text-xs text-slate-500">Live opportunities captured from missed calls in {data.periodLabel}.</p>
             </div>
             <Link
               href="/dashboard/jobs"
@@ -552,46 +511,47 @@ export default function DashboardOverviewPage() {
                 <tr>
                   <th className="py-2.5 px-3">Customer</th>
                   <th className="py-2.5 px-3">Issue</th>
+                  <th className="py-2.5 px-3">Recovery Source</th>
                   <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3">Reported Value</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3 text-right">Value</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {recentLeads.map((job) => (
+                {data.recentLeads.map((job) => (
                   <tr key={job.id} className="hover:bg-slate-50/60">
                     <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{job.contact?.full_name || 'Homeowner'}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{job.contact?.phone_number}</div>
+                      <div className="font-bold text-slate-900">{job.customerName}</div>
+                      <div className="text-[11px] text-slate-400 font-mono">{job.phone}</div>
                     </td>
                     <td className="py-3 px-3 max-w-xs truncate text-slate-700 font-medium">
-                      {job.problem || job.title}
+                      {job.issue}
+                    </td>
+                    <td className="py-3 px-3 text-slate-500 text-[11px]">
+                      {job.recoverySource}
                     </td>
                     <td className="py-3 px-3">
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                          job.status === 'BOOKED'
+                          job.status === 'COMPLETED'
                             ? 'bg-emerald-100 text-emerald-800'
+                            : job.status === 'BOOKED'
+                            ? 'bg-blue-100 text-blue-800'
                             : job.status === 'CONTACTED'
                             ? 'bg-amber-100 text-amber-800'
-                            : job.status === 'NEW'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-600'
+                            : job.status === 'DEAD'
+                            ? 'bg-slate-100 text-slate-500'
+                            : 'bg-indigo-100 text-indigo-800'
                         }`}
                       >
                         {job.status}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-bold text-slate-900">
-                      ${job.actual_value || job.estimated_value || '—'}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <Link
-                        href="/dashboard/jobs"
-                        className="inline-flex items-center gap-1 rounded-lg bg-slate-100 hover:bg-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-700"
-                      >
-                        View Lead
-                      </Link>
+                    <td className="py-3 px-3 font-bold text-slate-900 text-right">
+                      {job.actualRevenue !== undefined ? (
+                        <span className="text-emerald-600">${job.actualRevenue}</span>
+                      ) : (
+                        <span>${job.estimatedValue} Est.</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -600,90 +560,55 @@ export default function DashboardOverviewPage() {
           </div>
         </div>
 
-        {/* Section 15 & 18: Revenue Tracking & Today's Summary (4 cols) */}
+        {/* Revenue Breakdown (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
-          {/* Revenue Breakdown (Section 15) */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <DollarSign className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-slate-900">Revenue Attribution Breakdown</h3>
+              <h3 className="text-sm font-bold text-slate-900">Revenue Definitions &amp; Breakdown</h3>
             </div>
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center p-2 rounded-lg bg-emerald-50/70 border border-emerald-100">
-                <div>
-                  <span className="font-bold text-emerald-900">Confirmed Actual Revenue</span>
-                  <p className="text-[10px] text-emerald-700">Completed invoice values</p>
+              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-emerald-950">Confirmed Actual Revenue</span>
+                  <strong className="text-base font-black text-emerald-700">
+                    ${data.confirmedActualRevenue.toLocaleString()}
+                  </strong>
                 </div>
-                <strong className="text-base font-black text-emerald-700">
-                  ${summary.confirmedActualRevenue.toLocaleString()}
-                </strong>
+                <p className="text-[10px] text-emerald-800 mt-0.5">
+                  Confirmed amount recorded for completed jobs.
+                </p>
               </div>
 
-              <div className="flex justify-between items-center p-2 rounded-lg bg-blue-50/70 border border-blue-100">
-                <div>
-                  <span className="font-bold text-blue-900">In-Pipeline Estimated</span>
-                  <p className="text-[10px] text-blue-700">Qualified leads waiting</p>
+              <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-blue-950">In-Pipeline Estimated Value</span>
+                  <strong className="text-base font-black text-blue-700">
+                    ${data.pipelineEstimatedValue.toLocaleString()}
+                  </strong>
                 </div>
-                <strong className="text-base font-black text-blue-700">
-                  ${summary.pipelineEstimatedValue.toLocaleString()}
-                </strong>
+                <p className="text-[10px] text-blue-800 mt-0.5">
+                  Estimated value for active unclosed leads.
+                </p>
               </div>
 
-              <div className="flex justify-between items-center p-2 rounded-lg bg-slate-50 border border-slate-200">
-                <div>
-                  <span className="font-bold text-slate-700">Potential Missed Value</span>
-                  <p className="text-[10px] text-slate-500">All missed calls × avg ticket</p>
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-700">Potential Missed Call Value</span>
+                  <strong className="text-base font-black text-slate-700">
+                    ${data.potentialMissedCallValue.toLocaleString()}
+                  </strong>
                 </div>
-                <strong className="text-base font-black text-slate-700">
-                  ${summary.potentialMissedCallValue.toLocaleString()}
-                </strong>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Early opportunity estimate ({data.missedCallsCount} calls × $650).
+                </p>
               </div>
             </div>
-          </div>
-
-          {/* Section 18: Today's Recovery Summary */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Clock className="h-4 w-4 text-blue-600" />
-              <h3 className="text-sm font-bold text-slate-900">Today&apos;s Recovery Summary</h3>
-            </div>
-            <div className="space-y-1.5 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span>Missed calls:</span>
-                <strong className="text-slate-900">{summary.missedCallsCount}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Text-backs delivered:</span>
-                <strong className="text-slate-900">{summary.textsDeliveredCount}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Customer responses:</span>
-                <strong className="text-indigo-600">{summary.customersRespondedCount}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Qualified leads:</span>
-                <strong className="text-slate-900">{summary.qualifiedLeadsCount}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Jobs booked:</span>
-                <strong className="text-emerald-600 font-bold">{summary.bookedJobsCount}</strong>
-              </div>
-              <div className="flex justify-between border-t border-slate-100 pt-2 font-bold text-slate-900">
-                <span>Reported value:</span>
-                <span className="text-emerald-700">${summary.reportedRecoveredRevenue.toLocaleString()}</span>
-              </div>
-            </div>
-            <Link
-              href="/dashboard/reports"
-              className="block w-full text-center rounded-xl border border-slate-200 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
-            >
-              View Full Reports
-            </Link>
           </div>
         </div>
       </div>
 
-      {/* ---------------- MODAL FOR SECTION 15: ADD / UPDATE ACTUAL JOB VALUE ---------------- */}
+      {/* ---------------- MODAL FOR SECTION 15: RECORD COMPLETED REVENUE ---------------- */}
       {valueModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
@@ -698,7 +623,7 @@ export default function DashboardOverviewPage() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Enter the confirmed actual invoice value for completed service jobs to accurately track your recovered ROI.
+              When a job is marked completed, enter the confirmed invoice amount so it enters your confirmed actual revenue metrics.
             </p>
 
             <form onSubmit={handleSaveActualValue} className="space-y-3 text-xs">
@@ -709,22 +634,22 @@ export default function DashboardOverviewPage() {
                   onChange={(e) => setSelectedJobId(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                  {recentLeads.map((j) => (
+                  {data.recentLeads.map((j) => (
                     <option key={j.id} value={j.id}>
-                      {j.title} — {j.contact?.phone_number} (${j.actual_value || j.estimated_value})
+                      {j.customerName} — {j.issue} (${j.actualRevenue || j.estimatedValue})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-slate-600 font-bold mb-1">Actual Completed Value ($)</label>
+                <label className="block text-slate-600 font-bold mb-1">Confirmed Completed Amount ($)</label>
                 <input
                   type="number"
                   min="0"
                   step="10"
                   required
-                  placeholder="e.g. 850"
+                  placeholder="e.g. 1207.50"
                   value={enteredActualValue}
                   onChange={(e) => setEnteredActualValue(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 p-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"

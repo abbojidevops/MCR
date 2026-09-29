@@ -173,7 +173,7 @@ export interface IntakeSession {
   updated_at: string;
 }
 
-export type JobStatus = 'NEW' | 'CONTACTED' | 'BOOKED' | 'DEAD';
+export type JobStatus = 'NEW' | 'CONTACTED' | 'BOOKED' | 'COMPLETED' | 'DEAD';
 
 export interface JobCard {
   id: string;
@@ -181,6 +181,8 @@ export interface JobCard {
   contact_id: string;
   intake_session_id?: string;
   conversation_id?: string;
+  call_record_id?: string;
+  recovery_source?: string; // e.g. "Missed Call — September 29, 2026"
   title: string;
   trade: TradeKey;
   problem?: string;
@@ -196,6 +198,7 @@ export interface JobCard {
   qualified_time?: string;
   contacted_time?: string;
   booked_time?: string;
+  completed_time?: string;
   dead_time?: string;
   assigned_user_id?: string;
   created_at: string;

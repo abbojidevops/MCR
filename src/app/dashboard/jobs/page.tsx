@@ -69,7 +69,8 @@ export default function JobsPage() {
   const columns: { status: JobStatus; title: string; color: string; badgeBg: string }[] = [
     { status: 'NEW', title: 'New Opportunities', color: 'border-blue-500', badgeBg: 'bg-blue-100 text-blue-800' },
     { status: 'CONTACTED', title: 'Contacted', color: 'border-amber-500', badgeBg: 'bg-amber-100 text-amber-800' },
-    { status: 'BOOKED', title: 'Booked Jobs', color: 'border-emerald-500', badgeBg: 'bg-emerald-100 text-emerald-800' },
+    { status: 'BOOKED', title: 'Booked Jobs', color: 'border-indigo-500', badgeBg: 'bg-indigo-100 text-indigo-800' },
+    { status: 'COMPLETED', title: 'Completed (Paid)', color: 'border-emerald-500', badgeBg: 'bg-emerald-100 text-emerald-800' },
     { status: 'DEAD', title: 'Dead / Lost', color: 'border-slate-400', badgeBg: 'bg-slate-100 text-slate-700' },
   ];
 
@@ -117,7 +118,7 @@ export default function JobsPage() {
 
       {/* Kanban Board View */}
       {viewMode === 'kanban' && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {columns.map((col) => {
             const colJobs = jobs.filter((j) => j.status === col.status);
             const totalColValue = colJobs.reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
@@ -218,17 +219,27 @@ export default function JobsPage() {
                   <td className="px-4 py-3">
                     <div className="font-bold text-slate-900">{job.title}</div>
                     <div className="text-slate-500">
-                      {job.contact?.full_name} • {job.contact?.phone_number}
+                      {job.contact?.full_name || 'Unknown Caller'} • {job.contact?.phone_number}
                     </div>
                   </td>
                   <td className="px-4 py-3 uppercase font-semibold text-slate-600">{job.trade}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
+                    <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
+                      job.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' :
+                      job.status === 'BOOKED' ? 'bg-indigo-100 text-indigo-800' :
+                      job.status === 'CONTACTED' ? 'bg-amber-100 text-amber-800' :
+                      job.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
                       {job.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 font-bold text-slate-900">
-                    ${job.actual_value || job.estimated_value}
+                    {job.actual_value !== undefined ? (
+                      <span className="text-emerald-600">${job.actual_value}</span>
+                    ) : (
+                      <span>${job.estimated_value} (est)</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {job.is_emergency ? (
@@ -277,7 +288,7 @@ export default function JobsPage() {
             <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs space-y-2">
               <div className="flex justify-between">
                 <span className="text-slate-500">Customer Name:</span>
-                <span className="font-bold text-slate-800">{selectedJob.contact?.full_name || 'Homeowner'}</span>
+                <span className="font-bold text-slate-800">{selectedJob.contact?.full_name || 'Unknown Caller'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Phone Number:</span>
@@ -287,6 +298,12 @@ export default function JobsPage() {
                 <span className="text-slate-500">Service Address:</span>
                 <span className="font-bold text-slate-800">{selectedJob.address || 'Address provided via text'}</span>
               </div>
+              {selectedJob.recovery_source && (
+                <div className="flex justify-between border-t border-slate-200/60 pt-2">
+                  <span className="text-slate-500">Recovery Source:</span>
+                  <span className="font-semibold text-emerald-700">{selectedJob.recovery_source}</span>
+                </div>
+              )}
             </div>
 
             {/* Problem Description */}
@@ -381,8 +398,14 @@ export default function JobsPage() {
                 )}
                 {selectedJob.booked_time && (
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+                    <span className="h-2 w-2 rounded-full bg-indigo-600"></span>
                     <span><strong>Job Booked:</strong> Confirmed on schedule ({new Date(selectedJob.booked_time).toLocaleTimeString()})</span>
+                  </div>
+                )}
+                {selectedJob.completed_time && (
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+                    <span><strong>Job Completed &amp; Paid:</strong> Confirmed invoice settled (${selectedJob.actual_value || selectedJob.estimated_value}) at {new Date(selectedJob.completed_time).toLocaleTimeString()}</span>
                   </div>
                 )}
               </div>
@@ -406,30 +429,42 @@ export default function JobsPage() {
               </div>
 
               {/* Status Switcher Buttons */}
-              <div className="flex gap-1.5 mt-3 sm:mt-0">
+              <div className="flex flex-wrap gap-1.5 mt-3 sm:mt-0">
                 <button
                   type="button"
                   onClick={() => handleStatusChange(selectedJob.id, 'CONTACTED')}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    selectedJob.status === 'CONTACTED' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    selectedJob.status === 'CONTACTED' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   Contacted
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || 350)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    selectedJob.status === 'BOOKED' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
+                  onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 350)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    selectedJob.status === 'BOOKED' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   Booked
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    const finalVal = parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 450;
+                    handleStatusChange(selectedJob.id, 'COMPLETED', finalVal);
+                  }}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    selectedJob.status === 'COMPLETED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Completed (Paid)
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleStatusChange(selectedJob.id, 'DEAD')}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold ${
-                    selectedJob.status === 'DEAD' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    selectedJob.status === 'DEAD' ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
                 >
                   Dead
