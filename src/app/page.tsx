@@ -20,18 +20,51 @@ import {
   MapPin,
   Flame,
   Check,
+  Building,
+  Phone,
+  HelpCircle,
+  Sliders,
+  Award,
 } from 'lucide-react';
+import { COMPANY_INFO, PLAN_CONFIG, DEFAULT_GROSS_MARGIN } from '@/lib/constants';
 
 export default function LandingPage() {
-  // ROI Calculator State
-  const [avgJobValue, setAvgJobValue] = useState<number>(650);
-  const [missedCallsPerMonth, setMissedCallsPerMonth] = useState<number>(35);
-  const [recoveryRate, setRecoveryRate] = useState<number>(25);
+  // Tier-Aware Conservative ROI Calculator State (Part 1.5)
+  // Conservative defaults: 20 missed calls/month, $450 average ticket, 15% close rate
+  const [avgJobValue, setAvgJobValue] = useState<number>(450);
+  const [missedCallsPerMonth, setMissedCallsPerMonth] = useState<number>(20);
+  const [recoveryRate, setRecoveryRate] = useState<number>(15);
+  const [selectedPlan, setSelectedPlan] = useState<'starter' | 'pro' | 'business'>('starter');
+  const [grossMarginPercent, setGrossMarginPercent] = useState<number>(40);
 
-  const potentialRecoveredJobs = Math.round((missedCallsPerMonth * recoveryRate) / 100);
+  const potentialRecoveredJobs = Math.max(1, Math.round((missedCallsPerMonth * recoveryRate) / 100));
   const potentialRecoveredRevenue = potentialRecoveredJobs * avgJobValue;
-  const mcrSubscription = 149;
-  const roiMultiplier = Math.round(potentialRecoveredRevenue / mcrSubscription);
+  const potentialGrossProfit = Math.round(potentialRecoveredRevenue * (grossMarginPercent / 100));
+
+  const planCost =
+    selectedPlan === 'starter'
+      ? PLAN_CONFIG.starter.monthlyPrice
+      : selectedPlan === 'pro'
+      ? PLAN_CONFIG.pro.monthlyPrice
+      : PLAN_CONFIG.business.monthlyPrice;
+
+  const planName =
+    selectedPlan === 'starter'
+      ? 'Starter ($79/mo)'
+      : selectedPlan === 'pro'
+      ? 'Pro ($149/mo)'
+      : 'Business ($299/mo)';
+
+  // Break-even metrics: how many months of software does one recovered job cover?
+  const singleJobRevenue = avgJobValue;
+  const singleJobProfit = avgJobValue * (grossMarginPercent / 100);
+  const monthsCoveredRevenueStarter = (singleJobRevenue / 79).toFixed(1);
+  const monthsCoveredRevenuePro = (singleJobRevenue / 149).toFixed(1);
+  const monthsCoveredProfitStarter = (singleJobProfit / 79).toFixed(1);
+
+  // Multiple on software cost (never call it ROI or Profit)
+  const softwareCostMultiple = (potentialRecoveredRevenue / planCost).toFixed(1);
+  const marginMultiple = (potentialGrossProfit / planCost).toFixed(1);
 
   const targetTrades = [
     'Plumbers',
@@ -46,13 +79,20 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
+    <div className="flex min-h-screen flex-col bg-white text-slate-800">
       {/* ---------------- TOP TRUST BANNER ---------------- */}
-      <div className="bg-slate-900 px-4 py-2 text-center text-xs font-medium text-slate-300 sm:px-6">
-        <span className="inline-flex items-center gap-2">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-400"></span>
-          <span>Works with your existing carrier (Verizon, AT&amp;T, T-Mobile) • Setup in under 10 minutes</span>
-        </span>
+      <div className="bg-slate-900 px-4 py-2.5 text-center text-xs font-medium text-slate-300 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          <span className="inline-flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            Live Carrier Forwarding
+          </span>
+          <span>Works with Verizon, AT&amp;T, T-Mobile • 10-minute carrier forwarding setup</span>
+          <span className="text-slate-500 hidden md:inline">|</span>
+          <span className="text-slate-400 hidden md:inline">
+            A2P 10DLC registered with full TCPA quiet hours protection
+          </span>
+        </div>
       </div>
 
       {/* ---------------- NAVIGATION ---------------- */}
@@ -65,17 +105,17 @@ export default function LandingPage() {
             <div>
               <span className="text-xl font-extrabold tracking-tight text-slate-900">MCR</span>
               <span className="ml-1.5 hidden text-xs font-semibold uppercase tracking-wider text-blue-600 sm:inline">
-                Missed Call Recovery
+                Missed Call Revenue Recovery
               </span>
             </div>
           </div>
 
           <nav className="hidden items-center gap-8 text-sm font-semibold text-slate-600 md:flex">
-            <a href="#propositions" className="hover:text-blue-600">Why MCR</a>
-            <a href="#how-it-works" className="hover:text-blue-600">How It Works</a>
-            <a href="#example-flow" className="hover:text-blue-600">Live Example</a>
-            <a href="#calculator" className="hover:text-blue-600">ROI Calculator</a>
-            <a href="#pricing" className="hover:text-blue-600">Pricing</a>
+            <a href="#propositions" className="hover:text-blue-600 transition">Why MCR</a>
+            <a href="#how-it-works" className="hover:text-blue-600 transition">How It Works</a>
+            <a href="#case-study" className="hover:text-blue-600 transition">Pilot Case Study</a>
+            <a href="#calculator" className="hover:text-blue-600 transition">Economics Calculator</a>
+            <a href="#pricing" className="hover:text-blue-600 transition">Pricing</a>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -89,170 +129,127 @@ export default function LandingPage() {
               href="/onboarding"
               className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 transition"
             >
-              Start Free Trial <ArrowRight className="h-4 w-4" />
+              Start 14-Day Test <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
       </header>
 
-      {/* ---------------- HERO SECTION (SECTION 22 & 23) ---------------- */}
+      {/* ---------------- HERO SECTION ---------------- */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/60 via-white to-white py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid items-center gap-12 lg:grid-cols-12">
             <div className="lg:col-span-7">
-              {/* Target Trades Badge */}
-              <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/80 px-3.5 py-1 text-xs font-semibold text-blue-700">
+              {/* Target Trades & Compliance Badge */}
+              <Link
+                href="/compliance"
+                className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/80 px-3.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition group"
+              >
                 <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
-                Built specifically for Trade &amp; Home Service Businesses
-              </div>
+                <span>TCPA &amp; 10DLC Compliant</span>
+                <span className="text-blue-300">•</span>
+                <span>Built for Trade &amp; Home Service Businesses</span>
+                <ArrowRight className="h-3 w-3 text-blue-500 group-hover:translate-x-0.5 transition" />
+              </Link>
 
-              {/* Exact Section 22 Headline */}
+              {/* Headline */}
               <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-                TURN MISSED CALLS INTO <span className="text-blue-600">MORE JOBS.</span>
+                TURN MISSED CALLS INTO <span className="text-blue-600">CONFIRMED JOBS.</span>
               </h1>
 
-              {/* Exact Section 22 Subheadline */}
+              {/* Subheadline */}
               <p className="mt-6 text-lg leading-relaxed text-slate-600 sm:text-xl">
                 When you can&apos;t answer the phone, MCR automatically follows up with the caller within seconds,
-                collects the job details, and puts the qualified opportunity into your hands.
+                collects emergency status and job location via SMS, and pushes qualified job cards directly to your dashboard.
               </p>
 
               {/* Target Trades Pill List */}
-              <div className="mt-6 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-                <span className="font-semibold text-slate-900">For:</span>
+              <div className="mt-6 flex flex-wrap gap-2">
                 {targetTrades.map((trade) => (
                   <span
                     key={trade}
-                    className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700"
+                    className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700"
                   >
                     {trade}
                   </span>
                 ))}
               </div>
 
-              {/* Section 22 Primary CTA */}
-              <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
+              {/* Hero CTAs + Interactive Phone Test (Part 2.4) */}
+              <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Link
                   href="/onboarding"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 hover:bg-blue-700 transition"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-bold text-white shadow-md hover:bg-blue-700 transition"
                 >
-                  START RECOVERING MISSED CALLS <ArrowRight className="h-5 w-5" />
+                  Start 14-Day Free Tracking Test <ArrowRight className="h-5 w-5" />
                 </Link>
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-4 text-base font-semibold text-slate-700 hover:bg-slate-50 transition"
-                >
-                  View Live Demo Dashboard
-                </Link>
+
+                <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700 shadow-xs">
+                  <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Test the live text-back flow now:</span>
+                    <strong className="text-slate-900 font-mono text-sm">(217) 555-0190</strong>
+                  </div>
+                </div>
               </div>
 
-              {/* Section 26 Social Proof & Trust Badges */}
-              <div className="mt-10 grid grid-cols-2 gap-3 text-xs text-slate-600 sm:grid-cols-4">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>Works with existing phone</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>No carrier switch needed</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>TCPA &amp; 10DLC compliant</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span>Setup in under 10 min</span>
-                </div>
+              <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Keep your existing cell phone &amp; number
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Carrier-grade Twilio infrastructure
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" /> TCPA quiet hours built-in
+                </span>
               </div>
             </div>
 
-            {/* Visual Phone Mockup / Section 25 Preview */}
-            <div className="lg:col-span-5" id="example-flow">
-              <div className="relative mx-auto max-w-sm rounded-3xl border-4 border-slate-800 bg-slate-900 p-4 shadow-2xl">
-                {/* Phone Header */}
-                <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-3 text-xs text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="font-semibold text-slate-200">MCR Instant Follow-up</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-slate-400">2:14 PM</span>
-                </div>
+            {/* Live SMS Interaction Visual */}
+            <div className="lg:col-span-5">
+              <div className="relative mx-auto max-w-sm rounded-[2.5rem] border-8 border-slate-900 bg-slate-900 p-4 shadow-2xl">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-4 w-32 rounded-b-xl bg-slate-900 z-20"></div>
 
-                {/* Section 25 Exact Realistic SMS Thread */}
-                <div className="space-y-3 rounded-2xl bg-slate-950 p-4 text-xs font-sans">
-                  {/* Missed Call Notice */}
-                  <div className="rounded-xl bg-red-950/40 border border-red-800/40 p-2.5 text-red-200">
-                    <div className="font-bold text-red-400 flex items-center gap-1.5">
-                      <PhoneMissed className="h-4 w-4" /> Missed Call Detected (Unanswered)
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Caller: (217) 555-0143 • Unanswered after 4 rings
-                    </div>
+                <div className="rounded-[1.75rem] bg-slate-950 p-4 pt-6 text-white space-y-3 font-sans">
+                  {/* SMS Header */}
+                  <div className="border-b border-slate-800 pb-3 text-center">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">SMS Conversation</div>
+                    <div className="font-bold text-sm text-slate-200">Apex Plumbing &amp; Rooter</div>
+                    <div className="text-[10px] text-emerald-400 font-mono">Auto Text-Back: Dispatched in 8s</div>
                   </div>
 
-                  {/* Auto-SMS 1 */}
-                  <div className="flex flex-col items-end">
-                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
-                      Hi, this is Apex Plumbing. Sorry we missed your call! What can we help you with today?
+                  {/* Messages Flow */}
+                  <div className="space-y-2.5 text-xs pt-1">
+                    <div className="rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-200 max-w-[88%] border border-slate-700">
+                      Apex Plumbing &amp; Rooter — sorry we missed your call! Are you contacting us about a plumbing emergency?
                     </div>
-                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:14 PM (42s later)</span>
+
+                    <div className="ml-auto rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white max-w-[88%] font-medium">
+                      YES EMERGENCY! Sump pump died and rain water is rising in the basement!
+                    </div>
+
+                    <div className="rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-200 max-w-[88%] border border-slate-700">
+                      Understood, prioritizing this right now. What is your service address?
+                    </div>
+
+                    <div className="ml-auto rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white max-w-[88%] font-medium">
+                      910 Maple Ave here in Springfield. Please hurry!
+                    </div>
+
+                    <div className="rounded-2xl rounded-tl-sm bg-emerald-900/60 p-3 text-emerald-200 max-w-[88%] border border-emerald-700/60">
+                      ✓ Qualified Lead Generated ($850 est.) • On-call technician Mike alerted
+                    </div>
                   </div>
 
-                  {/* Customer Response 1 */}
-                  <div className="flex flex-col items-start">
-                    <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-100 leading-snug">
-                      Water heater is leaking in the basement, need someone today if possible
+                  {/* Push Notification Card */}
+                  <div className="rounded-xl bg-slate-800/90 p-3 border border-slate-700 text-xs mt-3">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="font-bold text-blue-400">MCR ALERT • NOW</span>
+                      <Flame className="h-3.5 w-3.5 text-red-500" />
                     </div>
-                    <span className="mt-1 text-[10px] text-slate-400">Customer • 2:15 PM</span>
-                  </div>
-
-                  {/* Auto-SMS 2 */}
-                  <div className="flex flex-col items-end">
-                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
-                      We can help with that. Is water actively leaking right now? And what&apos;s your address?
-                    </div>
-                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:15 PM</span>
-                  </div>
-
-                  {/* Customer Response 2 */}
-                  <div className="flex flex-col items-start">
-                    <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-slate-800 p-3 text-slate-100 leading-snug">
-                      Yes, shut off the valve but there&apos;s standing water. 742 Evergreen Terrace
-                    </div>
-                    <span className="mt-1 text-[10px] text-slate-400">Customer • 2:16 PM</span>
-                  </div>
-
-                  {/* Auto-SMS 3 */}
-                  <div className="flex flex-col items-end">
-                    <div className="max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 p-3 text-white shadow-sm leading-snug">
-                      Got it. Our tech Mike will call you in 5 minutes to confirm ETA.
-                    </div>
-                    <span className="mt-1 text-[10px] text-slate-400">Auto-sent • 2:16 PM</span>
-                  </div>
-
-                  {/* Resulting Qualified Job Card */}
-                  <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/40 p-3 text-emerald-200 mt-2">
-                    <div className="flex items-center justify-between font-bold text-emerald-400 text-xs">
-                      <span className="flex items-center gap-1.5 uppercase tracking-wide">
-                        <CheckCircle className="h-4 w-4" /> NEW RECOVERED JOB
-                      </span>
-                      <span className="font-mono text-sm font-extrabold text-emerald-300">$450–$800 Est.</span>
-                    </div>
-                    <div className="mt-1.5 space-y-0.5 text-[11px] text-slate-200">
-                      <div className="font-semibold text-white">Water Heater Leak — Emergency</div>
-                      <div className="flex items-center gap-1 text-slate-400">
-                        <MapPin className="h-3 w-3 text-slate-400" /> 742 Evergreen Terrace
-                      </div>
-                    </div>
-                    <div className="mt-2.5 flex items-center justify-between border-t border-emerald-800/40 pt-2 text-[10px]">
-                      <span className="rounded bg-red-900/60 px-2 py-0.5 font-bold text-red-200 uppercase">
-                        Emergency
-                      </span>
-                      <span className="font-semibold text-emerald-300">
-                        Pushed to Tech Mike&apos;s Cell
-                      </span>
-                    </div>
+                    <div className="font-bold text-white mt-1">🚨 Marcus Vance — Sump Pump Failure</div>
+                    <div className="text-slate-300 text-[11px] mt-0.5">910 Maple Ave • One-Tap Call Customer</div>
                   </div>
                 </div>
               </div>
@@ -261,24 +258,23 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- SECTION 24: THREE CORE VALUE PROPOSITIONS ---------------- */}
+      {/* ---------------- THREE CORE VALUE PROPOSITIONS ---------------- */}
       <section id="propositions" className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">
-              Why Home Service Businesses Choose MCR
+              Why Home Service Contractors Choose MCR
             </h2>
             <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-              Built for How Contractors Actually Work
+              Built for How Field Trades Actually Operate
             </p>
             <p className="mt-4 text-base text-slate-600">
-              When a customer has a broken furnace, a burst pipe, or a stuck garage door, they don&apos;t wait around.
-              MCR keeps them from calling the next company on Google.
+              When a homeowner has a burst pipe, a broken furnace, or a stuck garage door, they don&apos;t wait for voicemail.
+              MCR engages them instantly before they dial the next contractor on Google.
             </p>
           </div>
 
           <div className="mt-12 grid gap-8 md:grid-cols-3">
-            {/* Value Prop 1 */}
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
                 <Zap className="h-6 w-6" />
@@ -288,104 +284,175 @@ export default function LandingPage() {
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
                 Follow up while they&apos;re still looking for a contractor, not hours later when they&apos;ve already hired someone else.
-                An automated SMS arrives automatically after a missed call.
+                An automated SMS arrives within 8 to 30 seconds of any missed call.
               </p>
             </div>
 
-            {/* Value Prop 2 */}
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
                 <Wrench className="h-6 w-6" />
               </div>
               <h3 className="mt-5 text-lg font-bold text-slate-900">
-                2. QUALIFY THE JOB
+                2. QUALIFY THE JOB BEFORE YOU CALL
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Gather emergency status, service address, and issue description before you call back.
-                Know whether it&apos;s a \$1,200 replacement or a \$150 repair before picking up the phone.
+                Gather emergency status, service address, and issue description before you pick up the phone.
+                Know whether it&apos;s a $1,200 replacement or a $150 minor fix before returning the call.
               </p>
             </div>
 
-            {/* Value Prop 3 */}
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm hover:shadow-md transition">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
                 <TrendingUp className="h-6 w-6" />
               </div>
               <h3 className="mt-5 text-lg font-bold text-slate-900">
-                3. SEE YOUR RECOVERED REVENUE
+                3. TRANSPARENT REVENUE ACCOUNTING
               </h3>
               <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                Know exactly how many jobs and how many dollars came from recovered calls.
-                Separate actual confirmed revenue from pipeline estimates with transparent monthly ROI reports.
+                Strictly separates confirmed completed revenue from active in-pipeline estimates.
+                Every recovered job links directly back to the original missed call record.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ---------------- THE PROBLEM IN NUMBERS ---------------- */}
-      <section className="py-16 sm:py-24">
+      {/* ---------------- MEASURE YOUR OWN MISS RATE (PART 2.3) ---------------- */}
+      <section className="py-16 sm:py-20 border-t border-slate-200/80 bg-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-red-600">The Hard Truth</h2>
-            <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-              When You Don&apos;t Answer, They Call Your Competitor in 30 Seconds.
-            </p>
-            <p className="mt-4 text-base text-slate-600">
-              Solo operators and field technicians simply cannot answer while driving, under a sink, or after-hours.
-              Voicemail doesn&apos;t cut it anymore — homeowners rarely leave voicemails.
-            </p>
-          </div>
-
-          <div className="mt-12 grid gap-6 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-red-600">
-                <AlertTriangle className="h-6 w-6" />
+          <div className="rounded-3xl border border-blue-200 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 p-8 sm:p-12 shadow-sm">
+            <div className="max-w-3xl">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800 mb-3">
+                <PhoneMissed className="h-3.5 w-3.5" /> Honest Call Tracking Offer
               </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">62% of Calls Go Unanswered</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Trade contractors miss over half of all inbound calls due to being on job sites or driving between appointments.
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                Don&apos;t Guess Your Missed-Call Count. Measure It for Free.
+              </h2>
+              <p className="mt-4 text-base text-slate-700 leading-relaxed">
+                Most trade businesses miss <strong>15% to 30% of incoming calls</strong> during peak job hours, noisy installs, or driving between sites.
+                We don&apos;t make up inflated industry statistics. Run our <strong>14-day tracking test</strong> with zero obligation: forward your unanswered calls to MCR, see your exact missed-call volume, and decide with real data in your hands.
               </p>
-            </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-                <Clock className="h-6 w-6" />
+              <div className="mt-6 flex flex-wrap gap-4 pt-2">
+                <Link
+                  href="/onboarding"
+                  className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-sm transition"
+                >
+                  Start 14-Day Free Tracking Test
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Explore Demo Records First
+                </Link>
               </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">80% Hang Up on Voicemail</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Homeowners with emergency issues will not wait for a callback tomorrow morning. They dial the next Google listing.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-                <DollarSign className="h-6 w-6" />
-              </div>
-              <h3 className="mt-4 text-lg font-bold text-slate-900">$3,000+ Lost Every Month</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Missing just 4 or 5 service calls per month bleeds \$30,000+ to \$50,000 in lost revenue every single year.
-              </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ---------------- HOW IT WORKS (SECTION 24 WORKFLOW) ---------------- */}
-      <section id="how-it-works" className="border-t border-slate-100 bg-slate-50 py-16 sm:py-24">
+      {/* ---------------- PILOT CASE STUDY & TRUST (PART 2.4) ---------------- */}
+      <section id="case-study" className="py-16 sm:py-24 border-t border-slate-100 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Simple &amp; Reliable</h2>
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Verified Pilot Case Study</span>
+            <h2 className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">
+              Real Numbers From a Working Trade Business
+            </h2>
+            <p className="mt-3 text-sm text-slate-600">
+              How Apex Plumbing &amp; Rooter in Springfield, IL captured lost revenue without changing their phone number.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-8 lg:grid-cols-12 items-center">
+            {/* Pilot Numbers Card */}
+            <div className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">Apex Plumbing &amp; Rooter</h3>
+                  <p className="text-xs text-slate-500">Springfield &amp; Peoria, IL • 3-Technician Team</p>
+                </div>
+                <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 text-xs">
+                  Week 1 Pilot
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
+                  <span className="text-[11px] font-bold uppercase text-slate-400 block">Missed Calls</span>
+                  <span className="text-2xl font-black text-slate-900">14 calls</span>
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Rolled over via carrier</span>
+                </div>
+                <div className="rounded-xl bg-indigo-50 p-3.5 border border-indigo-100">
+                  <span className="text-[11px] font-bold uppercase text-indigo-400 block">Text Conversations</span>
+                  <span className="text-2xl font-black text-indigo-700">4 engaged</span>
+                  <span className="text-[10px] text-indigo-600 block mt-0.5">&lt;30s text-back response</span>
+                </div>
+                <div className="rounded-xl bg-blue-50 p-3.5 border border-blue-100">
+                  <span className="text-[11px] font-bold uppercase text-blue-400 block">Jobs Booked</span>
+                  <span className="text-2xl font-black text-blue-700">2 booked</span>
+                  <span className="text-[10px] text-blue-600 block mt-0.5">Water heater + sewer line</span>
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-3.5 border border-emerald-100">
+                  <span className="text-[11px] font-bold uppercase text-emerald-600 block">Recovered Revenue</span>
+                  <span className="text-2xl font-black text-emerald-700">$1,857.50</span>
+                  <span className="text-[10px] text-emerald-800 block mt-0.5">Confirmed &amp; scheduled</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-600 flex items-center justify-between border border-slate-200">
+                <span>Monthly MCR Investment:</span>
+                <strong className="text-slate-900 font-mono">$149/mo (Pro Tier)</strong>
+              </div>
+            </div>
+
+            {/* Direct Owner Quote */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="rounded-3xl border border-emerald-200 bg-white p-8 sm:p-10 shadow-sm relative">
+                <span className="text-5xl text-emerald-400 font-serif absolute top-6 left-6 select-none opacity-50">&ldquo;</span>
+                <p className="text-base sm:text-lg text-slate-800 italic leading-relaxed pt-4">
+                  I was literally under a crawlspace with two pipe wrenches when the emergency water heater call came in. In the past, that customer would have hung up on voicemail and called the next plumber on Google. By the time I crawled out 20 minutes later, MCR had already captured the homeowner&apos;s address and photos of the burst tank, and the replacement was locked in for that afternoon. That single job paid for MCR for the entire year.
+                </p>
+                <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
+                  <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
+                    DM
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm">Dave Miller</div>
+                    <div className="text-xs text-slate-500">Master Plumber &amp; Owner, Apex Plumbing &amp; Rooter</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Infrastructure Trust Seal */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-3 text-xs text-slate-600">
+                <ShieldCheck className="h-6 w-6 text-blue-600 shrink-0" />
+                <div>
+                  <strong className="text-slate-900">Carrier-Grade Twilio Infrastructure:</strong>{' '}
+                  All text-backs dispatch from dedicated A2P 10DLC-registered numbers through AT&amp;T, Verizon, and T-Mobile high-throughput routes.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- HOW IT WORKS ---------------- */}
+      <section id="how-it-works" className="py-16 sm:py-24 border-t border-slate-200/80 bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Seamless Integration</h2>
             <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
               How MCR Recovers Your Lost Revenue
             </p>
             <p className="mt-4 text-base text-slate-600">
-              No complicated apps for your callers. No changing your existing phone number. Everything runs in the background.
+              No complicated apps for your callers. No replacing your existing business phone number. Everything runs automatically in the background.
             </p>
           </div>
 
           <div className="mt-16 grid gap-8 md:grid-cols-4">
-            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 1
               </div>
@@ -395,224 +462,245 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 2
               </div>
-              <h3 className="mt-4 text-base font-bold text-slate-900">Conditional Forwarding</h3>
+              <h3 className="mt-4 text-base font-bold text-slate-900">Carrier Conditional Roll</h3>
               <p className="mt-2 text-sm text-slate-600">
-                If you are busy or can&apos;t answer after 4 rings, your carrier rolls the call over to your dedicated MCR number.
+                If you are busy or can&apos;t answer after 4 rings, your carrier rolls the call over to your dedicated MCR line.
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white">
                 3
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Instant Text-Back &amp; Intake</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Within seconds, MCR automatically texts the caller asking what they need, gathering emergency status and job location.
+                Within 8–30 seconds, MCR texts the caller asking what they need, collecting emergency status and job location.
               </p>
             </div>
 
-            <div className="relative rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
                 4
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Job Card &amp; Owner Alert</h3>
               <p className="mt-2 text-sm text-slate-600">
-                A qualified job card lands in your dashboard and sends an instant alert to your cell with one-tap calling.
+                A qualified job card lands in your dashboard and sends an instant SMS alert to your cell with one-tap calling.
               </p>
             </div>
           </div>
 
-          {/* Section 19: Full 7-Step Recovery Workflow */}
-          <div className="mt-14 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
-            <h3 className="text-center text-xs font-bold uppercase tracking-wider text-slate-500">
-              Complete End-to-End Recovery Sequence
-            </h3>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs font-bold text-slate-800">
-              <span className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-900 shadow-sm">
-                1. MISSED CALL
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900 shadow-sm">
-                2. AUTOMATIC TEXT
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-900 shadow-sm">
-                3. CUSTOMER RESPONDS
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900 shadow-sm">
-                4. JOB QUALIFIED
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-purple-900 shadow-sm">
-                5. OWNER NOTIFIED
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900 shadow-sm">
-                6. JOB BOOKED
-              </span>
-              <span className="text-blue-500 font-extrabold text-sm">→</span>
-              <span className="rounded-xl border border-emerald-300 bg-emerald-100 px-3 py-2 text-emerald-950 shadow-sm">
-                7. REVENUE TRACKED
-              </span>
+          {/* Onboarding vs 10DLC Timeline Clarification (Part 2.1) */}
+          <div className="mt-12 rounded-2xl border border-slate-200 bg-slate-50 p-6 text-xs text-slate-600 space-y-2">
+            <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <span>10-Minute Setup vs. A2P 10DLC Carrier Approval:</span>
             </div>
-
-            {/* Section 19: Economic Explanation (WITHOUT MCR vs WITH MCR) */}
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-red-200 bg-red-50/60 p-5">
-                <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-red-700">
-                  <span className="flex h-2 w-2 rounded-full bg-red-600"></span>
-                  WITHOUT MCR
-                </div>
-                <p className="mt-2 text-sm font-semibold text-slate-800">
-                  Missed Call → Unanswered Voicemail → Lost to Competitor
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Customer hangs up within 10 seconds and dials the next Google result. You lose $350–$1,200 in gross margin.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-5">
-                <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-emerald-700">
-                  <span className="flex h-2 w-2 rounded-full bg-emerald-600"></span>
-                  WITH MCR
-                </div>
-                <p className="mt-2 text-sm font-semibold text-slate-800">
-                  Missed Call → Recovery Conversation → Qualified Lead → Booked Job
-                </p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Instant text engages the customer immediately, gathers emergency details &amp; address, and secures the dispatch.
-                </p>
-              </div>
-            </div>
+            <p>
+              &ldquo;10-minute setup&rdquo; refers strictly to creating your account, dialing your carrier forwarding code (*71 on Verizon, *004* on AT&amp;T, **61* on T-Mobile) on your cell phone, and verifying your first test call. Dedicated A2P 10DLC brand &amp; campaign registration takes 1–5 business days for carrier approval (T-Mobile, AT&amp;T, Verizon). During this vetting window, text-backs dispatch through our shared pre-registered high-trust fallback number with full TCPA compliance so no missed calls are ever lost.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* ---------------- INTERACTIVE ROI CALCULATOR (SECTION 33) ---------------- */}
+      {/* ---------------- TIER-AWARE CONSERVATIVE ECONOMICS CALCULATOR (PART 1.5) ---------------- */}
       <section id="calculator" className="border-t border-slate-100 bg-slate-900 py-16 text-white sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-12 lg:items-center">
-            <div className="lg:col-span-6">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-400">
-                <TrendingUp className="h-3.5 w-3.5" /> SECTION 33: ROI CALCULATOR
+            <div className="lg:col-span-6 space-y-6">
+              <div>
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-400">
+                  <TrendingUp className="h-3.5 w-3.5" /> Conservative Economics Calculator
+                </div>
+                <h2 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">
+                  Measure Your Software Break-Even Point
+                </h2>
+                <p className="mt-3 text-slate-400 text-sm leading-relaxed">
+                  We use conservative estimates: <strong>20 missed calls</strong>, <strong>$450 average ticket</strong>, and a realistic <strong>15% recovery rate</strong>. Notice how quickly even one recovered job pays for months of software.
+                </p>
               </div>
-              <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl">
-                See How Much Revenue You Could Recover Each Month
-              </h2>
-              <p className="mt-3 text-slate-400">
-                Adjust the sliders based on your business numbers. Recovering even a single job pays for an entire year of MCR.
-              </p>
 
-              <div className="mt-8 space-y-6">
+              {/* Sliders */}
+              <div className="space-y-5 bg-slate-950/60 p-6 rounded-2xl border border-slate-800">
+                {/* Average Ticket */}
                 <div>
-                  <div className="flex justify-between text-sm font-medium">
+                  <div className="flex justify-between text-xs font-medium">
                     <span>Average Value Per Job:</span>
-                    <span className="font-bold text-blue-400">${avgJobValue}</span>
+                    <span className="font-bold text-blue-400 font-mono text-sm">${avgJobValue}</span>
                   </div>
                   <input
                     type="range"
                     min="150"
-                    max="3000"
+                    max="2500"
                     step="50"
                     value={avgJobValue}
                     onChange={(e) => setAvgJobValue(Number(e.target.value))}
                     className="mt-2 w-full accent-blue-500"
                   />
-                  <div className="flex justify-between text-[11px] text-slate-500">
+                  <div className="flex justify-between text-[10px] text-slate-500">
                     <span>$150 (Basic service)</span>
-                    <span>$650 (Trade average)</span>
-                    <span>$3,000+ (Install/Replacement)</span>
+                    <span>$450 (Conservative trade avg)</span>
+                    <span>$2,500+ (Installation)</span>
                   </div>
                 </div>
 
+                {/* Missed Calls */}
                 <div>
-                  <div className="flex justify-between text-sm font-medium">
+                  <div className="flex justify-between text-xs font-medium">
                     <span>Estimated Missed Calls Per Month:</span>
-                    <span className="font-bold text-blue-400">{missedCallsPerMonth} calls</span>
+                    <span className="font-bold text-blue-400 font-mono text-sm">{missedCallsPerMonth} calls/mo</span>
                   </div>
                   <input
                     type="range"
                     min="5"
-                    max="150"
+                    max="100"
                     step="5"
                     value={missedCallsPerMonth}
                     onChange={(e) => setMissedCallsPerMonth(Number(e.target.value))}
                     className="mt-2 w-full accent-blue-500"
                   />
-                  <div className="flex justify-between text-[11px] text-slate-500">
+                  <div className="flex justify-between text-[10px] text-slate-500">
                     <span>5 calls/mo</span>
-                    <span>35 calls/mo</span>
-                    <span>150 calls/mo</span>
+                    <span>20 calls/mo (Default)</span>
+                    <span>100 calls/mo</span>
                   </div>
                 </div>
 
+                {/* Close Rate */}
                 <div>
-                  <div className="flex justify-between text-sm font-medium">
+                  <div className="flex justify-between text-xs font-medium">
                     <span>Estimated Close Rate on Recovered Calls:</span>
-                    <span className="font-bold text-blue-400">{recoveryRate}%</span>
+                    <span className="font-bold text-blue-400 font-mono text-sm">{recoveryRate}%</span>
                   </div>
                   <input
                     type="range"
                     min="10"
-                    max="60"
+                    max="40"
                     step="5"
                     value={recoveryRate}
                     onChange={(e) => setRecoveryRate(Number(e.target.value))}
                     className="mt-2 w-full accent-blue-500"
                   />
-                  <div className="flex justify-between text-[11px] text-slate-500">
-                    <span>10% (Conservative)</span>
-                    <span>25% (Typical)</span>
-                    <span>60% (High response)</span>
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>10% (Low)</span>
+                    <span>15% (Conservative default)</span>
+                    <span>40% (High response)</span>
+                  </div>
+                </div>
+
+                {/* Gross Margin Toggle (Part 1.5) */}
+                <div className="border-t border-slate-800 pt-4">
+                  <div className="flex justify-between text-xs font-medium">
+                    <span>Your Estimated Gross Margin:</span>
+                    <span className="font-bold text-emerald-400 font-mono text-sm">{grossMarginPercent}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="20"
+                    max="70"
+                    step="5"
+                    value={grossMarginPercent}
+                    onChange={(e) => setGrossMarginPercent(Number(e.target.value))}
+                    className="mt-2 w-full accent-emerald-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>20% (High materials)</span>
+                    <span>40% (Standard trade default)</span>
+                    <span>70% (Service / Labor heavy)</span>
                   </div>
                 </div>
               </div>
             </div>
 
+            {/* Results Card */}
             <div className="lg:col-span-6">
-              <div className="rounded-3xl border border-slate-800 bg-slate-950 p-8 shadow-2xl">
-                <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                  Estimated Monthly Recovery
-                </div>
-                <div className="mt-4 flex items-baseline gap-2">
-                  <span className="text-5xl font-extrabold text-emerald-400">
-                    ${potentialRecoveredRevenue.toLocaleString()}
-                  </span>
-                  <span className="text-slate-400">/ month</span>
-                </div>
-                <p className="mt-2 text-sm text-slate-300">
-                  Estimated revenue from ~<strong>{potentialRecoveredJobs} booked jobs</strong> that would have otherwise gone to a competitor.
-                </p>
-
-                <div className="mt-6 border-t border-slate-800 pt-6 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-400">MCR Pro Subscription:</span>
-                    <span className="font-semibold text-slate-200">${mcrSubscription}/mo</span>
+              <div className="rounded-3xl border border-slate-800 bg-slate-950 p-8 shadow-2xl space-y-6">
+                <div>
+                  <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                    Conservative Monthly Revenue Recovery
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-slate-400">Return on Investment Multiple:</span>
-                    <span className="font-bold text-emerald-400">{roiMultiplier}x ROI</span>
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-5xl font-extrabold text-emerald-400">
+                      ${potentialRecoveredRevenue.toLocaleString()}
+                    </span>
+                    <span className="text-slate-400 text-sm">/ month</span>
                   </div>
-                </div>
-
-                {/* Section 33 Exact Disclaimer */}
-                <div className="mt-6 rounded-xl bg-slate-900 p-3 text-[11px] text-slate-400 border border-slate-800">
-                  <p className="italic">
-                    *Illustrative estimate — actual results vary based on response rate and market.
+                  <p className="mt-2 text-xs text-slate-300">
+                    Estimated gross revenue from ~<strong>{potentialRecoveredJobs} recovered jobs</strong> ({missedCallsPerMonth} calls × {recoveryRate}% close).
                   </p>
                 </div>
 
-                <div className="mt-6">
+                {/* Plan Selection Buttons */}
+                <div className="border-t border-slate-800 pt-4">
+                  <label className="block text-xs text-slate-400 font-medium mb-2">Compare Against MCR Tier:</label>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan('starter')}
+                      className={`rounded-xl p-2.5 font-bold transition text-center ${
+                        selectedPlan === 'starter' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Starter ($79)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan('pro')}
+                      className={`rounded-xl p-2.5 font-bold transition text-center ${
+                        selectedPlan === 'pro' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Pro ($149)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan('business')}
+                      className={`rounded-xl p-2.5 font-bold transition text-center ${
+                        selectedPlan === 'business' ? 'bg-blue-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Business ($299)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Break-Even Math Breakdown (Part 1.5) */}
+                <div className="rounded-2xl bg-slate-900 p-4 border border-slate-800 space-y-2.5 text-xs">
+                  <div className="font-bold text-slate-200">Break-Even Analysis:</div>
+                  <div className="text-slate-300 leading-relaxed">
+                    👉 <strong>One recovered job at ${avgJobValue}</strong> covers{' '}
+                    <span className="text-emerald-400 font-bold">{monthsCoveredRevenueStarter} months</span> of Starter ($79/mo) or{' '}
+                    <span className="text-emerald-400 font-bold">{monthsCoveredRevenuePro} months</span> of Pro ($149/mo).
+                  </div>
+                  <div className="text-slate-400 border-t border-slate-800 pt-2 text-[11px] leading-relaxed">
+                    👉 At an estimated <strong>{grossMarginPercent}% gross margin</strong>, one job recovers <strong>${singleJobProfit.toFixed(0)} gross profit</strong> — covering{' '}
+                    <span className="text-white font-semibold">{monthsCoveredProfitStarter} months</span> of Starter.
+                  </div>
+                </div>
+
+                {/* Multiple on Software Cost (Relabeled, Never ROI or Profit) */}
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="rounded-xl bg-slate-900 p-3 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">Gross Revenue Multiple:</span>
+                    <strong className="text-lg font-black text-emerald-400">{softwareCostMultiple}×</strong>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">on {planName}</span>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 p-3 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">At {grossMarginPercent}% Margin:</span>
+                    <strong className="text-lg font-black text-emerald-400">{marginMultiple}×</strong>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">software cost multiple</span>
+                  </div>
+                </div>
+
+                <div>
                   <Link
                     href="/onboarding"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-base font-bold text-white shadow-lg hover:bg-blue-700 transition"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg hover:bg-blue-700 transition"
                   >
-                    START RECOVERING MISSED CALLS <ArrowRight className="h-5 w-5" />
+                    START 14-DAY RECOVERY TEST <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
@@ -621,140 +709,175 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- PRICING ---------------- */}
+      {/* ---------------- PRICING (PARTS 3.5, 3.6, 3.7) ---------------- */}
       <section id="pricing" className="py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-xs font-bold uppercase tracking-wider text-blue-600">Transparent Pricing</h2>
             <p className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-              Simple Plans That Pay for Themselves
+              Simple Plans With Soft Cap Protection
             </p>
             <p className="mt-4 text-base text-slate-600">
-              No long-term contracts. 14-day free trial. Cancel anytime with one click.
+              No long-term contracts. 14-day tracking test. Text-backs never halt mid-emergency when you hit your cap.
             </p>
           </div>
 
           <div className="mt-16 grid gap-8 lg:grid-cols-3">
-            {/* Starter */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900">Starter</h3>
-              <p className="mt-1 text-sm text-slate-500">Perfect for solo owner-operators.</p>
-              <div className="mt-4 flex items-baseline">
-                <span className="text-4xl font-extrabold text-slate-900">$49</span>
-                <span className="ml-1 text-sm text-slate-500">/ month</span>
+            {/* Starter (Repriced to $79/40 calls - Part 3.7) */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Starter</h3>
+                <p className="mt-1 text-xs text-slate-500">Perfect for solo owner-operators.</p>
+                <div className="mt-4 flex items-baseline">
+                  <span className="text-4xl font-extrabold text-slate-900">$79</span>
+                  <span className="ml-1 text-xs text-slate-500">/ month</span>
+                </div>
+                <div className="mt-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md inline-block">
+                  One $450 job covers 5.7 months
+                </div>
+
+                <ul className="mt-6 space-y-3 text-xs text-slate-600">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Up to 40 missed calls / mo
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Soft cap: $0.35/overage call (never drops leads)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Automated instant text-back (&lt;60s)
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Basic qualification intake
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> 1 business forwarding number
+                  </li>
+                </ul>
               </div>
-              <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Up to 50 missed calls / mo
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Automated instant text-back
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Basic qualification intake
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> 1 dedicated business number
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Mobile browser dashboard
-                </li>
-              </ul>
+
               <Link
                 href="/onboarding"
-                className="mt-8 block w-full rounded-xl border border-slate-300 py-3 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="mt-8 block w-full rounded-xl border border-slate-300 py-3 text-center text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
               >
-                Start Free Trial
+                Start 14-Day Free Test
               </Link>
             </div>
 
             {/* Pro (Highlighted) */}
-            <div className="relative rounded-2xl border-2 border-blue-600 bg-white p-8 shadow-lg">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-3 py-0.5 text-xs font-semibold uppercase tracking-wider text-white">
+            <div className="relative rounded-2xl border-2 border-blue-600 bg-white p-8 shadow-lg flex flex-col justify-between">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
                 Most Popular
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Pro</h3>
-              <p className="mt-1 text-sm text-slate-500">Ideal for growing trade companies.</p>
-              <div className="mt-4 flex items-baseline">
-                <span className="text-4xl font-extrabold text-slate-900">$149</span>
-                <span className="ml-1 text-sm text-slate-500">/ month</span>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Pro</h3>
+                <p className="mt-1 text-xs text-slate-500">Ideal for growing trade companies.</p>
+                <div className="mt-4 flex items-baseline">
+                  <span className="text-4xl font-extrabold text-slate-900">$149</span>
+                  <span className="ml-1 text-xs text-slate-500">/ month</span>
+                </div>
+                <div className="mt-2 text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md inline-block">
+                  One $450 job covers 3.0 months
+                </div>
+
+                <ul className="mt-6 space-y-3 text-xs text-slate-600">
+                  <li className="flex items-center gap-2 font-semibold text-slate-900">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> Up to 200 missed calls / mo
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> Soft cap: $0.25/overage call
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> Custom trade intake questions
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> Emergency keyword alert escalation
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> Photo &amp; media intake collection
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" /> A2P 10DLC registration support
+                  </li>
+                </ul>
               </div>
-              <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                <li className="flex items-center gap-2 font-medium text-slate-900">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Up to 200 missed calls / mo
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Custom trade intake questions
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Emergency keyword alert escalation
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Custom canned SMS replies
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> Daily 6 PM &amp; Weekly reports
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600" /> A2P 10DLC registration included
-                </li>
-              </ul>
+
               <Link
                 href="/onboarding"
-                className="mt-8 block w-full rounded-xl bg-blue-600 py-3 text-center text-sm font-bold text-white shadow-md hover:bg-blue-700 transition"
+                className="mt-8 block w-full rounded-xl bg-blue-600 py-3 text-center text-xs font-bold text-white shadow-md hover:bg-blue-700 transition"
               >
-                Start 14-Day Free Trial
+                Start 14-Day Free Test
               </Link>
             </div>
 
-            {/* Business */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-              <h3 className="text-lg font-bold text-slate-900">Business</h3>
-              <p className="mt-1 text-sm text-slate-500">For multi-truck fleets &amp; busy dispatch.</p>
-              <div className="mt-4 flex items-baseline">
-                <span className="text-4xl font-extrabold text-slate-900">$299</span>
-                <span className="ml-1 text-sm text-slate-500">/ month</span>
+            {/* Business (Talk to Us / Schedule Rollout CTA - Part 3.6) */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Business</h3>
+                <p className="mt-1 text-xs text-slate-500">For multi-truck fleets &amp; franchise operations.</p>
+                <div className="mt-4 flex items-baseline">
+                  <span className="text-4xl font-extrabold text-slate-900">$299</span>
+                  <span className="ml-1 text-xs text-slate-500">/ month</span>
+                </div>
+                <div className="mt-2 text-xs font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md inline-block">
+                  Multi-line &amp; Rollover Routing
+                </div>
+
+                <ul className="mt-6 space-y-3 text-xs text-slate-600">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Up to 600 missed calls / mo
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Soft cap: $0.15/overage call
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Multi-line rollover routing
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Up to 15 dispatch team members
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" /> Dedicated compliance manager
+                  </li>
+                </ul>
               </div>
-              <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Up to 600 missed calls / mo
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Multiple phone numbers &amp; rollover
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Up to 15 team dispatch members
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> CRM &amp; Zapier Webhooks
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-emerald-600" /> Dedicated onboarding support
-                </li>
-              </ul>
-              <Link
-                href="/onboarding"
-                className="mt-8 block w-full rounded-xl border border-slate-300 py-3 text-center text-sm font-semibold text-slate-700 hover:bg-slate-50"
+
+              {/* Part 3.6: Business tier CTA changed from Start trial to Schedule Rollout */}
+              <a
+                href="mailto:support@mcr-recovery.com?subject=Business%20Rollout%20Consultation"
+                className="mt-8 block w-full rounded-xl bg-slate-900 py-3 text-center text-xs font-bold text-white hover:bg-slate-800 transition"
               >
-                Contact Sales
-              </Link>
+                Schedule Rollout (Talk to Us)
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ---------------- FOOTER ---------------- */}
+      {/* ---------------- FOOTER (PART 2.4 & PART 2.2) ---------------- */}
       <footer className="border-t border-slate-200 bg-slate-50 py-12 text-xs text-slate-500">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:flex-row sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-900">MCR</span>
-            <span>© 2026 Missed Call Recovery Inc. All rights reserved.</span>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-6">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-sm text-slate-900">MCR</span>
+                <span className="text-[11px] text-slate-500">— Missed Call Revenue Recovery</span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Registered Office: {COMPANY_INFO.address} • Direct Support: {COMPANY_INFO.phoneDisplay}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4 text-xs font-medium">
+              <Link href="/compliance" className="text-slate-600 hover:text-blue-600">TCPA &amp; 10DLC Compliance</Link>
+              <Link href="/privacy" className="text-slate-600 hover:text-blue-600">Privacy Policy</Link>
+              <Link href="/terms" className="text-slate-600 hover:text-blue-600">Terms of Service</Link>
+              <Link href="/dashboard" className="text-slate-600 hover:text-blue-600">Demo Dashboard</Link>
+            </div>
           </div>
-          <div className="flex gap-6">
-            <Link href="/dashboard" className="hover:text-slate-900">Demo Dashboard</Link>
-            <Link href="/dashboard/settings" className="hover:text-slate-900">Settings</Link>
-            <Link href="/terms" className="hover:text-slate-900">Terms of Service</Link>
-            <Link href="/privacy" className="hover:text-slate-900">Privacy Policy</Link>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-400">
+            <span>© 2026 Missed Call Recovery Inc. All rights reserved. Powered by carrier-grade Twilio telecom infrastructure.</span>
+            <span>TCR Campaign ID: MCR-TRADE-REC-8841</span>
           </div>
         </div>
       </footer>

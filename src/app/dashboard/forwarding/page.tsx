@@ -36,7 +36,6 @@ export default function ForwardingWizardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'simulate_call',
-          accountId: 'acc-apex-plumbing',
           callerNumber: '+12175559821',
           callerName: 'Carrier Test Call',
         }),

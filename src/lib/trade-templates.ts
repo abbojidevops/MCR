@@ -5,7 +5,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'plumbing',
     display_name: 'Plumbing & Rooter',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Are you contacting us about a plumbing emergency?",
+      "{{business_name}}: Sorry we missed your call! Need emergency plumbing service? Reply STOP to opt out.",
     emergency_keywords: ['leak', 'burst', 'flood', 'flooding', 'overflow', 'pipe broke', 'sewage', 'backup', 'no water', 'hot water heater leaking', 'emergency'],
     questions: [
       {
@@ -61,7 +61,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'hvac',
     display_name: 'Heating & Air Conditioning (HVAC)',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Is your heating or cooling system completely down?",
+      "{{business_name}}: Sorry we missed your call! Is your heating or AC down? Reply STOP to opt out.",
     emergency_keywords: ['no heat', 'freezing', 'furnace out', 'ac dead', 'ac out', 'no ac', 'burning smell', 'carbon monoxide', 'water leaking ac', 'elderly', 'infant'],
     questions: [
       {
@@ -112,7 +112,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'electrical',
     display_name: 'Electrical Services',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Is there an active electrical emergency like sparks, burning smell, or exposed wires?",
+      "{{business_name}}: Sorry we missed your call! Electrical emergency? Reply STOP to opt out.",
     emergency_keywords: ['spark', 'sparks', 'smoke', 'burning smell', 'fire', 'hot panel', 'buzzing', 'exposed wire', 'shock', 'power out'],
     questions: [
       {
@@ -163,7 +163,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'garage_door',
     display_name: 'Garage Door Repair & Install',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Is your garage door currently stuck open or is your vehicle trapped?",
+      "{{business_name}}: Sorry we missed your call! Garage door stuck? Reply STOP to opt out.",
     emergency_keywords: ['stuck', 'car trapped', 'cable snapped', 'spring broke', 'crooked door', 'off track', 'won\'t close', 'open to street'],
     questions: [
       {
@@ -214,7 +214,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'locksmith',
     display_name: 'Locksmith & Security',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Are you currently locked out of your house, car, or business?",
+      "{{business_name}}: Sorry we missed your call! Locked out right now? Reply STOP to opt out.",
     emergency_keywords: ['locked out', 'keys locked inside', 'child locked', 'pet locked', 'lost keys', 'lock broken', 'break-in'],
     questions: [
       {
@@ -260,7 +260,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'roofing',
     display_name: 'Roofing & Gutters',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Do you have an active roof leak or storm damage?",
+      "{{business_name}}: Sorry we missed your call! Active roof leak or storm damage? Reply STOP to opt out.",
     emergency_keywords: ['active leak', 'ceiling leaking', 'storm damage', 'tree on roof', 'shingles blown off', 'hole in roof', 'water dripping'],
     questions: [
       {
@@ -306,7 +306,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'landscaping',
     display_name: 'Landscaping & Tree Service',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Is there a fallen tree, broken limb, or urgent yard hazard?",
+      "{{business_name}}: Sorry we missed your call! Urgent tree or yard hazard? Reply STOP to opt out.",
     emergency_keywords: ['fallen tree', 'tree on car', 'tree on house', 'branch down', 'hazard', 'powerline near tree', 'blocked driveway'],
     questions: [
       {
@@ -352,7 +352,7 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     id: 'pest_control',
     display_name: 'Pest & Wildlife Control',
     initial_text_back:
-      "{{business_name}} — sorry we missed your call! Are you dealing with an urgent pest infestation or wildlife issue?",
+      "{{business_name}}: Sorry we missed your call! Urgent pest or wildlife problem? Reply STOP to opt out.",
     emergency_keywords: ['wasp nest', 'bee swarm', 'bat', 'raccoon', 'rat', 'mice', 'bed bugs', 'termite swarm', 'bitten', 'snake'],
     questions: [
       {

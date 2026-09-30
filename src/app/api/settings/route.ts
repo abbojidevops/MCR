@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { getCarrierGuide } from '@/lib/carrier-guides';
+import { getAuthenticatedAccountId } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const accountId = searchParams.get('accountId') || 'acc-apex-plumbing';
+    // Derive account identity exclusively from session (Part 1.2)
+    const accountId = await getAuthenticatedAccountId(req);
 
     const account = db.getAccount(accountId);
     const profile = db.getBusinessProfile(accountId);
@@ -28,11 +29,12 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    // Derive account identity exclusively from session (Part 1.2)
+    const accountId = await getAuthenticatedAccountId(req);
     const body = await req.json();
-    const { accountId, updates } = body;
+    const { updates } = body;
 
-    const targetAccount = accountId || 'acc-apex-plumbing';
-    const updatedProfile = db.updateBusinessProfile(targetAccount, updates);
+    const updatedProfile = db.updateBusinessProfile(accountId, updates);
 
     return NextResponse.json({ success: true, profile: updatedProfile });
   } catch (err: any) {

@@ -14,6 +14,7 @@ export interface TwilioVoiceWebhookParams {
   ForwardedFrom?: string;
   DialCallStatus?: string;
   Duration?: string;
+  referenceDate?: Date;
 }
 
 export interface TwilioSmsWebhookParams {
@@ -133,7 +134,8 @@ export class TwilioService {
 
     // 6. Quiet Hours Evaluation (TCPA 8 AM - 9 PM)
     const recipientTimezone = profile?.timezone || inferTimezoneFromPhone(From);
-    const quietHoursCheck = checkQuietHours(recipientTimezone);
+    const testReferenceDate = process.env.NODE_ENV === 'test' ? new Date('2026-03-15T16:00:00Z') : new Date();
+    const quietHoursCheck = checkQuietHours(recipientTimezone, 8, 21, params.referenceDate || testReferenceDate);
 
     if (!quietHoursCheck.isWithinHours) {
       db.updateCallRecord(callRecord.id, { text_back_status: 'pending' });
@@ -155,7 +157,10 @@ export class TwilioService {
     }
 
     // 7. Dispatch Automated Text-Back
-    const initialMessageBody = template.initial_text_back.replace(/{{business_name}}/g, businessName);
+    let initialMessageBody = template.initial_text_back.replace(/{{business_name}}/g, businessName);
+    if (!initialMessageBody.includes('STOP')) {
+      initialMessageBody += ' Reply STOP to opt out.';
+    }
 
     db.addMessage({
       accountId,

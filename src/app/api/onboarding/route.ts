@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { TradeKey } from '@/types';
+import { setSessionCookie } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
   try {
@@ -32,11 +33,18 @@ export async function POST(req: NextRequest) {
 
     db.logAudit(account.id, 'SIGNUP_COMPLETED', { businessName, trade, phone });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       account,
       profile,
       phoneNumber,
+    });
+
+    // Automatically set authenticated session for the newly created account
+    return setSessionCookie(response, {
+      accountId: account.id,
+      role: 'owner',
+      isDemo: false,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

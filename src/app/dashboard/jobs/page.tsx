@@ -28,7 +28,7 @@ export default function JobsPage() {
 
   const fetchJobs = async () => {
     try {
-      const res = await fetch('/api/jobs?accountId=acc-apex-plumbing');
+      const res = await fetch('/api/jobs');
       const data = await res.json();
       if (data.jobs) {
         setJobs(data.jobs);
@@ -48,7 +48,6 @@ export default function JobsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           jobId,
           status: newStatus,
           actualValue,
@@ -87,7 +86,7 @@ export default function JobsPage() {
 
         <div className="flex items-center gap-2">
           <a
-            href="/api/jobs/export?accountId=acc-apex-plumbing"
+            href="/api/jobs/export"
             download
             className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
           >
@@ -120,7 +119,7 @@ export default function JobsPage() {
       {viewMode === 'kanban' && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {columns.map((col) => {
-            const colJobs = jobs.filter((j) => j.status === col.status);
+            const colJobs = jobs.filter((j) => (j.status || '').toUpperCase() === col.status.toUpperCase());
             const totalColValue = colJobs.reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
 
             return (
@@ -328,7 +327,7 @@ export default function JobsPage() {
               </div>
             )}
 
-            {/* Section 15: Revenue Tracking & Distinction */}
+            {/* Revenue Tracking & Distinction */}
             <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
               <span className="font-bold text-xs text-emerald-950 uppercase tracking-wider">Revenue Attribution</span>
               <div className="grid grid-cols-2 gap-3 text-xs">
@@ -370,7 +369,7 @@ export default function JobsPage() {
               </div>
             </div>
 
-            {/* Section 14: Activity Timeline */}
+            {/* Activity Timeline */}
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2.5">
               <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Recovery Activity Timeline:</span>
               <div className="space-y-2 text-[11px] text-slate-600">

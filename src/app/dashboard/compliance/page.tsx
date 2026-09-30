@@ -20,7 +20,7 @@ export default function CompliancePage() {
 
   const fetchCompliance = async () => {
     try {
-      const res = await fetch('/api/compliance?accountId=acc-apex-plumbing');
+      const res = await fetch('/api/compliance');
       const data = await res.json();
       if (data.compliance) {
         setCompliance(data.compliance);
@@ -41,7 +41,6 @@ export default function CompliancePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           action: 'advance_status',
         }),
       });

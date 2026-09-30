@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
+import { getAuthenticatedAccountId } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const accountId = searchParams.get('accountId') || 'acc-apex-plumbing';
+    // Derive account identity exclusively from session (Part 1.2)
+    const accountId = await getAuthenticatedAccountId(req);
     const cannedReplies = db.getCannedReplies(accountId);
     return NextResponse.json({ cannedReplies });
   } catch (err: any) {
@@ -14,16 +15,17 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Derive account identity exclusively from session (Part 1.2)
+    const accountId = await getAuthenticatedAccountId(req);
     const body = await req.json();
-    const { accountId, title, shortcut, bodyText } = body;
+    const { title, shortcut, bodyText } = body;
 
     if (!title || !bodyText) {
       return NextResponse.json({ error: 'title and bodyText required' }, { status: 400 });
     }
 
-    const targetAccount = accountId || 'acc-apex-plumbing';
     const newReply = db.addCannedReply({
-      account_id: targetAccount,
+      account_id: accountId,
       title,
       shortcut: shortcut || '/quick',
       body: bodyText,

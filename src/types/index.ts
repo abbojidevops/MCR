@@ -24,6 +24,7 @@ export interface Account {
   slug: string;
   status: AccountStatus;
   plan_tier: PlanTier;
+  is_demo?: boolean;
   trial_ends_at: string;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ export interface BusinessProfile {
   business_name: string;
   legal_name?: string;
   trade: TradeKey;
+  is_demo?: boolean;
   ein?: string;
   address?: string;
   city?: string;

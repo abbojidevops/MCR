@@ -19,7 +19,7 @@ export default function BillingPage() {
 
   const fetchBilling = async () => {
     try {
-      const res = await fetch('/api/billing?accountId=acc-apex-plumbing');
+      const res = await fetch('/api/billing');
       const data = await res.json();
       if (data.subscription) setSubscription(data.subscription);
       if (data.currentPlan) setCurrentPlan(data.currentPlan);
@@ -41,7 +41,6 @@ export default function BillingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           planTier: newTier,
         }),
       });

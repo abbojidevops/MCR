@@ -30,7 +30,7 @@ export default function ReportsPage() {
   const fetchReports = async (selectedRange: DateRangePreset = range) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/reports?accountId=acc-apex-plumbing&range=${selectedRange}`);
+      const res = await fetch(`/api/reports?range=${selectedRange}`);
       const data = await res.json();
       if (data.metrics) setMetrics(data.metrics);
       if (data.weekly) setWeekly(data.weekly);
@@ -77,11 +77,11 @@ export default function ReportsPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Transparent ROI accounting strictly separating confirmed revenue from potential pipeline.
+            Transparent revenue accounting strictly separating confirmed revenue from potential pipeline.
           </p>
         </div>
 
-        {/* Date Filter Selector (Section 10) */}
+        {/* Date Filter Selector */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1 text-xs shadow-xs">
           {(
             [
@@ -121,7 +121,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* ---------------- 4 KPI CARDS (MATCHES DASHBOARD EXACTLY) ---------------- */}
+      {/* 4 KPI CARDS (MATCHES DASHBOARD EXACTLY) */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -151,7 +151,7 @@ export default function ReportsPage() {
 
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-950">
-            Confirmed Actual Revenue
+            Confirmed Completed Revenue
           </span>
           <div className="mt-2 text-3xl font-black text-emerald-700">
             ${m.confirmedActualRevenue.toLocaleString()}
@@ -162,24 +162,29 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Software Return / Financial Reconciliation Banner */}
+      {/* Financial Reconciliation Banner */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Software Return on Investment
+              Gross Revenue Multiple on Software Cost
             </div>
             <h2 className="text-xl font-black text-slate-900 mt-1">
               {m.softwareReturnMultiple !== null && m.softwareReturnMultiple > 0 ? (
                 <>
-                  <span className="text-emerald-600 font-black">{m.softwareReturnMultiple}× Software Return</span> for {m.periodLabel}
+                  <span className="text-emerald-600 font-black">
+                    Revenue recovered per $1 of subscription: {m.revenuePerSubscriptionDollar || m.softwareReturnMultiple}×
+                  </span>{' '}
+                  <span className="text-slate-600 text-sm font-bold">
+                    · At a 40% gross margin: {m.marginAdjustedMultiple || (m.softwareReturnMultiple * 0.4).toFixed(1)}×
+                  </span>
                 </>
               ) : (
                 'Pending completed job revenue'
               )}
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Calculated as: Confirmed Actual Revenue (${m.confirmedActualRevenue}) ÷ Subscription (${m.subscriptionMonthlyDollars}/mo).
+              Calculated as: Confirmed Completed Revenue (${m.confirmedActualRevenue.toLocaleString()}) ÷ Subscription (${m.subscriptionMonthlyDollars}/mo).
             </p>
           </div>
 
@@ -195,11 +200,11 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* ---------------- SECTION 16: REPORT ATTRIBUTION TABLE ---------------- */}
+        {/* Recovered Jobs Attribution Table */}
         <div className="pt-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900">
-              Section 16: Recovered Jobs Attribution Table
+              Recovered Jobs Attribution Table
             </h3>
             <span className="text-xs text-slate-500">
               {m.recoveredJobsList.length} Total Recovered Jobs

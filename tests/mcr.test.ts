@@ -1,3 +1,5 @@
+(process.env as any).NODE_ENV = 'test';
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -8,17 +10,19 @@ import { checkQuietHours, inferTimezoneFromPhone } from '@/lib/quiet-hours';
 import { isStopKeyword, isStartKeyword, isHelpKeyword } from '@/lib/compliance-machine';
 import { getCarrierGuide, CARRIER_GUIDES } from '@/lib/carrier-guides';
 import { generateDailySummary, generateWeeklyReport } from '@/lib/reports';
+import { getRevenueMetrics } from '@/lib/metrics';
+import { createSessionToken, verifySessionToken } from '@/lib/session';
 
 test('1. Strict Multi-Tenant Isolation', () => {
   const accountA = 'acc-apex-plumbing';
   const accountB = 'acc-coolbreeze-hvac';
 
-  // db.assertTenantAccess should succeed when IDs match
+  // 1. db.assertTenantAccess should succeed when IDs match
   assert.doesNotThrow(() => {
     db.assertTenantAccess(accountA, accountA);
   });
 
-  // db.assertTenantAccess should throw when account IDs do not match
+  // 2. db.assertTenantAccess should throw when account IDs do not match
   assert.throws(
     () => {
       db.assertTenantAccess(accountA, accountB);
@@ -27,11 +31,36 @@ test('1. Strict Multi-Tenant Isolation', () => {
     'Should throw tenant isolation violation when tenant IDs do not match'
   );
 
-  // Jobs for Account A must only belong to Account A
+  // 3. Cryptographic session token verification
+  const sessionTokenA = createSessionToken(accountA);
+  const sessionTokenB = createSessionToken(accountB);
+
+  const verifiedAccountA = verifySessionToken(sessionTokenA);
+  const verifiedAccountB = verifySessionToken(sessionTokenB);
+
+  assert.equal(verifiedAccountA?.accountId, accountA, 'Session token A must strictly resolve to Account A');
+  assert.equal(verifiedAccountB?.accountId, accountB, 'Session token B must strictly resolve to Account B');
+
+  // Tampered token must fail verification
+  const tamperedToken = sessionTokenA.slice(0, -4) + 'abcd';
+  assert.equal(verifySessionToken(tamperedToken), null, 'Tampered token signature must be rejected');
+
+  // 4. Jobs for Account A must only belong to Account A
   const jobsA = db.getJobs(accountA);
   for (const job of jobsA) {
     assert.equal(job.account_id, accountA, 'All jobs returned must belong exclusively to Account A');
   }
+
+  // 5. Jobs for Account B must only belong to Account B
+  const jobsB = db.getJobs(accountB);
+  for (const job of jobsB) {
+    assert.equal(job.account_id, accountB, 'All jobs returned must belong exclusively to Account B');
+  }
+
+  // Ensure no cross-tenant bleed: account A cannot access account B's jobs
+  assert.throws(() => {
+    db.assertTenantAccess(accountA, accountB);
+  }, /TENANT_ISOLATION_VIOLATION/);
 
   // Conversations for Account A must only belong to Account A
   const convsA = db.getConversations(accountA);
@@ -255,7 +284,7 @@ test('9. Subscription Billing States & Usage Tracking', () => {
   assert.ok(subInfo.plan);
   assert.ok(subInfo.usage);
 
-  assert.equal(subInfo.plan?.id, 'pro');
+  assert.equal(subInfo.plan?.id, 'business', 'Demo account Apex Plumbing must be on Business tier ($299/mo)');
   assert.equal(subInfo.subscription?.status, 'active');
   assert.ok((subInfo.usage?.calls_count ?? 0) >= 0);
   assert.ok((subInfo.usage?.sms_count ?? 0) >= 0);
@@ -273,4 +302,48 @@ test('10. Daily & Weekly Recovery Report Computation', () => {
   assert.ok(weekly.responseRatePercent >= 0);
   assert.ok(weekly.recoveryRatePercent >= 0);
   assert.match(weekly.summaryText, /recovered/i);
+});
+
+test('11. Single Source of Truth Metrics Reconciliation', () => {
+  const accountId = 'acc-apex-plumbing';
+  const metrics = getRevenueMetrics(accountId);
+  const jobs = db.getJobs(accountId);
+
+  // 1. Confirmed revenue must strictly equal sum of COMPLETED jobs only
+  const completedJobs = jobs.filter((j) => j.status === 'COMPLETED');
+  const expectedConfirmed = completedJobs.reduce((sum, j) => sum + (j.actual_value || 0), 0);
+  assert.equal(metrics.confirmedRevenue, expectedConfirmed, 'Confirmed revenue must equal sum of completed jobs');
+  assert.equal(metrics.completedJobsCount, completedJobs.length, 'Completed job count must match database');
+  assert.ok(expectedConfirmed >= 1207.50, 'Demo account John Smith completed job ($1,207.50) must be counted in confirmed');
+
+  // 2. Booked revenue must strictly equal sum of BOOKED jobs only
+  const bookedJobs = jobs.filter((j) => j.status === 'BOOKED');
+  const expectedBooked = bookedJobs.reduce((sum, j) => sum + (j.estimated_value ?? 0), 0);
+  assert.equal(metrics.bookedRevenue, expectedBooked, 'Booked revenue must equal sum of booked jobs');
+  assert.equal(metrics.bookedJobsCount, bookedJobs.length, 'Booked job count must match database');
+
+  // 3. Pipeline estimated value must strictly equal active qualified inquiries
+  const pipelineJobs = jobs.filter((j) => ['NEW', 'CONTACTED', 'IN_PROGRESS', 'SCHEDULED'].includes(j.status));
+  const expectedPipeline = pipelineJobs.reduce((sum, j) => sum + (j.estimated_value ?? 0), 0);
+  assert.equal(metrics.pipelineEstimatedValue, expectedPipeline, 'Pipeline estimated value must equal sum of active pipeline jobs');
+
+  // 4. Total potential value must strictly equal confirmed + booked + pipeline
+  assert.equal(
+    metrics.totalPotentialValue,
+    metrics.confirmedRevenue + metrics.bookedRevenue + metrics.pipelineEstimatedValue,
+    'Total potential value must equal confirmed + booked + pipeline'
+  );
+
+  // 5. Software revenue multiple must strictly be calculated on confirmed revenue only ($1,207.50 / $299 = 4.0x)
+  const expectedGrossMultiple = Number((metrics.confirmedRevenue / 299).toFixed(1));
+  assert.equal(metrics.revenuePerSubscriptionDollar, expectedGrossMultiple, 'Revenue per subscription dollar calculation must match');
+
+  const expectedMarginMultiple = Number(((metrics.confirmedRevenue * 0.40) / 299).toFixed(1));
+  assert.equal(metrics.marginAdjustedMultiple, expectedMarginMultiple, 'Margin-adjusted multiple at 40% margin must match');
+
+  // 6. Text-back gap analysis numbers must match call records
+  assert.ok(metrics.textBackGapAnalysis);
+  assert.ok(metrics.missedCallsCount > 0, 'Total missed calls count must be > 0');
+  assert.ok(metrics.textsDeliveredCount > 0, 'Texts delivered count must be > 0');
+  assert.ok(metrics.textBackGapAnalysis.totalUndelivered >= 0, 'Total undelivered must be >= 0');
 });

@@ -57,14 +57,10 @@ export function checkQuietHours(
     let nextAllowedSendTime: string | undefined;
 
     if (!isWithinHours) {
-      // Calculate next 8:00 AM in recipient local time
-      const nextDate = new Date(referenceDate);
-      if (currentHour >= endHour) {
-        // After 9 PM, next allowed is tomorrow 8:00 AM
-        nextDate.setDate(nextDate.getDate() + 1);
-      }
-      // Set to 8:05 AM to be safely inside the permitted window
-      nextAllowedSendTime = `Tomorrow at 08:00 AM (${timezone})`;
+      // Calculate next 8:05 AM in recipient local time
+      const isMorningBefore8 = currentHour < startHour;
+      const dayLabel = isMorningBefore8 ? 'Today' : 'Tomorrow';
+      nextAllowedSendTime = `${dayLabel} at 08:05 AM (${timezone})`;
     }
 
     return {

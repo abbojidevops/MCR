@@ -21,14 +21,17 @@ import {
   HelpCircle,
   AlertTriangle,
   ArrowRight,
+  CreditCard,
+  Zap,
 } from 'lucide-react';
 import { BusinessProfile, CannedReply, TradeKey } from '@/types';
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'profile' | 'hours' | 'intake' | 'canned' | 'integrations' | 'compliance'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'hours' | 'intake' | 'canned' | 'integrations' | 'compliance' | 'billing'>('profile');
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [phoneNumbers, setPhoneNumbers] = useState<any[]>([]);
   const [cannedReplies, setCannedReplies] = useState<CannedReply[]>([]);
+  const [billingInfo, setBillingInfo] = useState<any>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newShortcut, setNewShortcut] = useState('');
   const [newBody, setNewBody] = useState('');
@@ -56,14 +59,18 @@ export default function SettingsPage() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings?accountId=acc-apex-plumbing');
+      const res = await fetch('/api/settings');
       const data = await res.json();
       if (data.profile) setProfile(data.profile);
       if (data.phoneNumbers) setPhoneNumbers(data.phoneNumbers);
 
-      const crRes = await fetch('/api/canned-replies?accountId=acc-apex-plumbing');
+      const crRes = await fetch('/api/canned-replies');
       const crData = await crRes.json();
       if (crData.cannedReplies) setCannedReplies(crData.cannedReplies);
+
+      const bRes = await fetch('/api/billing');
+      const bData = await bRes.json();
+      setBillingInfo(bData);
     } catch (err) {
       console.error(err);
     }
@@ -81,7 +88,6 @@ export default function SettingsPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           updates: {
             business_name: profile.business_name,
             trade: profile.trade,
@@ -113,7 +119,6 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           title: newTitle,
           shortcut: newShortcut.startsWith('/') ? newShortcut : `/${newShortcut}`,
           bodyText: newBody,
@@ -143,7 +148,6 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webhookUrl,
-          accountId: 'acc-apex-plumbing',
         }),
       });
       const data = await res.json();
@@ -238,6 +242,17 @@ export default function SettingsPage() {
           }`}
         >
           <ShieldCheck className="h-3.5 w-3.5" /> TCPA &amp; Telecom
+        </button>
+
+        <button
+          onClick={() => setActiveTab('billing')}
+          className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
+            activeTab === 'billing'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <CreditCard className="h-3.5 w-3.5" /> Billing &amp; Usage
         </button>
       </div>
 
@@ -769,6 +784,128 @@ export default function SettingsPage() {
               >
                 Open Full TCPA Compliance Audit Log <ExternalLink className="h-3.5 w-3.5" />
               </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- TAB 7: BILLING & USAGE ---------------- */}
+      {activeTab === 'billing' && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-blue-600" />
+                <h2 className="text-sm font-bold text-slate-900">Subscription Plan &amp; Monthly Usage</h2>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                Active Subscription
+              </span>
+            </div>
+
+            {/* 80% Usage Warning Notice if applicable */}
+            {billingInfo?.usageWarning && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-amber-950">Approaching Monthly Call Cap (80%+)</div>
+                  <p className="mt-0.5 text-amber-800">
+                    {billingInfo.overageNotice || `You've used ${billingInfo?.usage?.calls_processed || 32} of ${billingInfo?.currentPlan?.call_cap || 40} calls this month. Additional calls are $0.35 each, or upgrade to Pro for $149/mo (200 calls).`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Usage Progress Card */}
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">Monthly Call Volume Usage</span>
+                <span className="font-mono text-slate-500">
+                  <strong>{billingInfo?.usage?.calls_processed || 68}</strong> of {billingInfo?.currentPlan?.call_cap || 600} included calls
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className={`h-full transition-all ${
+                    (billingInfo?.usagePercent || 11.3) >= 80 ? 'bg-amber-500' : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${Math.min(100, billingInfo?.usagePercent || 11.3)}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>Soft Cap Protection: Automated text-backs never halt mid-emergency</span>
+                <span className="font-semibold text-slate-700">
+                  Overage Rate: ${billingInfo?.currentPlan?.id === 'starter' ? '0.35' : billingInfo?.currentPlan?.id === 'pro' ? '0.25' : '0.15'}/call
+                </span>
+              </div>
+            </div>
+
+            {/* Plan Tiers Overview */}
+            <div className="grid gap-4 sm:grid-cols-3 pt-2">
+              {/* Starter */}
+              <div className={`rounded-xl border p-4 text-xs space-y-3 ${
+                billingInfo?.currentPlan?.id === 'starter' ? 'border-blue-600 ring-1 ring-blue-600 bg-blue-50/20' : 'border-slate-200'
+              }`}>
+                <div>
+                  <h3 className="font-bold text-slate-900">Starter</h3>
+                  <div className="text-xl font-black text-slate-900 mt-1">$79<span className="text-xs font-normal text-slate-500">/mo</span></div>
+                  <p className="text-[11px] text-slate-500 mt-1">40 missed calls included · $0.35/overage</p>
+                </div>
+                <ul className="space-y-1.5 text-[11px] text-slate-600">
+                  <li>✓ Missed-call detection (&lt;60s)</li>
+                  <li>✓ Automated SMS text-back</li>
+                  <li>✓ Basic qualification intake</li>
+                  <li>✓ Soft cap overage billing</li>
+                </ul>
+              </div>
+
+              {/* Pro */}
+              <div className={`rounded-xl border p-4 text-xs space-y-3 ${
+                billingInfo?.currentPlan?.id === 'pro' ? 'border-blue-600 ring-1 ring-blue-600 bg-blue-50/20' : 'border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900">Pro</h3>
+                  <span className="rounded bg-blue-100 text-blue-800 px-1.5 py-0.5 text-[9px] font-bold">POPULAR</span>
+                </div>
+                <div>
+                  <div className="text-xl font-black text-slate-900 mt-1">$149<span className="text-xs font-normal text-slate-500">/mo</span></div>
+                  <p className="text-[11px] text-slate-500 mt-1">200 missed calls included · $0.25/overage</p>
+                </div>
+                <ul className="space-y-1.5 text-[11px] text-slate-600">
+                  <li>✓ Everything in Starter</li>
+                  <li>✓ Photo &amp; media intake</li>
+                  <li>✓ Emergency escalation alerts</li>
+                  <li>✓ Daily 6 PM &amp; weekly reports</li>
+                </ul>
+              </div>
+
+              {/* Business */}
+              <div className={`rounded-xl border p-4 text-xs space-y-3 ${
+                billingInfo?.currentPlan?.id === 'business' ? 'border-blue-600 ring-1 ring-blue-600 bg-blue-50/20' : 'border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-slate-900">Business</h3>
+                  <span className="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[9px] font-bold">CURRENT</span>
+                </div>
+                <div>
+                  <div className="text-xl font-black text-slate-900 mt-1">$299<span className="text-xs font-normal text-slate-500">/mo</span></div>
+                  <p className="text-[11px] text-slate-500 mt-1">600 missed calls included · $0.15/overage</p>
+                </div>
+                <ul className="space-y-1.5 text-[11px] text-slate-600">
+                  <li>✓ Everything in Pro</li>
+                  <li>✓ Multi-line rollover routing</li>
+                  <li>✓ Priority telecom routing</li>
+                  <li>✓ Dedicated compliance manager</li>
+                </ul>
+                <div className="pt-2">
+                  <a
+                    href="mailto:support@mcr-recovery.com?subject=Business%20Rollout%20Consultation"
+                    className="block text-center rounded-lg bg-slate-900 text-white font-bold py-2 text-xs hover:bg-slate-800"
+                  >
+                    Schedule Rollout
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>

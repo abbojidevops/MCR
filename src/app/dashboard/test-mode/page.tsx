@@ -61,7 +61,6 @@ export default function TestModePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'simulate_call',
-          accountId: 'acc-apex-plumbing',
           callerNumber: callerPhone.replace(/\D/g, ''),
           callerName,
         }),
@@ -108,7 +107,6 @@ export default function TestModePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'simulate_reply',
-          accountId: 'acc-apex-plumbing',
           callerNumber: callerPhone.replace(/\D/g, ''),
           replyText: text,
         }),
@@ -126,7 +124,7 @@ export default function TestModePage() {
         if (data.jobCreated) {
           setChecklist((prev) => ({ ...prev, jobCreated: true, ownerNotified: true }));
           // Fetch latest job
-          const jobsRes = await fetch('/api/jobs?accountId=acc-apex-plumbing');
+          const jobsRes = await fetch('/api/jobs');
           const jobsData = await jobsRes.json();
           if (jobsData.jobs && jobsData.jobs.length > 0) {
             setCreatedJob(jobsData.jobs[0]);

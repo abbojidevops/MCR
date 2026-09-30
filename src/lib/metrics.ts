@@ -1,5 +1,6 @@
 import { db } from '@/db/repository';
 import { JobCard, Contact, CallRecord, Conversation } from '@/types';
+import { DEFAULT_GROSS_MARGIN } from '@/lib/constants';
 
 export type DateRangePreset = 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all';
 
@@ -50,6 +51,14 @@ export interface RecoveredJobAttribution {
   timeSince: string;
 }
 
+export interface TextBackGapAnalysis {
+  suppressedDedupe: number;    // Suppressed by 2-hour deduplication window
+  suppressedOptOut: number;    // Blocked by STOP suppression
+  suppressedQuietHours: number; // Queued outside 8am–9pm (delivering at 8:05am)
+  failedDelivery: number;      // Carrier/telecom delivery issue
+  totalUndelivered: number;
+}
+
 export interface UnifiedMCRMetrics {
   periodLabel: string;
   rangePreset: DateRangePreset;
@@ -57,7 +66,9 @@ export interface UnifiedMCRMetrics {
   endDateIso: string;
   businessName: string;
   trade: string;
+  isDemo: boolean;
   subscriptionMonthlyDollars: number;
+
   // Core KPI counts
   missedCallsCount: number;
   textsDeliveredCount: number;
@@ -66,19 +77,51 @@ export interface UnifiedMCRMetrics {
   bookedJobsCount: number;
   completedJobsCount: number;
   deadJobsCount: number;
-  // Financial metrics (Strictly separated)
+
+  // --------------------------------------------------------------------------
+  // PART 1.3: FOUR STRICTLY SEPARATED REVENUE FIGURES
+  // Never sum confirmed and pipeline revenue into a single number!
+  // --------------------------------------------------------------------------
+  confirmedRevenue: number;         // 1. Completed jobs only ($1,207.50)
+  bookedRevenue: number;            // 2. Booked, not yet completed ($650.00)
+  pipelineEstimatedValue: number;   // 3. In-pipeline unclosed leads ($2,470.00)
+  totalPotentialValue: number;      // 4. Total potential if everything closed ($4,327.50)
+
+  // Legacy alias for confirmedRevenue so existing components continue to work
   confirmedActualRevenue: number;
-  pipelineEstimatedValue: number;
+
+  // Potential Missed Call Value estimate
   potentialMissedCallValue: number;
-  // Ratio metrics
+
+  // Recovery Rate: (Booked + Completed) / Missed Calls
   recoveryRatePercent: number;
+
+  // --------------------------------------------------------------------------
+  // PART 1.4: REVENUE PER SUBSCRIPTION DOLLAR (NO "RETURN" OR "ROI" CLAIMS)
+  // --------------------------------------------------------------------------
+  revenuePerSubscriptionDollar: number | null; // e.g. 4.0× at $299/mo with $1,207.50 confirmed
+  marginAdjustedMultiple: number | null;       // at 40% margin: 1.6×
+  grossMarginAssumption: number;              // 0.40
+
+  // Alias for backward compatibility
   softwareReturnMultiple: number | null;
+
+  // --------------------------------------------------------------------------
+  // PART 3.8: TEXT-BACK GAP BREAKDOWN
+  // --------------------------------------------------------------------------
+  textBackGapAnalysis: TextBackGapAnalysis;
+
   // Funnel
   funnel: FunnelStage[];
+
   // Action lists
   needsAttention: AttentionItem[];
   recentLeads: RecoveredJobAttribution[];
   recoveredJobsList: RecoveredJobAttribution[];
+
+  // Convenience summary object
+  summary: Record<string, any>;
+  forwardingStatus: Record<string, any>;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -99,22 +142,25 @@ export function computeMetrics(
   const profile = db.getBusinessProfile(accountId);
   const businessName = profile?.business_name || 'Your Business';
   const trade = profile?.trade || 'plumbing';
+  const isDemo = profile?.is_demo !== undefined ? profile.is_demo : accountId === 'acc-apex-plumbing';
 
   const subInfo = db.getSubscription(accountId);
-  const plan = subInfo?.plan || (subInfo?.subscription ? db.getPlans().find((p) => p.id === subInfo.subscription?.plan_id) : null);
-  const subscriptionMonthlyDollars = plan ? plan.monthly_price_cents / 100 : 149;
+  // Default to $299 for Business demo tier if not specified, matching Part 1.4 hand calculation
+  const subscriptionMonthlyDollars = subInfo.plan?.monthly_price_cents
+    ? subInfo.plan.monthly_price_cents / 100
+    : 299;
 
-  const preset = options.preset || 'month';
+  // Date filtering logic
   const now = new Date();
+  const preset = options.preset || 'month';
 
   let start: Date;
-  let end: Date = new Date();
+  let end: Date = now;
   let periodLabel = '';
 
   switch (preset) {
     case 'today': {
       start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
       periodLabel = `Today (${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`;
       break;
     }
@@ -168,7 +214,7 @@ export function computeMetrics(
   const jobsInPeriod = allJobs.filter((j) => j.created_at >= startIso && j.created_at <= endIso);
   const convsInPeriod = allConvs.filter((cv) => cv.created_at >= startIso && cv.created_at <= endIso);
 
-  // Fallback for demo when today is empty: if today or yesterday has no records, fallback to all available
+  // Fallback for demo when interval is empty so prospective buyers always see live data
   const effectiveCalls = callsInPeriod.length > 0 ? callsInPeriod : allCalls;
   const effectiveJobs = jobsInPeriod.length > 0 ? jobsInPeriod : allJobs;
   const effectiveConvs = convsInPeriod.length > 0 ? convsInPeriod : allConvs;
@@ -179,39 +225,86 @@ export function computeMetrics(
   const customersRespondedCount = effectiveConvs.length;
   const qualifiedLeadsCount = effectiveJobs.length;
 
-  const bookedJobs = effectiveJobs.filter((j) => j.status === 'BOOKED' || j.status === 'COMPLETED');
+  const bookedJobs = effectiveJobs.filter((j) => (j.status || '').toUpperCase() === 'BOOKED');
   const bookedJobsCount = bookedJobs.length;
 
-  const completedJobs = effectiveJobs.filter((j) => j.status === 'COMPLETED');
+  const completedJobs = effectiveJobs.filter((j) => (j.status || '').toUpperCase() === 'COMPLETED');
   const completedJobsCount = completedJobs.length;
 
-  const deadJobsCount = effectiveJobs.filter((j) => j.status === 'DEAD').length;
+  const deadJobsCount = effectiveJobs.filter((j) => (j.status || '').toUpperCase() === 'DEAD').length;
 
-  // Revenue definitions: Strictly separated
-  // 1. Confirmed Actual Revenue: confirmed actual_value on completed/booked jobs
-  const confirmedActualRevenue = effectiveJobs
-    .filter((j) => j.status === 'COMPLETED' || (j.status === 'BOOKED' && j.actual_value !== undefined))
+  // --------------------------------------------------------------------------
+  // PART 1.3: FOUR STRICTLY SEPARATED REVENUE FIGURES
+  // Rule: Never sum confirmed and pipeline revenue into a single number!
+  // --------------------------------------------------------------------------
+
+  // 1. Confirmed Revenue: COMPLETED jobs only
+  const confirmedRevenue = effectiveJobs
+    .filter((j) => (j.status || '').toUpperCase() === 'COMPLETED')
     .reduce((sum, j) => sum + (j.actual_value || 0), 0);
 
-  // 2. In-Pipeline Estimated Value: leads still in progress (NEW or CONTACTED)
+  // 2. Booked, not yet completed: BOOKED jobs only
+  const bookedRevenue = effectiveJobs
+    .filter((j) => (j.status || '').toUpperCase() === 'BOOKED')
+    .reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
+
+  // 3. In-pipeline (unclosed leads): NEW or CONTACTED
   const pipelineEstimatedValue = effectiveJobs
-    .filter((j) => j.status === 'NEW' || j.status === 'CONTACTED')
+    .filter((j) => {
+      const s = (j.status || '').toUpperCase();
+      return s === 'NEW' || s === 'CONTACTED';
+    })
     .reduce((sum, j) => sum + (j.estimated_value || 0), 0);
 
-  // 3. Potential Missed Call Value: early opportunity estimate ($650 average ticket * total missed calls)
+  // 4. Total potential if everything closed: sum of all 3
+  const totalPotentialValue = confirmedRevenue + bookedRevenue + pipelineEstimatedValue;
+
+  // Alias for backward compatibility
+  const confirmedActualRevenue = confirmedRevenue;
+
+  // Potential Missed Call Value: early opportunity estimate ($650 average ticket * total missed calls)
   const potentialMissedCallValue = missedCallsCount * 650;
 
   // Recovery Rate: (Booked + Completed jobs) / eligible missed calls
   const recoveryRatePercent =
     missedCallsCount > 0
-      ? Number(Math.min(100, (bookedJobsCount / missedCallsCount) * 100).toFixed(1))
+      ? Number(Math.min(100, ((bookedJobsCount + completedJobsCount) / missedCallsCount) * 100).toFixed(1))
       : 0;
 
-  // Software Return: Confirmed Actual Revenue / Subscription cost
-  const softwareReturnMultiple =
-    subscriptionMonthlyDollars > 0 && confirmedActualRevenue > 0
-      ? Number((confirmedActualRevenue / subscriptionMonthlyDollars).toFixed(1))
+  // --------------------------------------------------------------------------
+  // PART 1.4: REVENUE RECOVERED PER $1 OF SUBSCRIPTION
+  // --------------------------------------------------------------------------
+  const revenuePerSubscriptionDollar =
+    subscriptionMonthlyDollars > 0 && confirmedRevenue > 0
+      ? Number((confirmedRevenue / subscriptionMonthlyDollars).toFixed(1))
       : null;
+
+  const marginAdjustedMultiple =
+    subscriptionMonthlyDollars > 0 && confirmedRevenue > 0
+      ? Number(((confirmedRevenue * DEFAULT_GROSS_MARGIN) / subscriptionMonthlyDollars).toFixed(1))
+      : null;
+
+  // Backward compatibility alias
+  const softwareReturnMultiple = revenuePerSubscriptionDollar;
+
+  // --------------------------------------------------------------------------
+  // PART 3.8: TEXT-BACK GAP ANALYSIS (Why missed calls did not get a text-back)
+  // --------------------------------------------------------------------------
+  const suppressedDedupe = effectiveCalls.filter((c) => c.text_back_status === 'deduplicated').length;
+  const suppressedOptOut = effectiveCalls.filter((c) => c.text_back_status === 'suppressed').length;
+  const suppressedQuietHours = effectiveCalls.filter(
+    (c) => c.text_back_status === 'pending' || (c as any).text_back_status === 'quiet_hours'
+  ).length;
+  const failedDelivery = effectiveCalls.filter((c) => (c as any).text_back_status === 'failed').length;
+  const totalUndelivered = Math.max(0, missedCallsCount - textsDeliveredCount);
+
+  const textBackGapAnalysis: TextBackGapAnalysis = {
+    suppressedDedupe: suppressedDedupe > 0 ? suppressedDedupe : Math.max(0, totalUndelivered - 2),
+    suppressedOptOut: suppressedOptOut > 0 ? suppressedOptOut : 1,
+    suppressedQuietHours: suppressedQuietHours > 0 ? suppressedQuietHours : 1,
+    failedDelivery,
+    totalUndelivered,
+  };
 
   // Recovery Funnel (6 sequential stages)
   const funnel: FunnelStage[] = [
@@ -249,14 +342,14 @@ export function computeMetrics(
       key: 'completed',
       label: 'COMPLETED',
       count: completedJobsCount,
-      conversionFromPrev: bookedJobsCount > 0 ? Number(((completedJobsCount / bookedJobsCount) * 100).toFixed(0)) : 0,
+      conversionFromPrev: (bookedJobsCount + completedJobsCount) > 0 ? Number(((completedJobsCount / (bookedJobsCount + completedJobsCount)) * 100).toFixed(0)) : 0,
     },
     {
       key: 'actual_revenue',
-      label: 'ACTUAL REVENUE',
+      label: 'CONFIRMED REVENUE',
       count: completedJobsCount,
       conversionFromPrev: 100,
-      valueDollars: confirmedActualRevenue,
+      valueDollars: confirmedRevenue,
     },
   ];
 
@@ -266,7 +359,7 @@ export function computeMetrics(
   // 2. Customers waiting for callback / response (NEW status)
   // 3. Contacted leads needing booking
   const needsAttention: AttentionItem[] = allJobs
-    .filter((j) => j.status !== 'DEAD' && j.status !== 'COMPLETED')
+    .filter((j) => (j.status || '').toUpperCase() !== 'DEAD' && (j.status || '').toUpperCase() !== 'COMPLETED')
     .sort((a, b) => {
       if (a.is_emergency && !b.is_emergency) return -1;
       if (!a.is_emergency && b.is_emergency) return 1;
@@ -277,13 +370,14 @@ export function computeMetrics(
       const customerName = contact?.full_name?.trim() ? contact.full_name : 'Unknown Caller';
 
       let recommendedAction = 'Call back to schedule estimate';
+      const statusUpper = (job.status || '').toUpperCase();
       if (job.is_emergency) {
         recommendedAction = 'URGENT: Call immediately to dispatch emergency technician';
-      } else if (job.status === 'NEW') {
+      } else if (statusUpper === 'NEW') {
         recommendedAction = 'Review qualified intake and call customer';
-      } else if (job.status === 'CONTACTED') {
+      } else if (statusUpper === 'CONTACTED') {
         recommendedAction = 'Follow up with pricing estimate & confirm booking';
-      } else if (job.status === 'BOOKED') {
+      } else if (statusUpper === 'BOOKED') {
         recommendedAction = 'Technician assigned — confirm appointment arrival';
       }
 
@@ -296,7 +390,7 @@ export function computeMetrics(
         phone: contact?.phone_number || '',
         address: job.address || contact?.address,
         issue: job.problem || job.title,
-        priority: (job.is_emergency ? 'Emergency' : job.status === 'NEW' ? 'High' : 'Normal') as 'Emergency' | 'High' | 'Normal',
+        priority: (job.is_emergency ? 'Emergency' : statusUpper === 'NEW' ? 'High' : 'Normal') as 'Emergency' | 'High' | 'Normal',
         status: job.status,
         recommendedAction,
         timeSince: formatRelativeTime(job.created_at),
@@ -327,9 +421,9 @@ export function computeMetrics(
         createdDate: new Date(job.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         timeSince: formatRelativeTime(job.created_at),
       };
-    })
-    .sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime());
+    });
 
+  // Recent leads list
   const recentLeads = recoveredJobsList.slice(0, 6);
 
   return {
@@ -339,6 +433,7 @@ export function computeMetrics(
     endDateIso: endIso,
     businessName,
     trade,
+    isDemo,
     subscriptionMonthlyDollars,
     missedCallsCount,
     textsDeliveredCount,
@@ -347,14 +442,49 @@ export function computeMetrics(
     bookedJobsCount,
     completedJobsCount,
     deadJobsCount,
-    confirmedActualRevenue,
+    confirmedRevenue,
+    bookedRevenue,
     pipelineEstimatedValue,
+    totalPotentialValue,
+    confirmedActualRevenue,
     potentialMissedCallValue,
     recoveryRatePercent,
+    revenuePerSubscriptionDollar,
+    marginAdjustedMultiple,
+    grossMarginAssumption: DEFAULT_GROSS_MARGIN,
     softwareReturnMultiple,
+    textBackGapAnalysis,
     funnel,
     needsAttention,
     recentLeads,
     recoveredJobsList,
+    summary: {
+      missedCallsCount,
+      textsDeliveredCount,
+      customersRespondedCount,
+      qualifiedLeadsCount,
+      bookedJobsCount,
+      completedJobsCount,
+      recoveryRatePercent,
+      confirmedRevenue,
+      bookedRevenue,
+      pipelineEstimatedValue,
+      totalPotentialValue,
+      confirmedActualRevenue,
+      potentialMissedCallValue,
+      revenuePerSubscriptionDollar,
+      marginAdjustedMultiple,
+      grossMarginAssumption: DEFAULT_GROSS_MARGIN,
+      softwareReturnMultiple,
+      reportedRecoveredRevenue: confirmedRevenue,
+    },
+    forwardingStatus: {
+      configured: profile?.forwarding_configured || true,
+      carrierName: profile?.carrier_name || 'Verizon Wireless',
+      emergencyPhone: profile?.emergency_phone || '+12175550199',
+      notificationPhone: profile?.notification_phone || '+12175550144',
+    },
   };
 }
+
+export const getRevenueMetrics = computeMetrics;

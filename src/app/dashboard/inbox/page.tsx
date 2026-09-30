@@ -44,9 +44,9 @@ export default function InboxPage() {
   const fetchData = async () => {
     try {
       const [convRes, jobsRes, crRes] = await Promise.all([
-        fetch('/api/conversations?accountId=acc-apex-plumbing'),
-        fetch('/api/jobs?accountId=acc-apex-plumbing'),
-        fetch('/api/canned-replies?accountId=acc-apex-plumbing'),
+        fetch('/api/conversations'),
+        fetch('/api/jobs'),
+        fetch('/api/canned-replies'),
       ]);
 
       const convData = await convRes.json();
@@ -68,7 +68,7 @@ export default function InboxPage() {
 
   const fetchMessages = async (convId: string) => {
     try {
-      const res = await fetch(`/api/conversations?accountId=acc-apex-plumbing&conversationId=${convId}`);
+      const res = await fetch(`/api/conversations?conversationId=${convId}`);
       const data = await res.json();
       if (data.messages) {
         setMessages(data.messages);
@@ -98,7 +98,6 @@ export default function InboxPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           conversationId: selectedConvId,
           bodyText: text,
         }),
@@ -187,16 +186,23 @@ export default function InboxPage() {
                     </div>
                   </div>
 
-                  <span className="text-[10px] text-slate-400 shrink-0">
-                    {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {((conv as any).message_count || (conv as any).messageCount || 0) > 0 && (
+                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
+                        {((conv as any).message_count || (conv as any).messageCount)} msgs
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <p className="mt-2 text-xs text-slate-600 line-clamp-1">
-                  {conv.latest_message?.body || 'No messages yet'}
+                  {(conv.latest_message || (conv as any).latestMessage)?.body || 'No messages yet'}
                 </p>
 
-                {/* Section 12: Badges (Intake progress & Job Status) */}
+                {/* Badges (Intake progress & Job Status) */}
                 <div className="mt-2 flex items-center justify-between text-[10px]">
                   <span className="text-slate-400 truncate max-w-[140px]">
                     {conv.job?.address ? `📍 ${conv.job.address}` : 'Intake Active'}

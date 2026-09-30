@@ -40,10 +40,10 @@ export default function MissedCallsPage() {
         fetch('/api/simulator', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_status', accountId: 'acc-apex-plumbing' }),
+          body: JSON.stringify({ action: 'get_status' }),
         }),
-        fetch('/api/jobs?accountId=acc-apex-plumbing'),
-        fetch('/api/conversations?accountId=acc-apex-plumbing'),
+        fetch('/api/jobs'),
+        fetch('/api/conversations'),
       ]);
 
       const callsData = await callsRes.json();
@@ -259,7 +259,7 @@ export default function MissedCallsPage() {
                       </div>
                     </td>
 
-                    {/* Text-Back Status */}
+                    {/* Text-Back Status & Suppression Reasons */}
                     <td className="px-4 py-3">
                       {call.text_back_status === 'sent' && (
                         <span className="inline-flex items-center gap-1 font-semibold text-emerald-600">
@@ -267,17 +267,36 @@ export default function MissedCallsPage() {
                         </span>
                       )}
                       {call.text_back_status === 'deduplicated' && (
-                        <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
-                          <Clock className="h-3 w-3" /> Deduplicated
-                        </span>
+                        <div>
+                          <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
+                            <Clock className="h-3 w-3" /> Deduplicated
+                          </span>
+                          <div className="text-[10px] text-slate-400">Called within last 4 hrs</div>
+                        </div>
                       )}
                       {call.text_back_status === 'suppressed' && (
-                        <span className="inline-flex items-center gap-1 font-semibold text-red-600">
-                          <ShieldAlert className="h-3 w-3" /> STOP
-                        </span>
+                        <div>
+                          <span className="inline-flex items-center gap-1 font-semibold text-red-600">
+                            <ShieldAlert className="h-3 w-3" /> Suppressed
+                          </span>
+                          <div className="text-[10px] text-slate-400">TCPA STOP on file</div>
+                        </div>
                       )}
                       {call.text_back_status === 'pending' && (
-                        <span className="text-slate-400">Queued</span>
+                        <div>
+                          <span className="inline-flex items-center gap-1 font-medium text-slate-500">
+                            <Clock className="h-3 w-3" /> Queued
+                          </span>
+                          <div className="text-[10px] text-slate-400">Quiet hours (Sends at 8:00 AM)</div>
+                        </div>
+                      )}
+                      {call.text_back_status === 'failed' && (
+                        <div>
+                          <span className="inline-flex items-center gap-1 font-medium text-red-500">
+                            <XCircle className="h-3 w-3" /> Failed
+                          </span>
+                          <div className="text-[10px] text-slate-400">Landline or invalid number</div>
+                        </div>
                       )}
                     </td>
 

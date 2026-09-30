@@ -27,7 +27,7 @@ export default function AdminDashboardPage() {
         const res = await fetch('/api/simulator', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_status', accountId: 'acc-apex-plumbing' }),
+          body: JSON.stringify({ action: 'get_status' }),
         });
         const data = await res.json();
         // Mock multi-tenant view

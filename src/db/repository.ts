@@ -405,6 +405,9 @@ class DatabaseRepository {
         ...conv,
         contact,
         latestMessage,
+        latest_message: latestMessage,
+        messageCount: messages.length,
+        message_count: messages.length,
       };
     });
   }

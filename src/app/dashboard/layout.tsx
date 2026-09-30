@@ -34,7 +34,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [simulatingCall, setSimulatingCall] = useState(false);
   const [simulationToast, setSimulationToast] = useState<string | null>(null);
 
-  // Section 19: Core Primary Navigation
+  React.useEffect(() => {
+    fetch('/api/auth/session')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.accountId) setSelectedAccount(d.accountId);
+      })
+      .catch(console.error);
+  }, []);
+
+  const handleAccountChange = async (newAccountId: string) => {
+    setSelectedAccount(newAccountId);
+    try {
+      await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetAccount: newAccountId }),
+      });
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Primary Navigation
   const primaryNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Missed Calls', href: '/dashboard/missed-calls', icon: History },
@@ -52,7 +75,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Test Simulator', href: '/dashboard/test-mode', icon: FlaskConical },
   ];
 
-  // Section 20: Mobile Bottom Bar Items
+  // Mobile Bottom Bar Items
   const mobileBottomItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Inbox', href: '/dashboard/inbox', icon: MessageSquare },
@@ -69,7 +92,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'simulate_call',
-          accountId: selectedAccount,
           callerNumber: '+12175558833',
           callerName: 'Sarah Connor',
         }),
@@ -110,7 +132,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </label>
           <select
             value={selectedAccount}
-            onChange={(e) => setSelectedAccount(e.target.value)}
+            onChange={(e) => handleAccountChange(e.target.value)}
             className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
           >
             <option value="acc-apex-plumbing">Apex Plumbing &amp; Rooter</option>
@@ -118,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </select>
         </div>
 
-        {/* Section 19: Core Navigation */}
+        {/* Primary Navigation */}
         <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
             Main Menu

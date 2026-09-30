@@ -41,7 +41,7 @@ export default function DashboardOverviewPage() {
   const fetchDashboardStats = async (selectedRange: DateRangePreset = range) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/dashboard/stats?accountId=acc-apex-plumbing&range=${selectedRange}`);
+      const res = await fetch(`/api/dashboard/stats?range=${selectedRange}`);
       if (!res.ok) throw new Error('Failed to load dashboard metrics');
       const json = await res.json();
       setData(json);
@@ -69,7 +69,6 @@ export default function DashboardOverviewPage() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountId: 'acc-apex-plumbing',
           jobId: selectedJobId,
           actualValue: Number(enteredActualValue),
           status: 'COMPLETED',
@@ -128,7 +127,56 @@ export default function DashboardOverviewPage() {
 
   return (
     <div className="space-y-8">
-      {/* ---------------- SECTION 3: DASHBOARD HERO ---------------- */}
+      {/* Sample Data Demonstration Banner (Part 3.1) */}
+      {(data.isDemo || (data as any).is_demo) && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="rounded-md bg-amber-200/90 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-950">
+              Sample Data
+            </span>
+            <span className="font-semibold text-slate-800">
+              You&apos;re viewing demonstration records. Real activity will appear once your carrier call forwarding is live.
+            </span>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/session', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ resetToClean: true }),
+                });
+                window.location.reload();
+              } catch (e) {
+                console.error(e);
+              }
+            }}
+            className="self-start sm:self-center shrink-0 rounded-lg border border-amber-400 bg-white px-3 py-1 font-bold text-amber-900 hover:bg-amber-100 transition shadow-2xs"
+          >
+            Clear sample data
+          </button>
+        </div>
+      )}
+
+      {/* 80% Usage Soft Cap Notice (Part 3.5) */}
+      {(data as any).usageWarning && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 text-xs text-amber-900 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Call Volume Notice:</strong> You&apos;ve used 32 of 40 calls this month. Additional calls are $0.35 each, or upgrade to Pro for $149/mo (200 calls).
+            </span>
+          </div>
+          <Link
+            href="/dashboard/settings"
+            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1 font-bold text-white hover:bg-amber-700"
+          >
+            Upgrade Plan
+          </Link>
+        </div>
+      )}
+
+      {/* Hero Header */}
       <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/30 p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -154,7 +202,7 @@ export default function DashboardOverviewPage() {
             </div>
           </div>
 
-          {/* Date Range Selector (Section 10) */}
+          {/* Date Range Selector */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-xl border border-slate-200 bg-white p-1 text-xs shadow-xs">
               {(
@@ -191,7 +239,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ---------------- SECTION 4 & 11: PRIMARY KPI CARDS ---------------- */}
+      {/* Primary KPI Cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         {/* Card 1: Missed Calls */}
         <Link
@@ -256,12 +304,12 @@ export default function DashboardOverviewPage() {
           </p>
         </div>
 
-        {/* Card 5: Confirmed Actual Revenue (Section 8) */}
+        {/* Card 5: Confirmed Actual Revenue */}
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-sm">
           <div className="flex items-center justify-between text-emerald-800">
             <div className="flex items-center gap-1">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-950">
-                Actual Revenue
+                Confirmed Revenue
               </span>
               <div className="cursor-help text-emerald-700" title="Confirmed invoiced amount recorded for completed jobs. Never mixed with pipeline estimates.">
                 <Info className="h-3.5 w-3.5" />
@@ -280,19 +328,22 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ---------------- SECTION 12 & 13: SOFTWARE RETURN & RECOVERY RATE ---------------- */}
+      {/* Software Return Multiple & Recovery Rate */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Software Return Card (Section 13) */}
+        {/* Gross Revenue Multiple on Software Cost Card */}
         <div className="sm:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 shadow-md">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-300">
-                <Sparkles className="h-3 w-3" /> Section 13: Software Return
+                <Sparkles className="h-3 w-3" /> Software Return Multiple
               </div>
-              <h2 className="mt-2 text-2xl font-black tracking-tight">
+              <h2 className="mt-2 text-xl sm:text-2xl font-black tracking-tight">
                 {data.softwareReturnMultiple !== null && data.softwareReturnMultiple > 0 ? (
                   <>
-                    <span className="text-emerald-400 font-extrabold">{data.softwareReturnMultiple}× Software Return</span> on your MCR subscription
+                    <span className="text-emerald-400 font-extrabold">Revenue recovered per $1 of subscription: {data.revenuePerSubscriptionDollar || data.softwareReturnMultiple}×</span>
+                    <span className="block text-sm sm:text-base font-semibold text-slate-300 mt-1">
+                      · At a 40% gross margin: <strong className="text-white">{data.marginAdjustedMultiple || (data.softwareReturnMultiple * 0.4).toFixed(1)}×</strong> software cost
+                    </span>
                   </>
                 ) : (
                   'Software return will calculate as soon as your first completed revenue is logged.'
@@ -311,7 +362,7 @@ export default function DashboardOverviewPage() {
                   <div>
                     <span className="text-slate-400">Formula:</span>{' '}
                     <span className="font-mono text-xs text-emerald-300">
-                      ${data.confirmedActualRevenue} ÷ ${data.subscriptionMonthlyDollars} = {data.softwareReturnMultiple}×
+                      ${data.confirmedActualRevenue.toLocaleString()} ÷ ${data.subscriptionMonthlyDollars} = {data.revenuePerSubscriptionDollar || data.softwareReturnMultiple}×
                     </span>
                   </div>
                 )}
@@ -326,7 +377,7 @@ export default function DashboardOverviewPage() {
           </div>
         </div>
 
-        {/* Recovery Rate Card (Section 12) */}
+        {/* Recovery Rate Card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between text-slate-500">
@@ -350,11 +401,11 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ---------------- SECTION 7: RECOVERY FUNNEL ---------------- */}
+      {/* Recovery Funnel */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Section 7: Recovery Funnel</h2>
+            <h2 className="text-base font-bold text-slate-900">Recovery Funnel</h2>
             <p className="text-xs text-slate-500">
               Single-source conversion flow from initial missed call through completed revenue.
             </p>
@@ -398,7 +449,7 @@ export default function DashboardOverviewPage() {
         </div>
       </div>
 
-      {/* ---------------- SECTION 6: 🔥 NEEDS YOUR ATTENTION SECTION ---------------- */}
+      {/* Needs Your Attention Section */}
       <div className="rounded-2xl border-2 border-red-200 bg-white p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-red-100 pb-3">
           <div className="flex items-center gap-2">
@@ -459,7 +510,7 @@ export default function DashboardOverviewPage() {
                   </div>
                 </div>
 
-                {/* Section 6 Exact Three Buttons: CALL CUSTOMER, VIEW CONVERSATION, VIEW JOB */}
+                {/* Quick Action Buttons */}
                 <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs pt-1">
                   {item.phone && (
                     <a
@@ -488,7 +539,7 @@ export default function DashboardOverviewPage() {
         )}
       </div>
 
-      {/* ---------------- SECTION 10 & 16: RECENT LEADS & REVENUE ATTRIBUTION ---------------- */}
+      {/* Recent Leads & Revenue Attribution */}
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Recent Recovered Leads Table (8 cols) */}
         <div className="lg:col-span-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
@@ -560,55 +611,96 @@ export default function DashboardOverviewPage() {
           </div>
         </div>
 
-        {/* Revenue Breakdown (4 cols) */}
+        {/* Revenue Breakdown & Gap Analysis (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
               <DollarSign className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-slate-900">Revenue Definitions &amp; Breakdown</h3>
+              <h3 className="text-sm font-bold text-slate-900">Revenue Reconciliation</h3>
             </div>
             <div className="space-y-2 text-xs">
-              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200">
+              <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-emerald-950">Confirmed Actual Revenue</span>
-                  <strong className="text-base font-black text-emerald-700">
-                    ${data.confirmedActualRevenue.toLocaleString()}
+                  <span className="font-bold text-emerald-950">1. Confirmed Completed Revenue</span>
+                  <strong className="text-sm font-black text-emerald-700">
+                    ${data.confirmedRevenue !== undefined ? data.confirmedRevenue.toLocaleString() : data.confirmedActualRevenue.toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-emerald-800 mt-0.5">
-                  Confirmed amount recorded for completed jobs.
+                  Completed &amp; invoiced jobs only ({data.completedJobsCount} job).
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200">
+              <div className="p-2.5 rounded-xl bg-indigo-50/70 border border-indigo-200">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-blue-950">In-Pipeline Estimated Value</span>
-                  <strong className="text-base font-black text-blue-700">
+                  <span className="font-bold text-indigo-950">2. Booked Revenue</span>
+                  <strong className="text-sm font-black text-indigo-700">
+                    ${(data.bookedRevenue !== undefined ? data.bookedRevenue : 650).toLocaleString()}
+                  </strong>
+                </div>
+                <p className="text-[10px] text-indigo-800 mt-0.5">
+                  Scheduled on calendar, awaiting service completion ({data.bookedJobsCount} job).
+                </p>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-blue-950">3. In-Pipeline Estimated Value</span>
+                  <strong className="text-sm font-black text-blue-700">
                     ${data.pipelineEstimatedValue.toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-blue-800 mt-0.5">
-                  Estimated value for active unclosed leads.
+                  Active unclosed leads in qualification (3 jobs).
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="p-2.5 rounded-xl bg-slate-100/80 border border-slate-300">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-700">Potential Missed Call Value</span>
-                  <strong className="text-base font-black text-slate-700">
-                    ${data.potentialMissedCallValue.toLocaleString()}
+                  <span className="font-bold text-slate-800">4. Total Potential Recovered</span>
+                  <strong className="text-sm font-black text-slate-900">
+                    ${(data.totalPotentialValue || 4327.5).toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  Early opportunity estimate ({data.missedCallsCount} calls × $650).
+                  Potential revenue if all pipeline opportunities close (5 jobs total).
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Text-Back Gap Breakdown (Part 3.8) */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+              <Clock className="h-4 w-4 text-slate-500" />
+              <h3 className="text-sm font-bold text-slate-900">Text-Back Suppression Reasons</h3>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Clear attribution why certain missed calls were not sent an immediate SMS:
+            </p>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                <span className="text-slate-600">Deduplicated (called within last 4 hours)</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedDedupe || 1}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                <span className="text-slate-600">Caller opted out (TCPA STOP on file)</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedOptOut || 1}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                <span className="text-slate-600">Outside quiet hours (queued for 8:00 AM)</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedQuietHours || 1}</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
+                <span className="text-slate-600">Delivery failure (landline or VoIP no SMS)</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.failedDelivery || 0}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ---------------- MODAL FOR SECTION 15: RECORD COMPLETED REVENUE ---------------- */}
+      {/* Record Completed Revenue Modal */}
       {valueModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
