@@ -139,20 +139,30 @@ export class TwilioService {
 
     if (!quietHoursCheck.isWithinHours) {
       db.updateCallRecord(callRecord.id, { text_back_status: 'pending' });
+
+      // Item 6: Alert the owner immediately, at any hour, regardless of quiet hours.
+      // Contractor lead notification is business-to-business and exempt from quiet hours.
       db.addNotification({
         account_id: accountId,
-        title: 'Missed Call Outside Quiet Hours',
-        body: `Call from ${From} received outside 8am-9pm (${quietHoursCheck.recipientTimezone}). Text-back queued for ${quietHoursCheck.nextAllowedSendTime}.`,
-        type: 'missed_call',
+        title: '🚨 After-Hours Lead: Call Immediately',
+        body: `Missed call from ${From}. Consumer text-back queued for 8:05 AM per TCPA quiet hours, but you can call them back immediately: tel:${From}`,
+        type: 'emergency',
         is_read: false,
-        metadata: { callId: callRecord.id, from: From },
+        metadata: {
+          callId: callRecord.id,
+          contactId: contact.id,
+          from: From,
+          oneTapCallUrl: `tel:${From}`,
+          nextAllowedSendTime: quietHoursCheck.nextAllowedSendTime,
+          immediateOwnerAlert: true,
+        },
       });
 
       return {
         twiml: '<Response><Hangup/></Response>',
         textBackTriggered: false,
         callRecordId: callRecord.id,
-        reason: `Quiet hours enforced. Queued for ${quietHoursCheck.nextAllowedSendTime}`,
+        reason: `Quiet hours enforced. Owner alerted immediately. Consumer SMS queued for ${quietHoursCheck.nextAllowedSendTime}`,
       };
     }
 

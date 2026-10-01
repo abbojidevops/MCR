@@ -63,18 +63,10 @@ export const PLAN_CONFIG = {
   },
 } as const;
 
-// Company Trust & Contact Information (Part 2.4)
+// Company Trust & Contact Information (Round 2 Truthfulness)
 export const COMPANY_INFO = {
   name: 'MCR Technologies, Inc.',
-  phone: '+1 (888) 627-7326', // 888-MCR-RECV
-  phoneDisplay: '(888) 627-7326',
   email: 'support@getmcr.com',
-  address: '1209 Orange St, Wilmington, DE 19801',
   supportHours: 'Mon–Fri 8:00 AM – 8:00 PM EST',
-  pilotResult: {
-    missedCalls: 23,
-    recoveredJobs: 7,
-    recoveredRevenue: 4100,
-    quote: 'Early Pilot Result: Missed 23 calls in a month. Recovered 7 jobs. $4,100 in revenue.',
-  },
 } as const;
+

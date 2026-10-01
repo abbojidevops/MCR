@@ -156,8 +156,8 @@ export default function RiskRegisterPage() {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
             <span className="text-xs font-medium text-slate-400">Concierge Validation Gate</span>
-            <div className="mt-2 text-3xl font-extrabold text-emerald-400">Active (2/3)</div>
-            <div className="mt-1 text-xs text-slate-400">Pilot customers in progress</div>
+            <div className="mt-2 text-3xl font-extrabold text-amber-400">Pending (0/3)</div>
+            <div className="mt-1 text-xs text-slate-400">0 paying pilots (pre-launch phase)</div>
           </div>
         </div>
 
@@ -219,6 +219,87 @@ export default function RiskRegisterPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        {/* ---------------- OPEN QUESTION: AFTER-HOURS SMS POLICY (ITEM 6) ---------------- */}
+        <div className="rounded-2xl border border-amber-600/50 bg-amber-950/20 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Open Legal Question: After-Hours SMS Policy &amp; TCPA Attorney Sign-Off</span>
+          </div>
+
+          <div className="text-xs text-slate-300 space-y-3 leading-relaxed">
+            <p>
+              <strong>The Problem:</strong> When a homeowner calls a contractor at 10:00 PM with an emergency (e.g. burst pipe), the consumer-facing automated text-back is currently queued until 8:05 AM to avoid TCPA quiet hours violations. However, waiting 10 hours means the homeowner calls a competitor, defeating the primary emergency value proposition.
+            </p>
+            <p>
+              <strong>Current Code Implementation:</strong>
+            </p>
+            <ul className="list-disc pl-5 space-y-1 text-slate-400">
+              <li>
+                <strong className="text-white">Business Owner Alert:</strong> Fires <em>immediately at any hour</em> via push notification, email, and one-tap callback URL (<code className="font-mono text-emerald-400">tel:caller</code>). Business-to-business lead alerts on the contractor&apos;s own phone are NOT consumer telemarketing and are exempt from TCPA quiet hours.
+              </li>
+              <li>
+                <strong className="text-white">Consumer Outbound SMS:</strong> Queued until 8:05 AM in the caller&apos;s local timezone unless legal confirms an exception.
+              </li>
+            </ul>
+            <p>
+              <strong>The Open Legal Argument:</strong> A direct, automated reply to an inbound consumer phone call is arguably <em>responsive transaction fulfillment</em> rather than unprompted telemarketing solicitation. Under FCC precedent, responding to consumer-initiated contact within minutes has strong legal defense, but courts and carrier rules differ on late-night automated SMS.
+            </p>
+            <p className="rounded-lg bg-amber-950/60 border border-amber-800/80 p-3 text-amber-200">
+              ⚖️ <strong>Legal Action Required:</strong> This policy must be formally evaluated and signed off by qualified TCPA legal counsel before enabling after-hours text-back dispatch in production. Code cannot make this determination unilaterally. Until formal legal sign-off, all consumer marketing of 24/7 or late-night automated text-back is suspended.
+            </p>
+          </div>
+        </div>
+
+        {/* ---------------- ARCHITECTURE DECISION: SHARED FALLBACK & SUPPRESSION (ITEM 8) ---------------- */}
+        <div className="rounded-2xl border border-blue-600/50 bg-blue-950/20 p-6 space-y-4">
+          <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+            <ShieldAlert className="h-4 w-4" />
+            <span>Architecture Decision Record: Shared Pre-Registered Fallback Number</span>
+          </div>
+
+          <div className="text-xs text-slate-300 space-y-3 leading-relaxed">
+            <p>
+              During the 3-day to 4-week TCR campaign approval window, tenants cannot send SMS from their dedicated numbers without carrier blocking. Evaluating the use of a shared pre-registered high-trust fallback number:
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-3 pt-2">
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-2">
+                <span className="font-bold text-amber-400 block text-xs">1. Shared Fate Risk</span>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  All tenants route through a single carrier campaign. A single spam complaint or illegal message from one rogue contractor risks having the entire campaign suspended by carriers, instantly shutting down texting for all tenants across the fleet.
+                </p>
+                <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-1.5">
+                  <strong>Mitigation:</strong> Strict pre-approved templates only. No freeform promotional messages permitted during fallback.
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-2">
+                <span className="font-bold text-amber-400 block text-xs">2. Throughput Ceiling</span>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  Sole-proprietor campaigns cap near 3,000 segments/day, with T-Mobile capping at 1,000 segments/day total. At an average of 4 messages per lead and 10 missed calls/tenant/day, the shared pool saturates at just <strong>25 active tenants</strong>.
+                </p>
+                <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-1.5">
+                  <strong>Mitigation:</strong> Hard throttle per tenant; queuing threshold alerts founder at 60% capacity.
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 space-y-2">
+                <span className="font-bold text-emerald-400 block text-xs">3. Suppression Migration</span>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  When a consumer replies STOP to the shared fallback number, the suppression must persist when the tenant&apos;s dedicated number clears vetting.
+                </p>
+                <div className="text-[10px] text-slate-500 border-t border-slate-800 pt-1.5">
+                  <strong>Implementation:</strong> Suppressions are stored by <code className="text-emerald-300 font-mono">(tenant_id, phone_number)</code> tuple, independent of originating sender number. Cutover migrates all historical opt-outs automatically.
+                </div>
+              </div>
+            </div>
+
+            <p className="pt-2 text-slate-400">
+              <strong>Recommendation:</strong> Do not market automated fallback texting as an immediate guarantee. Instead, rely on the honest waiting-period message (&ldquo;Voice alerts live today · Text-back activates upon carrier approval&rdquo;) with optional manual concierge assistance during vetting.
+            </p>
           </div>
         </div>
       </div>

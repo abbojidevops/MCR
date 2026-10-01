@@ -2,27 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { EmailService, EmailTrigger } from '@/lib/email/email-service';
 import { db } from '@/db/repository';
 import { generateWeeklyReport } from '@/lib/reports';
+import { getSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await getSession(req);
+    const accountId = session.accountId;
+
     const { searchParams } = new URL(req.url);
     const trigger = (searchParams.get('trigger') || 'weekly_report') as EmailTrigger;
-    const accountId = searchParams.get('accountId') || 'acc-apex-plumbing';
 
     const profile = db.getBusinessProfile(accountId);
+    const phoneNumbers = db.getPhoneNumbers(accountId);
+    const mcrLine = phoneNumbers[0]?.formatted_number || 'Assigned MCR Forwarding Line';
     const weekly = generateWeeklyReport(accountId);
 
     const rendered = EmailService.renderTemplate(trigger, {
-      businessName: profile?.business_name || 'Apex Plumbing & Rooter',
-      ownerName: 'Dave Miller',
-      mcrNumber: '+1 (217) 555-0190',
-      carrierName: profile?.carrier_name || 'Verizon Wireless',
-      dialCode: '*712175550190',
+      businessName: profile?.business_name || 'Your Service Business',
+      ownerName: profile?.business_name ? `${profile.business_name} Owner` : 'Service Contractor',
+      mcrNumber: mcrLine,
+      carrierName: profile?.carrier_name || 'Carrier Network',
+      dialCode: `*71${phoneNumbers[0]?.phone_number.replace(/\D/g, '') || ''}`,
       token: 'sample_verify_token_123',
-      brandSid: 'BN_tcr_apex_brand_01',
+      brandSid: 'Pending Carrier Submission',
       planName: 'MCR Pro',
       amountPaidCents: 14900,
-      nextBillingDate: 'October 29, 2026',
+      nextBillingDate: 'Next Billing Cycle',
       jobsCount: weekly.qualifiedJobsCount,
       recoveredValue: weekly.estimatedRecoveredValue.toLocaleString(),
       missedCallsCount: weekly.missedCallsCount,

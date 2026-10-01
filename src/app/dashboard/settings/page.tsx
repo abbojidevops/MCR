@@ -766,12 +766,12 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 flex items-start gap-3">
-                <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-start gap-3">
+                <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                 <div>
-                  <div className="font-bold text-slate-900">A2P 10DLC TCR Campaign Verified</div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Your account is registered under TCR Campaign <code className="font-mono bg-white px-1 border border-slate-200 rounded">MCR-TRADE-REC-8841</code> with high-throughput tier approval across AT&amp;T, Verizon, and T-Mobile.
+                  <div className="font-bold text-amber-950">A2P 10DLC Registration In Progress</div>
+                  <p className="text-[11px] text-amber-900 mt-0.5">
+                    Brand &amp; campaign registration awaiting carrier approval (3 days to 4 weeks). Voice alerts active · Outbound text-back live upon carrier approval.
                   </p>
                 </div>
               </div>

@@ -165,14 +165,14 @@ export default function JobsPage() {
 
                       <p className="mt-2 text-xs text-slate-600 line-clamp-2">{job.problem}</p>
 
-                      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-slate-400" />
-                          <span className="line-clamp-1 max-w-[130px]">{job.address || 'Address on file'}</span>
+                      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] text-slate-500 gap-2">
+                        <span className="flex items-center gap-1 min-w-0">
+                          <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{job.address || 'Address on file'}</span>
                         </span>
                         {job.photo_urls && job.photo_urls.length > 0 && (
-                          <span className="flex items-center gap-0.5 text-blue-600 font-semibold">
-                            <Camera className="h-3 w-3" /> {job.photo_urls.length}
+                          <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700 font-semibold shrink-0" title={`${job.photo_urls.length} photo attached`}>
+                            <Camera className="h-3 w-3" /> {job.photo_urls.length} {job.photo_urls.length === 1 ? 'photo' : 'photos'}
                           </span>
                         )}
                       </div>

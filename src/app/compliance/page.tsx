@@ -52,9 +52,9 @@ export default function CompliancePage() {
                 </p>
               </div>
               <div className="rounded-lg bg-white p-3.5 border border-blue-200">
-                <span className="font-bold text-blue-900 block mb-1">📋 A2P 10DLC Approval (1–5 Days)</span>
+                <span className="font-bold text-blue-900 block mb-1">📋 A2P 10DLC Approval (3 Days – 4 Weeks)</span>
                 <p className="text-slate-600">
-                  Dedicated brand &amp; campaign registration across Verizon, AT&amp;T, and T-Mobile takes 1 to 5 business days for carrier vetting. During this window, text-backs send from our shared pre-registered high-trust fallback number so zero calls are lost.
+                  Brand registration takes minutes to 3 days. Campaign approval, which gates outbound texting, runs 3 days to 4 weeks and includes a $15 non-refundable vetting fee. During vetting, your voice alerts remain fully active.
                 </p>
               </div>
             </div>
@@ -118,7 +118,7 @@ export default function CompliancePage() {
 
           <div className="border-t border-slate-100 pt-6 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
             <div>
-              Registered TCR Campaign: <code className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">MCR-TRADE-REC-8841</code>
+              Carrier Registration: Standard Brand &amp; Campaign submission via The Campaign Registry (TCR)
             </div>
             <div className="flex gap-4">
               <Link href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</Link>

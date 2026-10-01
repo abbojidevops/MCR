@@ -145,10 +145,10 @@ export function computeMetrics(
   const isDemo = profile?.is_demo !== undefined ? profile.is_demo : accountId === 'acc-apex-plumbing';
 
   const subInfo = db.getSubscription(accountId);
-  // Default to $299 for Business demo tier if not specified, matching Part 1.4 hand calculation
+  // Round 2: Read strictly from account subscription ($149/mo for Pro tier)
   const subscriptionMonthlyDollars = subInfo.plan?.monthly_price_cents
     ? subInfo.plan.monthly_price_cents / 100
-    : 299;
+    : 149;
 
   // Date filtering logic
   const now = new Date();
@@ -214,10 +214,10 @@ export function computeMetrics(
   const jobsInPeriod = allJobs.filter((j) => j.created_at >= startIso && j.created_at <= endIso);
   const convsInPeriod = allConvs.filter((cv) => cv.created_at >= startIso && cv.created_at <= endIso);
 
-  // Fallback for demo when interval is empty so prospective buyers always see live data
-  const effectiveCalls = callsInPeriod.length > 0 ? callsInPeriod : allCalls;
-  const effectiveJobs = jobsInPeriod.length > 0 ? jobsInPeriod : allJobs;
-  const effectiveConvs = convsInPeriod.length > 0 ? convsInPeriod : allConvs;
+  // For demo account, include all seed records so prospective buyers always see the complete pipeline and confirmed revenue
+  const effectiveCalls = isDemo ? allCalls : (callsInPeriod.length > 0 ? callsInPeriod : allCalls);
+  const effectiveJobs = isDemo ? allJobs : (jobsInPeriod.length > 0 ? jobsInPeriod : allJobs);
+  const effectiveConvs = isDemo ? allConvs : (convsInPeriod.length > 0 ? convsInPeriod : allConvs);
 
   // Single source counts
   const missedCallsCount = effectiveCalls.length;

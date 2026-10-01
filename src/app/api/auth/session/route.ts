@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, setSessionCookie, createSessionToken } from '@/lib/session';
+import { getSession, setSessionCookie } from '@/lib/session';
 import { db } from '@/db/repository';
 
 export async function GET(req: NextRequest) {
@@ -19,28 +19,55 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Authenticate caller session
+    const session = await getSession(req);
+
     const body = await req.json().catch(() => ({}));
-    const { targetAccount, resetToClean } = body;
+    const { resetToClean } = body;
 
-    let accountId = 'acc-apex-plumbing';
-    let isDemo = true;
-
-    if (resetToClean) {
-      const created = db.createAccount('My Service Business', 'plumbing', '+12175550199', 'Owner', 'Verizon Wireless');
-      accountId = created.account.id;
-      isDemo = false;
-    } else if (targetAccount) {
-      accountId = targetAccount;
-      isDemo = targetAccount === 'acc-apex-plumbing';
+    // Reject any arbitrary account switching payloads
+    if (body.targetAccount) {
+      return NextResponse.json(
+        { error: 'Forbidden: Client-supplied account switching is disallowed' },
+        { status: 403 }
+      );
     }
 
-    const response = NextResponse.json({
-      success: true,
-      accountId,
-      isDemo,
-    });
+    if (resetToClean) {
+      // Only demo seed account is permitted to reset to a clean onboarding slate
+      if (!session.isDemo) {
+        return NextResponse.json(
+          { error: 'Forbidden: Destructive reset cannot be performed on non-demo tenant accounts' },
+          { status: 403 }
+        );
+      }
 
-    return setSessionCookie(response, { accountId, isDemo });
+      const created = db.createAccount(
+        'My Service Business',
+        'plumbing',
+        '+12175550199',
+        'Business Owner',
+        'Verizon Wireless'
+      );
+
+      const response = NextResponse.json({
+        success: true,
+        accountId: created.account.id,
+        isDemo: false,
+      });
+
+      return setSessionCookie(response, {
+        accountId: created.account.id,
+        isDemo: false,
+        role: 'owner',
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      accountId: session.accountId,
+      isDemo: session.isDemo,
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

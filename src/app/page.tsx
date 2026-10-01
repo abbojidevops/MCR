@@ -183,14 +183,6 @@ export default function LandingPage() {
                 >
                   Start 14-Day Free Tracking Test <ArrowRight className="h-5 w-5" />
                 </Link>
-
-                <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-700 shadow-xs">
-                  <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <div>
-                    <span className="text-slate-500 block text-[10px]">Test the live text-back flow now:</span>
-                    <strong className="text-slate-900 font-mono text-sm">(217) 555-0190</strong>
-                  </div>
-                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
@@ -352,88 +344,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ---------------- PILOT CASE STUDY & TRUST (PART 2.4) ---------------- */}
+      {/* ---------------- PILOT CASE STUDY & TRUST (PART 2.4 / ROUND 2) ---------------- */}
       <section id="case-study" className="py-16 sm:py-24 border-t border-slate-100 bg-slate-50">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Verified Pilot Case Study</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Pilot Results</span>
             <h2 className="mt-2 text-3xl font-extrabold text-slate-900 sm:text-4xl">
-              Real Numbers From a Working Trade Business
+              Pilot results — coming soon
             </h2>
-            <p className="mt-3 text-sm text-slate-600">
-              How Apex Plumbing &amp; Rooter in Springfield, IL captured lost revenue without changing their phone number.
+            <p className="mt-4 text-base text-slate-600 leading-relaxed">
+              We&apos;re running our first pilots now. When a real contractor has a real month of numbers, we&apos;ll publish them here, including the ones that look bad.
             </p>
-          </div>
-
-          <div className="mt-12 grid gap-8 lg:grid-cols-12 items-center">
-            {/* Pilot Numbers Card */}
-            <div className="lg:col-span-5 rounded-3xl border border-slate-200 bg-white p-8 shadow-sm space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-900">Apex Plumbing &amp; Rooter</h3>
-                  <p className="text-xs text-slate-500">Springfield &amp; Peoria, IL • 3-Technician Team</p>
-                </div>
-                <span className="rounded-full bg-emerald-100 text-emerald-800 font-bold px-2.5 py-1 text-xs">
-                  Week 1 Pilot
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-100">
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block">Missed Calls</span>
-                  <span className="text-2xl font-black text-slate-900">14 calls</span>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">Rolled over via carrier</span>
-                </div>
-                <div className="rounded-xl bg-indigo-50 p-3.5 border border-indigo-100">
-                  <span className="text-[11px] font-bold uppercase text-indigo-400 block">Text Conversations</span>
-                  <span className="text-2xl font-black text-indigo-700">4 engaged</span>
-                  <span className="text-[10px] text-indigo-600 block mt-0.5">&lt;30s text-back response</span>
-                </div>
-                <div className="rounded-xl bg-blue-50 p-3.5 border border-blue-100">
-                  <span className="text-[11px] font-bold uppercase text-blue-400 block">Jobs Booked</span>
-                  <span className="text-2xl font-black text-blue-700">2 booked</span>
-                  <span className="text-[10px] text-blue-600 block mt-0.5">Water heater + sewer line</span>
-                </div>
-                <div className="rounded-xl bg-emerald-50 p-3.5 border border-emerald-100">
-                  <span className="text-[11px] font-bold uppercase text-emerald-600 block">Recovered Revenue</span>
-                  <span className="text-2xl font-black text-emerald-700">$1,857.50</span>
-                  <span className="text-[10px] text-emerald-800 block mt-0.5">Confirmed &amp; scheduled</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-600 flex items-center justify-between border border-slate-200">
-                <span>Monthly MCR Investment:</span>
-                <strong className="text-slate-900 font-mono">$149/mo (Pro Tier)</strong>
-              </div>
-            </div>
-
-            {/* Direct Owner Quote */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="rounded-3xl border border-emerald-200 bg-white p-8 sm:p-10 shadow-sm relative">
-                <span className="text-5xl text-emerald-400 font-serif absolute top-6 left-6 select-none opacity-50">&ldquo;</span>
-                <p className="text-base sm:text-lg text-slate-800 italic leading-relaxed pt-4">
-                  I was literally under a crawlspace with two pipe wrenches when the emergency water heater call came in. In the past, that customer would have hung up on voicemail and called the next plumber on Google. By the time I crawled out 20 minutes later, MCR had already captured the homeowner&apos;s address and photos of the burst tank, and the replacement was locked in for that afternoon. That single job paid for MCR for the entire year.
-                </p>
-                <div className="mt-6 flex items-center gap-3 border-t border-slate-100 pt-4">
-                  <div className="h-10 w-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
-                    DM
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">Dave Miller</div>
-                    <div className="text-xs text-slate-500">Master Plumber &amp; Owner, Apex Plumbing &amp; Rooter</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Infrastructure Trust Seal */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-3 text-xs text-slate-600">
-                <ShieldCheck className="h-6 w-6 text-blue-600 shrink-0" />
-                <div>
-                  <strong className="text-slate-900">Carrier-Grade Twilio Infrastructure:</strong>{' '}
-                  All text-backs dispatch from dedicated A2P 10DLC-registered numbers through AT&amp;T, Verizon, and T-Mobile high-throughput routes.
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -499,8 +420,8 @@ export default function LandingPage() {
               <Clock className="h-4 w-4 text-blue-600" />
               <span>10-Minute Setup vs. A2P 10DLC Carrier Approval:</span>
             </div>
-            <p>
-              &ldquo;10-minute setup&rdquo; refers strictly to creating your account, dialing your carrier forwarding code (*71 on Verizon, *004* on AT&amp;T, **61* on T-Mobile) on your cell phone, and verifying your first test call. Dedicated A2P 10DLC brand &amp; campaign registration takes 1–5 business days for carrier approval (T-Mobile, AT&amp;T, Verizon). During this vetting window, text-backs dispatch through our shared pre-registered high-trust fallback number with full TCPA compliance so no missed calls are ever lost.
+            <p className="leading-relaxed">
+              &ldquo;10-minute setup&rdquo; refers strictly to creating your account, dialing your carrier forwarding code (*71 on Verizon, *004* on AT&amp;T, **61* on T-Mobile) on your cell phone, and verifying your first test call. Brand registration takes minutes to 3 days. Campaign approval, which is what actually gates your texting, runs 3 days to 4 weeks and includes a $15 non-refundable vetting fee. Sole proprietors without an EIN move fastest. If you need calls covered before carrier approval clears, voice alerts remain fully active while text-back registration finishes vetting.
             </p>
           </div>
         </div>
@@ -863,7 +784,7 @@ export default function LandingPage() {
                 <span className="text-[11px] text-slate-500">— Missed Call Revenue Recovery</span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Registered Office: {COMPANY_INFO.address} • Direct Support: {COMPANY_INFO.phoneDisplay}
+                Direct Contact: {COMPANY_INFO.email}
               </p>
             </div>
 
@@ -876,8 +797,7 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[11px] text-slate-400">
-            <span>© 2026 Missed Call Recovery Inc. All rights reserved. Powered by carrier-grade Twilio telecom infrastructure.</span>
-            <span>TCR Campaign ID: MCR-TRADE-REC-8841</span>
+            <span>© 2026 Missed Call Recovery Inc. All rights reserved. Automated missed-call text-back &amp; qualification platform for trade contractors.</span>
           </div>
         </div>
       </footer>

@@ -22,6 +22,8 @@ import {
   Share2,
   ShieldCheck,
   MoreHorizontal,
+  Clock,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -33,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [unreadCount, setUnreadCount] = useState(2);
   const [simulatingCall, setSimulatingCall] = useState(false);
   const [simulationToast, setSimulationToast] = useState<string | null>(null);
+  const [complianceStatus, setComplianceStatus] = useState<string>('signed_up');
 
   React.useEffect(() => {
     fetch('/api/auth/session')
@@ -41,21 +44,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         if (d.accountId) setSelectedAccount(d.accountId);
       })
       .catch(console.error);
-  }, []);
 
-  const handleAccountChange = async (newAccountId: string) => {
-    setSelectedAccount(newAccountId);
-    try {
-      await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetAccount: newAccountId }),
-      });
-      window.location.reload();
-    } catch (e) {
-      console.error(e);
-    }
-  };
+    fetch('/api/compliance')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.compliance?.status) setComplianceStatus(d.compliance.status);
+      })
+      .catch(console.error);
+  }, []);
 
   // Primary Navigation
   const primaryNavItems = [
@@ -125,19 +121,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        {/* Tenant Switcher */}
+        {/* Active Authenticated Business Profile */}
         <div className="border-b border-slate-200 p-3">
           <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
             Active Business
           </label>
-          <select
-            value={selectedAccount}
-            onChange={(e) => handleAccountChange(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="acc-apex-plumbing">Apex Plumbing &amp; Rooter</option>
-            <option value="acc-coolbreeze-hvac">CoolBreeze Heating &amp; Air</option>
-          </select>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800">
+            {selectedAccount === 'acc-coolbreeze-hvac' ? 'CoolBreeze Heating & Air' : 'Apex Plumbing & Rooter'}
+          </div>
         </div>
 
         {/* Primary Navigation */}
@@ -196,26 +187,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </nav>
 
-        {/* Setup Health Status Widget (Section 17) */}
+        {/* Setup Compliance Status Widget (Item 5 Truthfulness) */}
         <div className="p-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs">
-            <div className="flex items-center justify-between font-bold text-emerald-900 text-[11px]">
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> MCR SETUP
-              </span>
-              <span className="rounded bg-emerald-200/60 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800">
-                100% READY
-              </span>
+          {complianceStatus === 'sms_live' ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs">
+              <div className="flex items-center justify-between font-bold text-emerald-900 text-[11px]">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> MCR SETUP
+                </span>
+                <span className="rounded bg-emerald-200/60 px-1.5 py-0.5 text-[9px] font-extrabold text-emerald-800">
+                  100% READY
+                </span>
+              </div>
+              <div className="mt-1.5 grid grid-cols-2 gap-x-1 gap-y-0.5 text-[10px] text-emerald-800 font-medium">
+                <span>✓ Profile</span>
+                <span>✓ Recovery #</span>
+                <span>✓ Forwarding</span>
+                <span>✓ Test Call</span>
+                <span>✓ SMS Auto</span>
+                <span>✓ 10DLC Live</span>
+              </div>
             </div>
-            <div className="mt-1.5 grid grid-cols-2 gap-x-1 gap-y-0.5 text-[10px] text-emerald-800 font-medium">
-              <span>✓ Profile</span>
-              <span>✓ Recovery #</span>
-              <span>✓ Forwarding</span>
-              <span>✓ Test Call</span>
-              <span>✓ SMS Auto</span>
-              <span>✓ 10DLC Verified</span>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs">
+              <div className="flex items-center justify-between font-bold text-amber-900 text-[11px]">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-600" /> 10DLC Compliance
+                </span>
+                <span className="rounded bg-amber-200/80 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900 uppercase">
+                  {complianceStatus.replace('_', ' ')}
+                </span>
+              </div>
+              <div className="mt-2 font-bold text-amber-950 text-[11px] leading-tight">
+                Voice alerts active · Text-back not yet live
+              </div>
+              <p className="mt-1 text-[10px] text-amber-800 leading-snug">
+                Carrier vetting in progress (3 days – 4 weeks). Voice forwarding captures missed calls now.
+              </p>
+              <div className="mt-2.5 flex items-center justify-between border-t border-amber-200/60 pt-2 text-[10px]">
+                <span className="text-amber-800">State: <strong className="font-mono">{complianceStatus}</strong></span>
+                <Link href="/dashboard/compliance" className="font-bold text-amber-900 underline hover:text-amber-950">
+                  View Tracker &rarr;
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Quick Simulator CTA */}
@@ -309,13 +325,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </div>
               )}
             </div>
-
-            <Link
-              href="/admin"
-              className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200"
-            >
-              Admin
-            </Link>
           </div>
         </header>
 
