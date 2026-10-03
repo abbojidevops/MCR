@@ -31,14 +31,30 @@ export default function OnboardingPage() {
   const totalSteps = 12;
 
   // Form State
-  const [businessName, setBusinessName] = useState('Premier Plumbing & Rooter');
-  const [legalName, setLegalName] = useState('Premier Plumbing LLC');
+  const [businessName, setBusinessName] = useState('');
+  const [legalName, setLegalName] = useState('');
   const [trade, setTrade] = useState<TradeKey>('plumbing');
-  const [ownerName, setOwnerName] = useState('Mark Stevens');
-  const [ownerPhone, setOwnerPhone] = useState('(217) 555-0144');
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
   const [selectedCarrier, setSelectedCarrier] = useState('verizon');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mcrAssignedNumber, setMcrAssignedNumber] = useState<string>('');
+
+  React.useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.phoneNumbers && d.phoneNumbers[0]?.formatted_number) {
+          setMcrAssignedNumber(d.phoneNumbers[0].formatted_number);
+        } else if (d.profile?.notification_phone) {
+          setMcrAssignedNumber(d.profile.notification_phone);
+        } else {
+          setMcrAssignedNumber('[Dedicated Number Assigned Upon Activation]');
+        }
+      })
+      .catch(() => setMcrAssignedNumber('[Dedicated Number Assigned Upon Activation]'));
+  }, []);
 
   // Test simulation state in Step 10 & 11
   const [testSimulating, setTestSimulating] = useState(false);
@@ -51,9 +67,7 @@ export default function OnboardingPage() {
     ownerNotified: false,
   });
 
-  const mcrAssignedNumber = '+1 (217) 555-0199';
-  const cleanMcrTenDigit = '2175550199';
-
+  const cleanMcrTenDigit = mcrAssignedNumber.replace(/\D/g, '') || 'YOUR_MCR_NUMBER';
   const carrierGuide = CARRIER_GUIDES[selectedCarrier] || CARRIER_GUIDES.verizon;
   const dialCode = carrierGuide.forward_no_answer_code.replace(/{{FORWARD_NUMBER}}/g, cleanMcrTenDigit);
 
@@ -276,6 +290,7 @@ export default function OnboardingPage() {
                     type="text"
                     value={ownerName}
                     onChange={(e) => setOwnerName(e.target.value)}
+                    placeholder="e.g. Mark Stevens"
                     className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -287,6 +302,7 @@ export default function OnboardingPage() {
                     type="tel"
                     value={ownerPhone}
                     onChange={(e) => setOwnerPhone(e.target.value)}
+                    placeholder="e.g. (217) 555-0100"
                     className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
                   />
                 </div>
@@ -421,10 +437,9 @@ export default function OnboardingPage() {
               </div>
 
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-                <div className="font-semibold text-slate-800">Waiting Period Notice:</div>
+                <div className="font-semibold text-slate-800">10DLC Carrier Registration Timeline:</div>
                 <p className="mt-1">
-                  While carrier registration is pending (typically 1-3 business days), your missed calls are still tracked
-                  and owner notifications are sent immediately.
+                  Brand registration takes minutes to 3 days. Campaign approval runs 3 days to 4 weeks with a $15 non-refundable carrier vetting fee. During this window, your voice forwarding is active and missed calls notify you immediately.
                 </p>
               </div>
             </div>
