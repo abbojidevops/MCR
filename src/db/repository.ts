@@ -783,7 +783,19 @@ class DatabaseRepository {
     });
     this.saveToFile();
   }
+
+  // --------------------------------------------------------------------------
+  // Persistence Health
+  // --------------------------------------------------------------------------
+  public isPostgresConfigured(): boolean {
+    return Boolean(process.env.DATABASE_URL);
+  }
+
+  public getStorageEngine(): 'postgresql' | 'file_json' {
+    return process.env.DATABASE_URL ? 'postgresql' : 'file_json';
+  }
 }
 
 // Global Singleton
 export const db = new DatabaseRepository();
+

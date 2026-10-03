@@ -280,9 +280,152 @@
       "full_name": "Unknown Caller",
       "created_at": "2026-10-01T19:10:13.221Z",
       "updated_at": "2026-10-01T19:10:13.221Z"
+    },
+    {
+      "id": "cont-mus12fvj-401l",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175554399",
+      "full_name": "Unknown Caller",
+      "created_at": "2026-10-03T06:45:26.623Z",
+      "updated_at": "2026-10-03T06:45:26.623Z"
+    },
+    {
+      "id": "cont-mus12fwc-oa2j",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175552079",
+      "full_name": "Unknown Caller",
+      "created_at": "2026-10-03T06:45:26.652Z",
+      "updated_at": "2026-10-03T06:45:26.652Z"
+    },
+    {
+      "id": "cont-mus12fwt-d36m",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175559907",
+      "full_name": "Unknown Caller",
+      "created_at": "2026-10-03T06:45:26.669Z",
+      "updated_at": "2026-10-03T06:45:26.669Z"
+    },
+    {
+      "id": "cont-mus12fxc-91lw",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175555608",
+      "full_name": "Unknown Caller",
+      "created_at": "2026-10-03T06:45:26.688Z",
+      "updated_at": "2026-10-03T06:45:26.688Z",
+      "address": "456 Oak Street, Springfield"
+    },
+    {
+      "id": "cont-mus159l8-a88v",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175556245",
+      "full_name": "Unknown Caller",
+      "created_at": "2026-10-03T06:47:38.444Z",
+      "updated_at": "2026-10-03T06:47:38.444Z"
     }
   ],
   "callRecords": [
+    {
+      "id": "call-mus159l4-3ez3",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_LATE_NIGHT_1791010058440",
+      "from_number": "+12175556245",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:47:38.440Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "pending",
+      "deduplication_state": "first_call",
+      "created_at": "2026-10-03T06:47:38.440Z",
+      "updated_at": "2026-10-03T06:47:38.463Z"
+    },
+    {
+      "id": "call-mus12fxa-b3eg",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_QUAL_1791009926686",
+      "from_number": "+12175555608",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:45:26.686Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "sent",
+      "deduplication_state": "first_call",
+      "created_at": "2026-10-03T06:45:26.686Z",
+      "updated_at": "2026-10-03T06:45:26.692Z"
+    },
+    {
+      "id": "call-mus12fwz-tip9",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_SUPP_1791009926675",
+      "from_number": "+12175559907",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:45:26.675Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "suppressed",
+      "deduplication_state": "first_call",
+      "created_at": "2026-10-03T06:45:26.675Z",
+      "updated_at": "2026-10-03T06:45:26.677Z"
+    },
+    {
+      "id": "call-mus12fwl-5exw",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_CALL2_1791009926661",
+      "from_number": "+12175552079",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:45:26.661Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "deduplicated",
+      "deduplication_state": "duplicate_suppressed",
+      "created_at": "2026-10-03T06:45:26.661Z",
+      "updated_at": "2026-10-03T06:45:26.663Z"
+    },
+    {
+      "id": "call-mus12fwa-8swa",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_CALL1_1791009926650",
+      "from_number": "+12175552079",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:45:26.650Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "sent",
+      "deduplication_state": "first_call",
+      "created_at": "2026-10-03T06:45:26.650Z",
+      "updated_at": "2026-10-03T06:45:26.656Z"
+    },
+    {
+      "id": "call-mus12fvg-qjf7",
+      "account_id": "acc-apex-plumbing",
+      "twilio_call_sid": "CA_MISSED_TEST_1791009926620",
+      "from_number": "+12175554399",
+      "to_number": "+12175550190",
+      "direction": "inbound",
+      "start_time": "2026-10-03T06:45:26.620Z",
+      "duration": 0,
+      "call_status": "no-answer",
+      "missed_reason": "no-answer",
+      "forwarded_status": "direct",
+      "text_back_status": "sent",
+      "deduplication_state": "first_call",
+      "created_at": "2026-10-03T06:45:26.620Z",
+      "updated_at": "2026-10-03T06:45:26.644Z"
+    },
     {
       "id": "call-mupwsixt-ko7x",
       "account_id": "acc-apex-plumbing",
@@ -754,6 +897,51 @@
     }
   ],
   "conversations": [
+    {
+      "id": "conv-mus159l9-dbeu",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus159l8-a88v",
+      "status": "active",
+      "last_message_at": "2026-10-03T06:47:38.445Z",
+      "created_at": "2026-10-03T06:47:38.445Z",
+      "updated_at": "2026-10-03T06:47:38.445Z"
+    },
+    {
+      "id": "conv-mus12fxd-lfes",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus12fxc-91lw",
+      "status": "active",
+      "last_message_at": "2026-10-03T06:45:26.724Z",
+      "created_at": "2026-10-03T06:45:26.689Z",
+      "updated_at": "2026-10-03T06:45:26.724Z"
+    },
+    {
+      "id": "conv-mus12fwu-dmb8",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus12fwt-d36m",
+      "status": "active",
+      "last_message_at": "2026-10-03T06:45:26.683Z",
+      "created_at": "2026-10-03T06:45:26.670Z",
+      "updated_at": "2026-10-03T06:45:26.683Z"
+    },
+    {
+      "id": "conv-mus12fwd-4nk4",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus12fwc-oa2j",
+      "status": "active",
+      "last_message_at": "2026-10-03T06:45:26.655Z",
+      "created_at": "2026-10-03T06:45:26.653Z",
+      "updated_at": "2026-10-03T06:45:26.655Z"
+    },
+    {
+      "id": "conv-mus12fvk-bd55",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus12fvj-401l",
+      "status": "active",
+      "last_message_at": "2026-10-03T06:45:26.643Z",
+      "created_at": "2026-10-03T06:45:26.624Z",
+      "updated_at": "2026-10-03T06:45:26.643Z"
+    },
     {
       "id": "conv-mupwsixz-fa5z",
       "account_id": "acc-apex-plumbing",
@@ -1763,6 +1951,201 @@
       "media_urls": [],
       "status": "delivered",
       "created_at": "2026-10-01T19:07:44.502Z"
+    },
+    {
+      "id": "msg-mus12fw3-bo4m",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fvk-bd55",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175554399",
+      "body": "Apex Plumbing & Rooter: Sorry we missed your call! Need emergency plumbing service? Reply STOP to opt out.",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fw2_orncc",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.643Z"
+    },
+    {
+      "id": "msg-mus12fwf-8p6z",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwd-4nk4",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175552079",
+      "body": "Apex Plumbing & Rooter: Sorry we missed your call! Need emergency plumbing service? Reply STOP to opt out.",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fwf_1l4il",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.655Z"
+    },
+    {
+      "id": "msg-mus12fww-gvg7",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwu-dmb8",
+      "direction": "inbound",
+      "from_number": "+12175559907",
+      "to_number": "+12175550190",
+      "body": "STOP",
+      "media_urls": [],
+      "twilio_message_sid": "SM_STOP_1791009926666",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.672Z"
+    },
+    {
+      "id": "msg-mus12fwx-rt68",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwu-dmb8",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175559907",
+      "body": "Apex Plumbing & Rooter: You have been unsubscribed and will receive no further messages. Text START to resubscribe.",
+      "media_urls": [],
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.673Z"
+    },
+    {
+      "id": "msg-mus12fx6-br96",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwu-dmb8",
+      "direction": "inbound",
+      "from_number": "+12175559907",
+      "to_number": "+12175550190",
+      "body": "START",
+      "media_urls": [],
+      "twilio_message_sid": "SM_START_1791009926679",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.682Z"
+    },
+    {
+      "id": "msg-mus12fx7-5mt8",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwu-dmb8",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175559907",
+      "body": "Apex Plumbing & Rooter: You have successfully resubscribed to missed-call recovery updates. How can we help you today?",
+      "media_urls": [],
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.683Z"
+    },
+    {
+      "id": "msg-mus12fxf-ok32",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175555608",
+      "body": "Apex Plumbing & Rooter: Sorry we missed your call! Need emergency plumbing service? Reply STOP to opt out.",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fxf_pe3eu",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.691Z"
+    },
+    {
+      "id": "msg-mus12fxn-olpx",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "inbound",
+      "from_number": "+12175555608",
+      "to_number": "+12175550190",
+      "body": "YES, water is bursting from my bathroom sink!",
+      "media_urls": [],
+      "twilio_message_sid": "SM_Q1_1791009926698",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.699Z"
+    },
+    {
+      "id": "msg-mus12fxr-kfxw",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175555608",
+      "body": "Understood, prioritizing this. What plumbing issue are you experiencing? (e.g. water heater, clogged drain, toilet leaking)",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fxq_z8yqy",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.703Z"
+    },
+    {
+      "id": "msg-mus12fxt-wu2t",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "inbound",
+      "from_number": "+12175555608",
+      "to_number": "+12175550190",
+      "body": "The shutoff valve snapped off and won't close",
+      "media_urls": [],
+      "twilio_message_sid": "SM_Q2_1791009926704",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.705Z"
+    },
+    {
+      "id": "msg-mus12fxw-e02y",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175555608",
+      "body": "Got it. What is the service address or neighborhood where the work is needed?",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fxw_z6zr3",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.708Z"
+    },
+    {
+      "id": "msg-mus12fxz-wzni",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "inbound",
+      "from_number": "+12175555608",
+      "to_number": "+12175550190",
+      "body": "456 Oak Street, Springfield",
+      "media_urls": [],
+      "twilio_message_sid": "SM_Q3_1791009926709",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.711Z"
+    },
+    {
+      "id": "msg-mus12fy2-773z",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175555608",
+      "body": "Received. If possible, please reply with a photo of the issue so our technician can prepare parts.",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fy2_dgm3q",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.714Z"
+    },
+    {
+      "id": "msg-mus12fy5-rp80",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "inbound",
+      "from_number": "+12175555608",
+      "to_number": "+12175550190",
+      "body": "Sent photo!",
+      "media_urls": [
+        "https://images.example.com/burst-pipe.jpg"
+      ],
+      "twilio_message_sid": "SM_Q4_1791009926715",
+      "status": "received",
+      "created_at": "2026-10-03T06:45:26.717Z"
+    },
+    {
+      "id": "msg-mus12fyc-h4jl",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "direction": "outbound",
+      "from_number": "+12175550190",
+      "to_number": "+12175555608",
+      "body": "Thank you! Your job request has been received by our lead technician. Someone from Apex Plumbing & Rooter will contact you shortly to confirm timing.",
+      "media_urls": [],
+      "twilio_message_sid": "SM_MOCK_mus12fyb_e183g",
+      "status": "delivered",
+      "created_at": "2026-10-03T06:45:26.724Z"
     }
   ],
   "intakeSessions": [
@@ -1885,9 +2268,72 @@
       "updated_at": "2026-10-01T19:07:44.501Z",
       "problem_description": "The shutoff valve snapped off and won't close",
       "address": "456 Oak Street, Springfield"
+    },
+    {
+      "id": "intake-mus12fw6-p384",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fvk-bd55",
+      "trade": "plumbing",
+      "current_step": "ASK_EMERGENCY",
+      "is_emergency": false,
+      "photo_urls": [],
+      "status": "in_progress",
+      "created_at": "2026-10-03T06:45:26.646Z",
+      "updated_at": "2026-10-03T06:45:26.646Z"
+    },
+    {
+      "id": "intake-mus12fwi-dir7",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fwd-4nk4",
+      "trade": "plumbing",
+      "current_step": "ASK_EMERGENCY",
+      "is_emergency": false,
+      "photo_urls": [],
+      "status": "in_progress",
+      "created_at": "2026-10-03T06:45:26.658Z",
+      "updated_at": "2026-10-03T06:45:26.658Z"
+    },
+    {
+      "id": "intake-mus12fxj-gnho",
+      "account_id": "acc-apex-plumbing",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "trade": "plumbing",
+      "current_step": "QUALIFIED",
+      "is_emergency": true,
+      "photo_urls": [
+        "https://images.example.com/burst-pipe.jpg"
+      ],
+      "status": "completed",
+      "created_at": "2026-10-03T06:45:26.695Z",
+      "updated_at": "2026-10-03T06:45:26.722Z",
+      "problem_description": "The shutoff valve snapped off and won't close",
+      "address": "456 Oak Street, Springfield"
     }
   ],
   "jobs": [
+    {
+      "id": "job-mus12fy7-hv3x",
+      "recovery_source": "Missed Call — October 3, 2026",
+      "account_id": "acc-apex-plumbing",
+      "contact_id": "cont-mus12fxc-91lw",
+      "intake_session_id": "intake-mus12fxj-gnho",
+      "conversation_id": "conv-mus12fxd-lfes",
+      "title": "Plumbing & Rooter - The shutoff valve snapped off and won't ",
+      "trade": "plumbing",
+      "problem": "The shutoff valve snapped off and won't close",
+      "is_emergency": true,
+      "address": "456 Oak Street, Springfield",
+      "photo_urls": [
+        "https://images.example.com/burst-pipe.jpg"
+      ],
+      "status": "NEW",
+      "estimated_value": 650,
+      "first_call_time": "2026-10-03T06:40:26.718Z",
+      "text_back_time": "2026-10-03T06:41:26.718Z",
+      "qualified_time": "2026-10-03T06:45:26.718Z",
+      "created_at": "2026-10-03T06:45:26.718Z",
+      "updated_at": "2026-10-03T06:45:26.718Z"
+    },
     {
       "id": "job-mupwpc6r-vbxc",
       "recovery_source": "Missed Call — October 2, 2026",
@@ -2190,6 +2636,26 @@
       "source": "inbound_sms_start",
       "audit_notes": "User opted back in via START / UNSTOP",
       "created_at": "2026-10-01T19:07:44.463Z"
+    },
+    {
+      "id": "consent-mus12fws",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175559907",
+      "consent_type": "opt_out",
+      "consent_status": "revoked",
+      "source": "inbound_sms_stop",
+      "audit_notes": "Suppression registered: Customer texted STOP keyword",
+      "created_at": "2026-10-03T06:45:26.668Z"
+    },
+    {
+      "id": "consent-mus12fx4",
+      "account_id": "acc-apex-plumbing",
+      "phone_number": "+12175559907",
+      "consent_type": "explicit_consent",
+      "consent_status": "granted",
+      "source": "inbound_sms_start",
+      "audit_notes": "User opted back in via START / UNSTOP",
+      "created_at": "2026-10-03T06:45:26.680Z"
     }
   ],
   "compliance": [
@@ -2311,15 +2777,97 @@
       "account_id": "acc-apex-plumbing",
       "period_start": "2026-09-16T18:41:01.567Z",
       "period_end": "2026-10-16T18:41:01.567Z",
-      "calls_count": 85,
-      "sms_count": 357,
-      "mms_count": 17,
+      "calls_count": 91,
+      "sms_count": 372,
+      "mms_count": 18,
       "numbers_count": 1,
       "overage_amount_cents": 0,
       "created_at": "2026-09-16T18:41:01.567Z"
     }
   ],
   "notifications": [
+    {
+      "id": "notif-mus159ls-1z1f",
+      "account_id": "acc-apex-plumbing",
+      "title": "🚨 After-Hours Lead: Call Immediately",
+      "body": "Missed call from +12175556245. Consumer text-back queued for 8:05 AM per TCPA quiet hours, but you can call them back immediately: tel:+12175556245",
+      "type": "emergency",
+      "is_read": false,
+      "metadata": {
+        "callId": "call-mus159l4-3ez3",
+        "contactId": "cont-mus159l8-a88v",
+        "from": "+12175556245",
+        "oneTapCallUrl": "tel:+12175556245",
+        "nextAllowedSendTime": "Tomorrow at 08:05 AM (America/Chicago)",
+        "immediateOwnerAlert": true
+      },
+      "created_at": "2026-10-03T06:47:38.464Z"
+    },
+    {
+      "id": "notif-mus12fy9-n7ey",
+      "account_id": "acc-apex-plumbing",
+      "title": "🚨 URGENT: Qualified Emergency Job",
+      "body": "New job created for Unknown Caller (plumbing): \"The shutoff valve snapped off and won't close\". Address: 456 Oak Street, Springfield",
+      "type": "emergency",
+      "is_read": false,
+      "metadata": {
+        "jobId": "job-mus12fy7-hv3x",
+        "contactId": "cont-mus12fxc-91lw"
+      },
+      "created_at": "2026-10-03T06:45:26.721Z"
+    },
+    {
+      "id": "notif-mus12fxo-7jpp",
+      "account_id": "acc-apex-plumbing",
+      "title": "🚨 EMERGENCY KEYWORD DETECTED",
+      "body": "Caller Unknown Caller indicated an urgent issue: \"YES, water is bursting from my bathroom sink!\"",
+      "type": "emergency",
+      "is_read": false,
+      "metadata": {
+        "conversationId": "conv-mus12fxd-lfes",
+        "contactId": "cont-mus12fxc-91lw"
+      },
+      "created_at": "2026-10-03T06:45:26.700Z"
+    },
+    {
+      "id": "notif-mus12fxl-jrg4",
+      "account_id": "acc-apex-plumbing",
+      "title": "📞 Missed Call Text-Back Sent",
+      "body": "Missed call from +12175555608. Automatic qualification text sent to customer.",
+      "type": "missed_call",
+      "is_read": false,
+      "metadata": {
+        "callId": "call-mus12fxa-b3eg",
+        "contactId": "cont-mus12fxc-91lw"
+      },
+      "created_at": "2026-10-03T06:45:26.697Z"
+    },
+    {
+      "id": "notif-mus12fwj-r9rm",
+      "account_id": "acc-apex-plumbing",
+      "title": "📞 Missed Call Text-Back Sent",
+      "body": "Missed call from +12175552079. Automatic qualification text sent to customer.",
+      "type": "missed_call",
+      "is_read": false,
+      "metadata": {
+        "callId": "call-mus12fwa-8swa",
+        "contactId": "cont-mus12fwc-oa2j"
+      },
+      "created_at": "2026-10-03T06:45:26.659Z"
+    },
+    {
+      "id": "notif-mus12fw8-n7n9",
+      "account_id": "acc-apex-plumbing",
+      "title": "📞 Missed Call Text-Back Sent",
+      "body": "Missed call from +12175554399. Automatic qualification text sent to customer.",
+      "type": "missed_call",
+      "is_read": false,
+      "metadata": {
+        "callId": "call-mus12fvg-qjf7",
+        "contactId": "cont-mus12fvj-401l"
+      },
+      "created_at": "2026-10-03T06:45:26.648Z"
+    },
     {
       "id": "notif-mupwsiyg-tnm3",
       "account_id": "acc-apex-plumbing",
@@ -2764,6 +3312,71 @@
     },
     "twilio_voice:CA_LATE_NIGHT_1790881813217": {
       "processedAt": "2026-10-01T19:10:13.219Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_voice:CA_IDEMPOTENT_TEST_1791009926617": {
+      "processedAt": "2026-10-03T06:45:26.617Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_voice:CA_MISSED_TEST_1791009926620": {
+      "processedAt": "2026-10-03T06:45:26.621Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_voice:CA_CALL1_1791009926650": {
+      "processedAt": "2026-10-03T06:45:26.651Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_voice:CA_CALL2_1791009926661": {
+      "processedAt": "2026-10-03T06:45:26.662Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_sms:SM_STOP_1791009926666": {
+      "processedAt": "2026-10-03T06:45:26.667Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_voice:CA_SUPP_1791009926675": {
+      "processedAt": "2026-10-03T06:45:26.676Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_sms:SM_START_1791009926679": {
+      "processedAt": "2026-10-03T06:45:26.679Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_voice:CA_QUAL_1791009926686": {
+      "processedAt": "2026-10-03T06:45:26.687Z",
+      "provider": "twilio_voice",
+      "eventType": "voice_call_missed"
+    },
+    "twilio_sms:SM_Q1_1791009926698": {
+      "processedAt": "2026-10-03T06:45:26.698Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_sms:SM_Q2_1791009926704": {
+      "processedAt": "2026-10-03T06:45:26.704Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_sms:SM_Q3_1791009926709": {
+      "processedAt": "2026-10-03T06:45:26.710Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_sms:SM_Q4_1791009926715": {
+      "processedAt": "2026-10-03T06:45:26.715Z",
+      "provider": "twilio_sms",
+      "eventType": "sms_received"
+    },
+    "twilio_voice:CA_LATE_NIGHT_1791010058440": {
+      "processedAt": "2026-10-03T06:47:38.442Z",
       "provider": "twilio_voice",
       "eventType": "voice_call_missed"
     }

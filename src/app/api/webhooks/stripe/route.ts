@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { db } from '@/db/repository';
 
 export async function POST(req: NextRequest) {
@@ -7,7 +8,29 @@ export async function POST(req: NextRequest) {
     const signature = req.headers.get('stripe-signature');
 
     // In production with STRIPE_WEBHOOK_SECRET, verify stripe signature.
-    // For mock/test mode, parse event payload directly.
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (webhookSecret && process.env.NODE_ENV === 'production' && process.env.STRIPE_LIVE === 'true') {
+      if (!signature) {
+        return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
+      }
+      const parts = signature.split(',').reduce((acc: any, part: string) => {
+        const [k, v] = part.split('=');
+        acc[k] = v;
+        return acc;
+      }, {});
+      const timestamp = parts['t'];
+      const expectedSig = parts['v1'];
+      if (!timestamp || !expectedSig) {
+        return NextResponse.json({ error: 'Malformed stripe-signature header' }, { status: 400 });
+      }
+      const computedSig = crypto.createHmac('sha256', webhookSecret)
+        .update(`${timestamp}.${rawBody}`)
+        .digest('hex');
+      if (computedSig !== expectedSig) {
+        return NextResponse.json({ error: 'Invalid stripe-signature' }, { status: 400 });
+      }
+    }
+
     let event: any;
     try {
       event = JSON.parse(rawBody);

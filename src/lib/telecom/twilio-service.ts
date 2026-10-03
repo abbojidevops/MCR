@@ -4,6 +4,7 @@ import { TRADE_TEMPLATES } from '@/lib/trade-templates';
 import { isHelpKeyword, isStartKeyword, isStopKeyword } from '@/lib/compliance-machine';
 import { checkQuietHours, inferTimezoneFromPhone } from '@/lib/quiet-hours';
 import { TradeKey } from '@/types';
+import { TwilioClient } from './twilio-client';
 
 export interface TwilioVoiceWebhookParams {
   CallSid: string;
@@ -172,6 +173,12 @@ export class TwilioService {
       initialMessageBody += ' Reply STOP to opt out.';
     }
 
+    const sendRes = await TwilioClient.sendSms({
+      to: From,
+      from: To,
+      body: initialMessageBody,
+    });
+
     db.addMessage({
       accountId,
       conversationId: conversation.id,
@@ -179,7 +186,7 @@ export class TwilioService {
       fromNumber: To,
       toNumber: From,
       body: initialMessageBody,
-      twilioMessageSid: `mock_sms_${Date.now()}`,
+      twilioMessageSid: sendRes.sid || `sms_${Date.now()}`,
     });
 
     db.updateCallRecord(callRecord.id, { text_back_status: 'sent' });
@@ -503,6 +510,12 @@ export class TwilioService {
     }
 
     // Send Outbound Reply
+    const sendReplyRes = await TwilioClient.sendSms({
+      to: From,
+      from: To,
+      body: nextReply,
+    });
+
     db.addMessage({
       accountId,
       conversationId: conversation.id,
@@ -510,6 +523,7 @@ export class TwilioService {
       fromNumber: To,
       toNumber: From,
       body: nextReply,
+      twilioMessageSid: sendReplyRes.sid || `sms_${Date.now()}`,
     });
 
     return {

@@ -9,12 +9,14 @@
     "lint": "next lint",
     "test": "npx tsx --test tests/mcr.test.ts",
     "demo": "npx tsx scripts/demo-walkthrough.ts",
-    "db:reset": "npx tsx scripts/db-reset.ts"
+    "db:reset": "npx tsx scripts/db-reset.ts",
+    "db:migrate:postgres": "npx tsx scripts/migrate-to-postgres.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
     "next": "^15.1.7",
+    "pg": "^8.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.6.0",
@@ -22,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
     "autoprefixer": "^10.6.1",

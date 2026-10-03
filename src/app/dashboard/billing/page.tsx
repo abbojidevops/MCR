@@ -41,17 +41,36 @@ export default function BillingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'create_checkout_session',
           planTier: newTier,
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.url && data.url.startsWith('http')) {
+        window.location.href = data.url;
+      } else {
         fetchBilling();
       }
     } catch (err) {
       console.error(err);
     } finally {
       setIsUpgrading(false);
+    }
+  };
+
+  const handleOpenStripePortal = async () => {
+    try {
+      const res = await fetch('/api/billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_portal_session' }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -81,10 +100,21 @@ export default function BillingPage() {
           </div>
 
           <div className="text-right sm:text-right">
-            <span className="text-3xl font-extrabold text-slate-900">
-              ${(currentPlan?.monthly_price_cents || 14900) / 100}
-            </span>
-            <span className="text-xs text-slate-500"> / month</span>
+            <div>
+              <span className="text-3xl font-extrabold text-slate-900">
+                ${(currentPlan?.monthly_price_cents || 14900) / 100}
+              </span>
+              <span className="text-xs text-slate-500"> / month</span>
+            </div>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={handleOpenStripePortal}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                <CreditCard className="h-3.5 w-3.5 text-slate-500" /> Manage Payment Method
+              </button>
+            </div>
           </div>
         </div>
 
