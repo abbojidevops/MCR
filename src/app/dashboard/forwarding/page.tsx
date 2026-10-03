@@ -17,9 +17,24 @@ export default function ForwardingWizardPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [testingCall, setTestingCall] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [mcrAssignedNumber, setMcrAssignedNumber] = useState<string>('');
 
-  const mcrAssignedNumber = '+1 (217) 555-0190';
-  const guide = getCarrierGuide(selectedCarrier, mcrAssignedNumber);
+  React.useEffect(() => {
+    fetch('/api/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.phoneNumbers && data.phoneNumbers[0]?.formatted_number) {
+          setMcrAssignedNumber(data.phoneNumbers[0].formatted_number);
+        } else if (data.profile?.notification_phone) {
+          setMcrAssignedNumber(data.profile.notification_phone);
+        } else {
+          setMcrAssignedNumber('[Pending Carrier Provisioning]');
+        }
+      })
+      .catch(() => setMcrAssignedNumber('[Pending Carrier Provisioning]'));
+  }, []);
+
+  const guide = getCarrierGuide(selectedCarrier, mcrAssignedNumber || '[Pending Carrier Provisioning]');
 
   const handleCopy = (code: string) => {
     navigator.clipboard.writeText(code);

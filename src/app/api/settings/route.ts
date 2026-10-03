@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const account = db.getAccount(accountId);
     const profile = db.getBusinessProfile(accountId);
     const phoneNumbers = db.getPhoneNumbers(accountId);
-    const mcrNumber = phoneNumbers[0]?.formatted_number || '+1 (217) 555-0190';
+    const mcrNumber = phoneNumbers[0]?.formatted_number || profile?.notification_phone || '[Pending Carrier Provisioning]';
     const carrierGuide = profile?.carrier_name
       ? getCarrierGuide(profile.carrier_name.toLowerCase().includes('verizon') ? 'verizon' : 'att', mcrNumber)
       : undefined;
