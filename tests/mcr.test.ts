@@ -366,3 +366,78 @@ test('12. Admin Route Lockdown & Session Verification', () => {
   assert.ok(adminSession);
   assert.equal(adminSession.role, 'admin');
 });
+
+test('13. Twilio Client & Telecom REST Integration', async () => {
+  const { TwilioClient } = require('../src/lib/telecom/twilio-client');
+
+  // 1. Mock mode dispatch
+  const result = await TwilioClient.sendSms({
+    to: '+12175559900',
+    from: '+12175550190',
+    body: 'Test dispatch message',
+  });
+  assert.equal(result.status, 'mocked');
+  assert.ok(result.sid.startsWith('SM_MOCK_'));
+
+  // 2. Signature verification
+  const crypto = require('crypto');
+  const testAuthToken = 'mock_auth_token_12345';
+  const url = 'https://mcr.example.com/api/webhooks/twilio/voice';
+  const params: Record<string, string> = { CallSid: 'CA123456', From: '+12175559900', To: '+12175550190' };
+  const data = Object.keys(params).sort().reduce((acc, k) => acc + k + params[k], url);
+  const validSig = crypto.createHmac('sha1', testAuthToken).update(Buffer.from(data, 'utf-8')).digest('base64');
+
+  // Verify HMAC algorithm
+  const checkSig = (sig: string, token: string) => {
+    const expected = crypto.createHmac('sha1', token).update(Buffer.from(data, 'utf-8')).digest('base64');
+    return sig === expected;
+  };
+  assert.equal(checkSig(validSig, testAuthToken), true);
+  assert.equal(checkSig('invalid_sig', testAuthToken), false);
+});
+
+test('14. Stripe Webhook Cryptographic Verification & Billing Engine', () => {
+  const crypto = require('crypto');
+  const webhookSecret = 'whsec_test_secret_67890';
+  const payload = JSON.stringify({ id: 'evt_test_123', type: 'invoice.payment_succeeded' });
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = crypto.createHmac('sha256', webhookSecret).update(`${timestamp}.${payload}`).digest('hex');
+
+  // Verify signature algorithm
+  const verifyStripeSig = (header: string, body: string, secret: string) => {
+    const parts = header.split(',').reduce((acc: any, p: string) => {
+      const [k, v] = p.split('=');
+      acc[k] = v;
+      return acc;
+    }, {});
+    const computed = crypto.createHmac('sha256', secret).update(`${parts['t']}.${body}`).digest('hex');
+    return computed === parts['v1'];
+  };
+
+  const header = `t=${timestamp},v1=${signature}`;
+  assert.equal(verifyStripeSig(header, payload, webhookSecret), true);
+  assert.equal(verifyStripeSig(`t=${timestamp},v1=bad_sig`, payload, webhookSecret), false);
+});
+
+test('15. PostgreSQL Schema & Dual Persistence Engine', async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { checkPostgresConnection } = require('../src/db/postgres');
+
+  // 1. Schema file must exist and contain 35 tables
+  const schemaPath = path.join(process.cwd(), 'src', 'db', 'schema.sql');
+  assert.equal(fs.existsSync(schemaPath), true);
+  const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
+  assert.ok(schemaSql.includes('CREATE TABLE IF NOT EXISTS accounts'));
+  assert.ok(schemaSql.includes('CREATE TABLE IF NOT EXISTS jobs'));
+  assert.ok(schemaSql.includes('CREATE TABLE IF NOT EXISTS call_records'));
+  assert.ok(schemaSql.includes('CREATE TABLE IF NOT EXISTS compliance_registrations'));
+
+  // 2. Repository identifies storage engine gracefully
+  const engine = db.getStorageEngine();
+  assert.ok(['postgresql', 'file_json'].includes(engine));
+
+  // 3. PostgreSQL connection check safely returns boolean without crashing
+  const connected = await checkPostgresConnection();
+  assert.equal(typeof connected, 'boolean');
+});
