@@ -42,6 +42,19 @@ services:
       timeout: 5s
       retries: 5
 
+  # Cloudflare Zero-Trust Tunnel (Run with `docker compose --profile tunnel up`)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: mcr-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
+    profiles:
+      - tunnel
+
 volumes:
   mcr_data:
   pg_data:

@@ -185,3 +185,10 @@ Fix:     1. Dial *73 to cancel unconditional forwarding.
 
 For detailed contractor tier-1/tier-2 support, carrier conditional forwarding troubleshooting, and TCPA dispute resolution, see the dedicated [Customer Support & Telephony Runbook](docs/CUSTOMER_SUPPORT_RUNBOOK.md).
 
+---
+
+## 9. Cloudflare Edge & Zero-Trust Tunnel Setup
+
+For deploying MCR behind Cloudflare, setting up Cloudflare Tunnel (`cloudflared`), and mandatory WAF Skip rules for Twilio/Stripe webhooks, see the [Cloudflare Edge & Zero-Trust Deployment Guide](docs/CLOUDFLARE_DEPLOYMENT.md).
+
+
