@@ -49,6 +49,12 @@ PORT=3001
 NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://mcr.yourdomain.com
 
+# Platform Operator / Admin Boundary
+# MANDATORY: Must be supplied via environment (never baked into Docker image).
+# If unset or empty, /admin boundary strictly returns 503 Service Unavailable (no dev fallback).
+ADMIN_PASSWORD=your-secure-random-admin-password
+SESSION_SECRET=your-secure-signing-secret-key-32bytes
+
 # Telephony (Twilio)
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token_here
@@ -56,8 +62,10 @@ TWILIO_PHONE_NUMBER=+15551234567
 TWILIO_MOCK_MODE=false # Set to false in production
 
 # Database
-# If DATABASE_URL is not set, MCR automatically falls back to file-persistent JSON at ./data/mcr_db.json
+# If DATABASE_URL is not set, MCR falls back to file-persistent JSON at ./data/mcr_db.json
 DATABASE_URL=postgresql://postgres:password@localhost:5432/mcr_db
+# Security rule: In Docker deployments, Postgres port 5432 is never published to the host machine.
+# Migrations & schema application are executed on container startup via scripts/db-init.mjs.
 
 # Stripe Billing
 STRIPE_SECRET_KEY=sk_live_...
@@ -170,3 +178,10 @@ Fix:     1. Dial *73 to cancel unconditional forwarding.
   ```bash
   pg_dump -U postgres -d mcr_db -F c -b -v -f "/backups/mcr_db_$(date +%Y%m%d).dump"
   ```
+
+---
+
+## 8. Customer Support & Telephony Escalations
+
+For detailed contractor tier-1/tier-2 support, carrier conditional forwarding troubleshooting, and TCPA dispute resolution, see the dedicated [Customer Support & Telephony Runbook](docs/CUSTOMER_SUPPORT_RUNBOOK.md).
+

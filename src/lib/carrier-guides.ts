@@ -28,7 +28,7 @@ export const CARRIER_GUIDES: Record<string, CarrierForwardingGuide> = {
     supports_conditional_forwarding: true,
     instructions: [
       'Open your phone keypad dialer.',
-      'Dial *71 followed directly by your 10-digit MCR number without spaces (e.g. *715551234567).',
+      'Dial *71{{FORWARD_NUMBER}} followed directly without spaces.',
       'Press the Call button.',
       'Wait for 2-3 confirmation beeps or a voice prompt, then hang up.',
       'Conditional call forwarding is now active. Your phone will ring 3-4 times; if unanswered or declined, it forwards immediately to MCR.',

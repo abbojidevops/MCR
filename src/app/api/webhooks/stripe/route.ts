@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { db } from '@/db/repository';
+import { verifyStripeSignature, processStripeWebhookEvent } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,20 +13,8 @@ export async function POST(req: NextRequest) {
       if (!signature) {
         return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
       }
-      const parts = signature.split(',').reduce((acc: any, part: string) => {
-        const [k, v] = part.split('=');
-        acc[k] = v;
-        return acc;
-      }, {});
-      const timestamp = parts['t'];
-      const expectedSig = parts['v1'];
-      if (!timestamp || !expectedSig) {
-        return NextResponse.json({ error: 'Malformed stripe-signature header' }, { status: 400 });
-      }
-      const computedSig = crypto.createHmac('sha256', webhookSecret)
-        .update(`${timestamp}.${rawBody}`)
-        .digest('hex');
-      if (computedSig !== expectedSig) {
+      const isValid = verifyStripeSignature(rawBody, signature, webhookSecret);
+      if (!isValid) {
         return NextResponse.json({ error: 'Invalid stripe-signature' }, { status: 400 });
       }
     }
@@ -34,7 +22,7 @@ export async function POST(req: NextRequest) {
     let event: any;
     try {
       event = JSON.parse(rawBody);
-    } catch (e) {
+    } catch {
       return NextResponse.json({ error: 'Malformed JSON payload' }, { status: 400 });
     }
 
@@ -48,76 +36,16 @@ export async function POST(req: NextRequest) {
 
     db.markWebhookProcessed('stripe', eventId, eventType);
 
-    // 2. Handle specific Stripe event types
-    switch (eventType) {
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data?.object;
-        const customerId = invoice?.customer;
-        const allAccounts = db.getAllAccounts();
-        for (const acc of allAccounts) {
-          const subInfo = db.getSubscription(acc.id);
-          if (subInfo.subscription && subInfo.subscription.stripe_customer_id === customerId) {
-            subInfo.subscription.status = 'active';
-            db.addNotification({
-              account_id: acc.id,
-              title: 'Subscription Payment Succeeded',
-              body: `Monthly subscription invoice paid successfully. Account remains active.`,
-              type: 'daily_summary',
-              is_read: false,
-            });
-            break;
-          }
-        }
-        break;
-      }
+    // 2. Delegate to honest Stripe event processor
+    const result = processStripeWebhookEvent(event);
 
-      case 'invoice.payment_failed': {
-        const invoice = event.data?.object;
-        const customerId = invoice?.customer;
-        const allAccounts = db.getAllAccounts();
-        for (const acc of allAccounts) {
-          const subInfo = db.getSubscription(acc.id);
-          if (subInfo.subscription && subInfo.subscription.stripe_customer_id === customerId) {
-            subInfo.subscription.status = 'past_due';
-            db.addNotification({
-              account_id: acc.id,
-              title: '⚠️ Subscription Payment Failed',
-              body: `Your payment method could not be processed. Please update billing info to prevent interruption.`,
-              type: 'emergency',
-              is_read: false,
-            });
-            break;
-          }
-        }
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const sub = event.data?.object;
-        const customerId = sub?.customer;
-        const allAccounts = db.getAllAccounts();
-        for (const acc of allAccounts) {
-          const subInfo = db.getSubscription(acc.id);
-          if (subInfo.subscription && subInfo.subscription.stripe_customer_id === customerId) {
-            subInfo.subscription.status = 'canceled';
-            db.addNotification({
-              account_id: acc.id,
-              title: 'Subscription Canceled',
-              body: `Subscription ended. Missed-call recovery is paused.`,
-              type: 'emergency',
-              is_read: false,
-            });
-            break;
-          }
-        }
-        break;
-      }
-
-      default:
-        break;
-    }
-
-    return NextResponse.json({ received: true, eventType }, { status: 200 });
+    return NextResponse.json({
+      received: true,
+      eventType,
+      handled: result.handled,
+      action: result.action,
+      accountId: result.accountId,
+    }, { status: 200 });
   } catch (err: any) {
     console.error('Error handling Stripe webhook:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

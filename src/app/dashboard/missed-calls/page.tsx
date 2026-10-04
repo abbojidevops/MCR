@@ -37,11 +37,7 @@ export default function MissedCallsPage() {
     try {
       setLoading(true);
       const [callsRes, jobsRes, convsRes] = await Promise.all([
-        fetch('/api/simulator', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_status' }),
-        }),
+        fetch('/api/calls'),
         fetch('/api/jobs'),
         fetch('/api/conversations'),
       ]);

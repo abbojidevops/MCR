@@ -48,8 +48,9 @@ export class SimulationEngine {
 
     const contact = db.getOrCreateContact(accountId, callerNumber, callerName);
     const conv = db.getOrCreateConversation(accountId, contact.id);
-    const messages = db.getMessages(accountId, conv.id);
+    const messages = db.getMessages(accountId, conv.id) || [];
     const lastMsg = messages[messages.length - 1];
+
 
     return {
       callRecordId: voiceResult.callRecordId,

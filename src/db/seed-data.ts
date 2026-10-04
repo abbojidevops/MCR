@@ -15,8 +15,11 @@ import {
   Subscription,
   UsageRecord,
   Notification,
+  UserCredential,
 } from '@/types';
 import { TRADE_TEMPLATES } from '@/lib/trade-templates';
+import { hashPasswordSync } from '@/lib/auth/password';
+
 
 export const SEED_PLANS: SubscriptionPlan[] = [
   {
@@ -976,8 +979,8 @@ export const SEED_SUBSCRIPTIONS: Subscription[] = [
     id: 'sub-apex',
     account_id: 'acc-apex-plumbing',
     plan_id: 'pro',
-    stripe_customer_id: 'cus_apex_demo_123',
-    stripe_subscription_id: 'sub_apex_demo_123',
+    stripe_customer_id: undefined,
+    stripe_subscription_id: undefined,
     status: 'active',
     current_period_start: new Date(Date.now() - 15 * 86400000).toISOString(),
     current_period_end: new Date(Date.now() + 15 * 86400000).toISOString(),
@@ -986,3 +989,27 @@ export const SEED_SUBSCRIPTIONS: Subscription[] = [
     updated_at: new Date().toISOString(),
   },
 ];
+
+export const SEED_USER_CREDENTIALS: UserCredential[] = [
+  {
+    id: 'cred-apex-demo',
+    user_id: 'usr-demo-owner',
+    account_id: 'acc-apex-plumbing',
+    email: 'demo@apexplumbing.com',
+    password_hash: hashPasswordSync('ApexDemo2026!Secure', 'a1b2c3d4e5f60718'),
+    algorithm: 'scrypt',
+    created_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'cred-coolbreeze',
+    user_id: 'usr-coolbreeze-owner',
+    account_id: 'acc-coolbreeze-hvac',
+    email: 'owner@coolbreezehvac.com',
+    password_hash: hashPasswordSync('CoolBreeze2026!Secure', 'b2c3d4e5f6a10719'),
+    algorithm: 'scrypt',
+    created_at: new Date(Date.now() - 20 * 86400000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+

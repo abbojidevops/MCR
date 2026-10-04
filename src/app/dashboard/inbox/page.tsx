@@ -336,7 +336,7 @@ export default function InboxPage() {
                   <div>
                     <span className="text-[10px] text-slate-500 font-medium">Estimated Value: </span>
                     <span className="font-bold text-slate-900">
-                      ${activeConv.job?.estimated_value ?? 650}
+                      {activeConv.job?.estimated_value !== undefined ? `$${activeConv.job.estimated_value}` : '—'}
                     </span>
                   </div>
                   {activeConv.job?.actual_value !== undefined && (

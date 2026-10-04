@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
+
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+    return NextResponse.json({ success: true, accountId, status: 'ready' });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
     const { webhookUrl } = body;
 

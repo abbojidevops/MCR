@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, setSessionCookie } from '@/lib/session';
+import { setSessionCookie } from '@/lib/session';
 import { db } from '@/db/repository';
+import { requireTenantAuth } from '@/lib/authz';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession(req);
-    const profile = db.getBusinessProfile(session.accountId);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { session, accountId } = auth;
+    const profile = db.getBusinessProfile(accountId);
 
     return NextResponse.json({
       session,
@@ -20,7 +23,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     // 1. Authenticate caller session
-    const session = await getSession(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { session, accountId } = auth;
+
 
     const body = await req.json().catch(() => ({}));
     const { resetToClean } = body;

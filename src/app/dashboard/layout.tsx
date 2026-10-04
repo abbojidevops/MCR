@@ -45,12 +45,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       })
       .catch(console.error);
 
-    fetch('/api/compliance')
+    fetch('/api/setup-status')
       .then((r) => r.json())
       .then((d) => {
-        if (d.compliance?.status) setComplianceStatus(d.compliance.status);
+        if (d.complianceStatus) setComplianceStatus(d.complianceStatus);
+        else if (d.compliance?.status) setComplianceStatus(d.compliance.status);
       })
-      .catch(console.error);
+      .catch(() => {
+        fetch('/api/compliance')
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.compliance?.status) setComplianceStatus(d.compliance.status);
+          })
+          .catch(console.error);
+      });
   }, []);
 
   // Primary Navigation

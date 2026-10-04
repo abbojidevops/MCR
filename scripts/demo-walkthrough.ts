@@ -26,7 +26,7 @@ async function runDemo() {
 
   // 1. Simulate Voice Missed Call Webhook
   console.log('\n[STAGE 2] Twilio Voice Webhook Received (/api/webhooks/twilio/voice)');
-  const callSid = 'CA_demo_' + Date.now();
+  const callSid = 'CA_SIM_demo_' + Date.now();
   const voiceResult = await TwilioService.handleInboundCall({
     CallSid: callSid,
     From: customerPhone,
@@ -45,8 +45,9 @@ async function runDemo() {
   // 2. Fetch Conversation & Outbound SMS
   const conversations = db.getConversations(accountId);
   const conv = conversations.find((c) => c.contact?.phone_number === customerPhone);
-  const messages = conv ? db.getMessages(accountId, conv.id) : [];
+  const messages = (conv ? db.getMessages(accountId, conv.id) : []) || [];
   const initialText = messages[0]?.body || 'Hi, this is Apex Plumbing & Rooter...';
+
   console.log('\n[STAGE 3] Customer Smartphone Screen:');
   console.log(`         📱 SMS FROM: Apex Plumbing & Rooter (${mcrAssignedNumber})`);
   console.log(`         💬 "${initialText}"`);

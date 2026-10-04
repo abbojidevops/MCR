@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
-import { computeMetrics, DateRangePreset } from '@/lib/metrics';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { computeMetrics, getSimulatedExclusions, DateRangePreset } from '@/lib/metrics';
+import { requireTenantAuth } from '@/lib/authz';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const { searchParams } = new URL(req.url);
     const range = (searchParams.get('range') || 'month') as DateRangePreset;
 
     const metrics = computeMetrics(accountId, { preset: range });
     const profile = db.getBusinessProfile(accountId);
+    const simulatedExclusions = getSimulatedExclusions(accountId);
 
     return NextResponse.json({
       ...metrics,
+      simulatedExclusions,
       summary: {
         missedCallsCount: metrics.missedCallsCount,
         textsDeliveredCount: metrics.textsDeliveredCount,

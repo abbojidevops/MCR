@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { EmailService, EmailTrigger } from '@/lib/email/email-service';
 import { db } from '@/db/repository';
 import { generateWeeklyReport } from '@/lib/reports';
-import { getSession } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getSession(req);
-    const accountId = session.accountId;
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
 
     const { searchParams } = new URL(req.url);
     const trigger = (searchParams.get('trigger') || 'weekly_report') as EmailTrigger;
@@ -45,4 +46,8 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return GET(req);
 }

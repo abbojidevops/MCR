@@ -5,6 +5,9 @@
 // Default gross profit margin for trades/home services (configurable assumption)
 export const DEFAULT_GROSS_MARGIN = 0.40; // 40%
 
+// Default average trade ticket assumption ($650 industry baseline)
+export const DEFAULT_AVERAGE_TICKET = 650;
+
 // Subscription Plan Pricing & Caps
 export const PLAN_CONFIG = {
   starter: {

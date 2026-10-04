@@ -1,9 +1,11 @@
 import crypto from 'crypto';
+import { NextRequest } from 'next/server';
 import { db } from '@/db/repository';
 import { TRADE_TEMPLATES } from '@/lib/trade-templates';
 import { isHelpKeyword, isStartKeyword, isStopKeyword } from '@/lib/compliance-machine';
 import { checkQuietHours, inferTimezoneFromPhone } from '@/lib/quiet-hours';
 import { TradeKey } from '@/types';
+import { checkSubscriptionEntitlement } from '@/lib/billing/entitlement';
 import { TwilioClient } from './twilio-client';
 
 export interface TwilioVoiceWebhookParams {
@@ -28,32 +30,94 @@ export interface TwilioSmsWebhookParams {
   MediaContentType0?: string;
 }
 
+/**
+ * Resolve candidate URLs that Twilio could have called against.
+ * Protects against reverse proxy headers (Cloudflare, ngrok, localhost ports).
+ */
+export function getCandidateWebhookUrls(req: NextRequest): string[] {
+  const urls: Set<string> = new Set();
+  urls.add(req.url);
+
+  let pathname = '';
+  let search = '';
+  try {
+    const parsed = new URL(req.url);
+    pathname = parsed.pathname;
+    search = parsed.search;
+  } catch {}
+
+  const hostHeader = req.headers.get('x-forwarded-host') || req.headers.get('host');
+  const protoHeader = req.headers.get('x-forwarded-proto') || 'https';
+
+  if (hostHeader && pathname) {
+    urls.add(`${protoHeader}://${hostHeader}${pathname}${search}`);
+    const altProto = protoHeader === 'https' ? 'http' : 'https';
+    urls.add(`${altProto}://${hostHeader}${pathname}${search}`);
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.WEBHOOK_BASE_URL;
+  if (appUrl && pathname) {
+    try {
+      const base = new URL(appUrl);
+      urls.add(`${base.protocol}//${base.host}${pathname}${search}`);
+    } catch {}
+  }
+
+  return Array.from(urls);
+}
+
 export class TwilioService {
   /**
    * Validate Twilio Webhook Signature (HMAC-SHA1)
+   * Strictly fail-closed: if authToken or signature is missing/empty, returns false.
+   * Compares against candidate URLs using constant-time string comparison.
    */
   public static validateSignature(
-    authToken: string,
+    authToken: string | undefined,
     signature: string | null,
-    url: string,
+    urls: string | string[],
     params: Record<string, string>
   ): boolean {
-    if (!authToken || process.env.NODE_ENV === 'test' || process.env.TWILIO_MOCK_MODE === 'true') {
-      return true; // Bypass in mock/test mode
+    if (!authToken || !authToken.trim()) return false;
+    if (!signature || !signature.trim()) return false;
+
+    const candidateUrls = Array.isArray(urls) ? urls : [urls];
+
+    // Sort parameters alphabetically by key and concatenate values
+    const sortedKeys = Object.keys(params).sort();
+    const paramString = sortedKeys.reduce((acc, key) => acc + key + params[key], '');
+
+    for (const url of candidateUrls) {
+      if (!url) continue;
+      const data = url + paramString;
+      const expectedSignature = crypto
+        .createHmac('sha1', authToken)
+        .update(Buffer.from(data, 'utf-8'))
+        .digest('base64');
+
+      const sigBuf = Buffer.from(signature);
+      const expectedBuf = Buffer.from(expectedSignature);
+
+      if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+        return true;
+      }
     }
-    if (!signature) return false;
 
-    // Sort parameters alphabetically by key and concatenate
-    const data = Object.keys(params)
-      .sort()
-      .reduce((acc, key) => acc + key + params[key], url);
+    return false;
+  }
 
-    const expectedSignature = crypto
-      .createHmac('sha1', authToken)
-      .update(Buffer.from(data, 'utf-8'))
-      .digest('base64');
-
-    return signature === expectedSignature;
+  /**
+   * Compute valid HMAC-SHA1 signature for a URL and parameter dictionary
+   */
+  public static computeSignature(
+    authToken: string,
+    url: string,
+    params: Record<string, string>
+  ): string {
+    const sortedKeys = Object.keys(params).sort();
+    const paramString = sortedKeys.reduce((acc, key) => acc + key + params[key], '');
+    const data = url + paramString;
+    return crypto.createHmac('sha1', authToken).update(Buffer.from(data, 'utf-8')).digest('base64');
   }
 
   /**
@@ -110,7 +174,7 @@ export class TwilioService {
 
     // 4. Contact & Conversation Resolution
     const contact = db.getOrCreateContact(accountId, From);
-    const conversation = db.getOrCreateConversation(accountId, contact.id);
+    const conversation = db.getOrCreateConversation(accountId, contact.id, callRecord.is_simulated);
 
     // 5. Evaluate Deduplication & Suppression
     if (isDeduplicated) {
@@ -133,7 +197,20 @@ export class TwilioService {
       };
     }
 
-    // 6. Quiet Hours Evaluation (TCPA 8 AM - 9 PM)
+    // 6. Subscription Entitlement & Dunning Gate
+    const effectiveNow = params.referenceDate || (process.env.NODE_ENV === 'test' ? new Date('2026-03-15T16:00:00Z') : new Date());
+    const entitlement = checkSubscriptionEntitlement(accountId, effectiveNow);
+    if (!entitlement.entitled) {
+      db.updateCallRecord(callRecord.id, { text_back_status: 'failed' });
+      return {
+        twiml: '<Response><Hangup/></Response>',
+        textBackTriggered: false,
+        callRecordId: callRecord.id,
+        reason: `Subscription not entitled: ${entitlement.reason}`,
+      };
+    }
+
+    // 7. Quiet Hours Evaluation (TCPA 8 AM - 9 PM)
     const recipientTimezone = profile?.timezone || inferTimezoneFromPhone(From);
     const testReferenceDate = process.env.NODE_ENV === 'test' ? new Date('2026-03-15T16:00:00Z') : new Date();
     const quietHoursCheck = checkQuietHours(recipientTimezone, 8, 21, params.referenceDate || testReferenceDate);
@@ -451,6 +528,7 @@ export class TwilioService {
           contact_id: contact.id,
           intake_session_id: intake.id,
           conversation_id: conversation.id,
+          is_simulated: Boolean(intake.is_simulated || conversation.is_simulated),
           title: `${template.display_name} - ${intake.problem_description?.slice(0, 40) || 'New Inquiry'}`,
           trade,
           problem: intake.problem_description,

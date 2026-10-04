@@ -110,3 +110,64 @@ export function getNextComplianceStatus(current: ComplianceStatus): ComplianceSt
       return null;
   }
 }
+
+export const CARRIER_CONTROLLED_STATUSES = new Set<ComplianceStatus>([
+  'brand_approved',
+  'campaign_submitted',
+  'campaign_approved',
+  'number_linked',
+  'sms_live',
+  'rejected',
+]);
+
+export function isCarrierControlledStatus(status: ComplianceStatus): boolean {
+  return CARRIER_CONTROLLED_STATUSES.has(status);
+}
+
+/**
+ * Validates whether a customer actor is permitted to execute a specific transition.
+ * Customers are strictly restricted to submitting initial registration (signed_up -> brand_submitted)
+ * or resubmitting after a rejection (rejected -> brand_submitted).
+ * All carrier approval/vetting transitions require carrier_webhook or admin provenance.
+ */
+export function canCustomerPerformTransition(
+  currentStatus: ComplianceStatus,
+  targetStatus: ComplianceStatus,
+  action?: string
+): boolean {
+  if (action === 'submit_registration' || (currentStatus === 'signed_up' && targetStatus === 'brand_submitted')) {
+    return true;
+  }
+  if (action === 'resubmit' || (currentStatus === 'rejected' && targetStatus === 'brand_submitted')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Validates whether the requested transition is valid in the 10DLC state machine
+ */
+export function isValidTransition(from: ComplianceStatus, to: ComplianceStatus): boolean {
+  if (from === to) return true;
+  switch (from) {
+    case 'signed_up':
+      return to === 'brand_submitted';
+    case 'brand_submitted':
+      return to === 'brand_approved' || to === 'rejected';
+    case 'brand_approved':
+      return to === 'campaign_submitted' || to === 'rejected';
+    case 'campaign_submitted':
+      return to === 'campaign_approved' || to === 'rejected';
+    case 'campaign_approved':
+      return to === 'number_linked' || to === 'rejected';
+    case 'number_linked':
+      return to === 'sms_live' || to === 'rejected';
+    case 'rejected':
+      return to === 'brand_submitted';
+    case 'sms_live':
+      return to === 'rejected'; // carrier revocation
+    default:
+      return false;
+  }
+}
+

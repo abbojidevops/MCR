@@ -1,6 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ShieldCheck, CheckCircle2, Clock, AlertTriangle, PhoneCall, Lock, FileText } from 'lucide-react';
+import { getDerivedComplianceClaim } from '@/lib/marketing-claims';
+import { getSystemCarrierLiveStatus } from '@/lib/marketing-claims-server';
 
 export const metadata = {
   title: 'Compliance & Telecom Standards — MCR',
@@ -8,6 +10,9 @@ export const metadata = {
 };
 
 export default function CompliancePage() {
+  const isLive = getSystemCarrierLiveStatus();
+  const claim = getDerivedComplianceClaim(isLive);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       {/* Header */}
@@ -24,14 +29,14 @@ export default function CompliancePage() {
       <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 space-y-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm space-y-8">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 mb-3 border border-emerald-200">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Carrier Verified Telecom Architecture
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 mb-3 border border-blue-200">
+              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> {claim.compliancePageBadge}
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">
-              Telecommunications &amp; TCPA Compliance
+              Telecommunications &amp; TCPA Compliance Architecture
             </h1>
             <p className="mt-2 text-sm text-slate-500">
-              How MCR guarantees full regulatory compliance under FCC TCPA rules, CTIA messaging principles, and carrier A2P 10DLC regulations.
+              {claim.compliancePageStatusText}
             </p>
           </div>
 

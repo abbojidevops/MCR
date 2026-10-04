@@ -27,8 +27,10 @@ import {
   Award,
 } from 'lucide-react';
 import { COMPANY_INFO, PLAN_CONFIG, DEFAULT_GROSS_MARGIN } from '@/lib/constants';
+import { getDerivedComplianceClaim } from '@/lib/marketing-claims';
 
 export default function LandingPage() {
+  const claim = getDerivedComplianceClaim(false);
   // Tier-Aware Conservative ROI Calculator State (Part 1.5)
   // Conservative defaults: 20 missed calls/month, $450 average ticket, 15% close rate
   const [avgJobValue, setAvgJobValue] = useState<number>(450);
@@ -90,7 +92,7 @@ export default function LandingPage() {
           <span>Works with Verizon, AT&amp;T, T-Mobile • 10-minute carrier forwarding setup</span>
           <span className="text-slate-500 hidden md:inline">|</span>
           <span className="text-slate-400 hidden md:inline">
-            A2P 10DLC registered with full TCPA quiet hours protection
+            {claim.topBannerText}
           </span>
         </div>
       </div>
@@ -146,7 +148,7 @@ export default function LandingPage() {
                 className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50/80 px-3.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition group"
               >
                 <span className="flex h-2 w-2 rounded-full bg-blue-600"></span>
-                <span>TCPA &amp; 10DLC Compliant</span>
+                <span>{claim.heroBadgeTitle}</span>
                 <span className="text-blue-300">•</span>
                 <span>Built for Trade &amp; Home Service Businesses</span>
                 <ArrowRight className="h-3 w-3 text-blue-500 group-hover:translate-x-0.5 transition" />

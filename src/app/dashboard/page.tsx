@@ -23,6 +23,7 @@ import {
   Sparkles,
   Calendar,
   Check,
+  FlaskConical,
 } from 'lucide-react';
 import { UnifiedMCRMetrics, DateRangePreset, AttentionItem, RecoveredJobAttribution } from '@/lib/metrics';
 
@@ -176,6 +177,24 @@ export default function DashboardOverviewPage() {
         </div>
       )}
 
+      {/* Simulation Exclusion Disclosure (Criterion 6) */}
+      {(data as any)?.simulatedExclusions?.disclosure && (
+        <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-3.5 text-xs text-blue-900 flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-blue-600 shrink-0" />
+            <span>
+              <strong>Simulator Activity:</strong> {(data as any).simulatedExclusions.disclosure}.
+            </span>
+          </div>
+          <Link
+            href="/dashboard/test-mode"
+            className="shrink-0 text-blue-700 font-bold hover:underline"
+          >
+            View Simulator
+          </Link>
+        </div>
+      )}
+
       {/* Hero Header */}
       <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-blue-50/30 p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -192,13 +211,19 @@ export default function DashboardOverviewPage() {
               {getGreeting()}, {data.businessName} 👋
             </h1>
             <div className="mt-2 text-base sm:text-lg font-bold text-slate-800">
-              You&apos;ve recovered{' '}
-              <span className="text-emerald-700 font-extrabold underline decoration-emerald-400 decoration-2 underline-offset-4">
-                {data.bookedJobsCount} booked jobs
-              </span>{' '}
-              ({data.completedJobsCount} completed) generating{' '}
-              <span className="text-emerald-700 font-extrabold">${data.confirmedActualRevenue.toLocaleString()}</span>{' '}
-              in confirmed revenue.
+              {data.missedCallsCount === 0 && data.bookedJobsCount === 0 ? (
+                <span className="text-slate-600">No calls yet — awaiting your first forwarded missed call.</span>
+              ) : (
+                <>
+                  You&apos;ve recovered{' '}
+                  <span className="text-emerald-700 font-extrabold underline decoration-emerald-400 decoration-2 underline-offset-4">
+                    {data.bookedJobsCount} booked jobs
+                  </span>{' '}
+                  ({data.completedJobsCount} completed) generating{' '}
+                  <span className="text-emerald-700 font-extrabold">${data.confirmedActualRevenue.toLocaleString()}</span>{' '}
+                  in confirmed revenue.
+                </>
+              )}
             </div>
           </div>
 
@@ -300,7 +325,7 @@ export default function DashboardOverviewPage() {
             ${data.pipelineEstimatedValue.toLocaleString()}
           </div>
           <p className="mt-1 text-[11px] text-blue-900/70 font-medium">
-            Active unclosed leads
+            Active unclosed leads · Based on ${data.averageTicketAssumption || 650} estimated average trade ticket
           </p>
         </div>
 
@@ -466,8 +491,14 @@ export default function DashboardOverviewPage() {
         {data.needsAttention.length === 0 ? (
           <div className="p-6 text-center text-slate-500 text-xs">
             <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-            <p className="font-bold text-slate-800">All caught up!</p>
-            <p className="mt-0.5 text-slate-400">No uncontacted emergency leads or unanswered customer queries.</p>
+            <p className="font-bold text-slate-800">
+              {data.missedCallsCount === 0 ? 'No calls yet' : 'All caught up!'}
+            </p>
+            <p className="mt-0.5 text-slate-400">
+              {data.missedCallsCount === 0
+                ? 'When missed calls occur, leads requiring immediate attention will appear here.'
+                : 'No uncontacted emergency leads or unanswered customer queries.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -568,44 +599,52 @@ export default function DashboardOverviewPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.recentLeads.map((job) => (
-                  <tr key={job.id} className="hover:bg-slate-50/60">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{job.customerName}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{job.phone}</div>
-                    </td>
-                    <td className="py-3 px-3 max-w-xs truncate text-slate-700 font-medium">
-                      {job.issue}
-                    </td>
-                    <td className="py-3 px-3 text-slate-500 text-[11px]">
-                      {job.recoverySource}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                          job.status === 'COMPLETED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : job.status === 'BOOKED'
-                            ? 'bg-blue-100 text-blue-800'
-                            : job.status === 'CONTACTED'
-                            ? 'bg-amber-100 text-amber-800'
-                            : job.status === 'DEAD'
-                            ? 'bg-slate-100 text-slate-500'
-                            : 'bg-indigo-100 text-indigo-800'
-                        }`}
-                      >
-                        {job.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-bold text-slate-900 text-right">
-                      {job.actualRevenue !== undefined ? (
-                        <span className="text-emerald-600">${job.actualRevenue}</span>
-                      ) : (
-                        <span>${job.estimatedValue} Est.</span>
-                      )}
+                {data.recentLeads.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-slate-500 font-medium">
+                      No calls yet — captured leads will appear here once calls are received.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  data.recentLeads.map((job) => (
+                    <tr key={job.id} className="hover:bg-slate-50/60">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-slate-900">{job.customerName}</div>
+                        <div className="text-[11px] text-slate-400 font-mono">{job.phone}</div>
+                      </td>
+                      <td className="py-3 px-3 max-w-xs truncate text-slate-700 font-medium">
+                        {job.issue}
+                      </td>
+                      <td className="py-3 px-3 text-slate-500 text-[11px]">
+                        {job.recoverySource}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            job.status === 'COMPLETED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : job.status === 'BOOKED'
+                              ? 'bg-blue-100 text-blue-800'
+                              : job.status === 'CONTACTED'
+                              ? 'bg-amber-100 text-amber-800'
+                              : job.status === 'DEAD'
+                              ? 'bg-slate-100 text-slate-500'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          {job.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-bold text-slate-900 text-right">
+                        {job.actualRevenue !== undefined ? (
+                          <span className="text-emerald-600">${job.actualRevenue}</span>
+                        ) : (
+                          <span>${job.estimatedValue} Est.</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -635,11 +674,11 @@ export default function DashboardOverviewPage() {
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-indigo-950">2. Booked Revenue</span>
                   <strong className="text-sm font-black text-indigo-700">
-                    ${(data.bookedRevenue !== undefined ? data.bookedRevenue : 650).toLocaleString()}
+                    ${(data.bookedRevenue ?? 0).toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-indigo-800 mt-0.5">
-                  Scheduled on calendar, awaiting service completion ({data.bookedJobsCount} job).
+                  Scheduled on calendar, awaiting service completion ({data.bookedJobsCount} {data.bookedJobsCount === 1 ? 'job' : 'jobs'}).
                 </p>
               </div>
 
@@ -647,11 +686,11 @@ export default function DashboardOverviewPage() {
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-blue-950">3. In-Pipeline Estimated Value</span>
                   <strong className="text-sm font-black text-blue-700">
-                    ${data.pipelineEstimatedValue.toLocaleString()}
+                    ${(data.pipelineEstimatedValue ?? 0).toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-blue-800 mt-0.5">
-                  Active unclosed leads in qualification (3 jobs).
+                  Active unclosed leads in qualification ({data.qualifiedLeadsCount} {data.qualifiedLeadsCount === 1 ? 'job' : 'jobs'}). Based on ${data.averageTicketAssumption || 650} estimated average trade ticket.
                 </p>
               </div>
 
@@ -659,11 +698,11 @@ export default function DashboardOverviewPage() {
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-slate-800">4. Total Potential Recovered</span>
                   <strong className="text-sm font-black text-slate-900">
-                    ${(data.totalPotentialValue || 4327.5).toLocaleString()}
+                    ${(data.totalPotentialValue ?? 0).toLocaleString()}
                   </strong>
                 </div>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  Potential revenue if all pipeline opportunities close (5 jobs total).
+                  Potential revenue if all pipeline opportunities close (${(data.qualifiedLeadsCount || 0) + (data.bookedJobsCount || 0) + (data.completedJobsCount || 0)} jobs total).
                 </p>
               </div>
             </div>
@@ -681,15 +720,15 @@ export default function DashboardOverviewPage() {
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
                 <span className="text-slate-600">Deduplicated (called within last 4 hours)</span>
-                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedDedupe || 1}</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedDedupe || 0}</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
                 <span className="text-slate-600">Caller opted out (TCPA STOP on file)</span>
-                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedOptOut || 1}</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedOptOut || 0}</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
                 <span className="text-slate-600">Outside quiet hours (queued for 8:00 AM)</span>
-                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedQuietHours || 1}</span>
+                <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedQuietHours || 0}</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
                 <span className="text-slate-600">Delivery failure (landline or VoIP no SMS)</span>
@@ -741,7 +780,7 @@ export default function DashboardOverviewPage() {
                   min="0"
                   step="10"
                   required
-                  placeholder="e.g. 1207.50"
+                  placeholder="0.00"
                   value={enteredActualValue}
                   onChange={(e) => setEnteredActualValue(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 p-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"

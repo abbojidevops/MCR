@@ -7,12 +7,15 @@ services:
       dockerfile: Dockerfile
     container_name: mcr-saas-app
     restart: unless-stopped
+    command: sh -c "node scripts/db-init.mjs && npm start"
     ports:
       - '3000:3000'
     environment:
       - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=postgresql://mcr_user:mcr_password@postgres:5432/mcr_db
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SESSION_SECRET=${SESSION_SECRET}
       - TWILIO_MOCK_MODE=true
     depends_on:
       postgres:
@@ -28,11 +31,11 @@ services:
       POSTGRES_USER: mcr_user
       POSTGRES_PASSWORD: mcr_password
       POSTGRES_DB: mcr_db
-    ports:
-      - '5432:5432'
+    # Security requirement: No database port published to the host
+    expose:
+      - '5432'
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U mcr_user -d mcr_db']
       interval: 10s

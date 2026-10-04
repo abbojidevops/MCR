@@ -1,15 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { JobStatus } from '@/types';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
+import { notFoundResponse } from '@/lib/api-errors';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from authenticated session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get('status') as JobStatus | null;
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
 
+    const { searchParams } = new URL(req.url);
+    const jobId = searchParams.get('jobId') || searchParams.get('id');
+
+    if (jobId) {
+      const job = db.getJob(accountId, jobId);
+      if (!job) {
+        return notFoundResponse();
+      }
+      return NextResponse.json({ job });
+    }
+
+    const status = searchParams.get('status') as JobStatus | null;
     let jobs = db.getJobs(accountId);
     if (status) {
       jobs = jobs.filter((j) => (j.status || '').toUpperCase() === status.toUpperCase());
@@ -23,8 +35,10 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    // Derive account identity exclusively from authenticated session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
     const { jobId, status, actualValue, estimatedValue, notes } = body;
 
@@ -39,6 +53,9 @@ export async function PATCH(req: NextRequest) {
     if (notes !== undefined) updates.notes = notes;
 
     const updatedJob = db.updateJob(accountId, jobId, updates);
+    if (!updatedJob) {
+      return notFoundResponse();
+    }
 
     // Add audit log
     db.logAudit(accountId, 'UPDATE_JOB', { jobId, updates });

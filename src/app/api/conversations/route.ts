@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
+import { notFoundResponse } from '@/lib/api-errors';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from authenticated session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const { searchParams } = new URL(req.url);
     const conversationId = searchParams.get('conversationId');
 
     if (conversationId) {
       const messages = db.getMessages(accountId, conversationId);
+      if (messages === null) {
+        return notFoundResponse();
+      }
       return NextResponse.json({ messages });
     }
 
@@ -30,8 +36,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Derive account identity exclusively from authenticated session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
     const { conversationId, bodyText } = body;
 
@@ -39,9 +47,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'conversationId and bodyText required' }, { status: 400 });
     }
 
-    const conv = db.getConversations(accountId).find((c) => c.id === conversationId);
+    const conv = db.getConversation(accountId, conversationId);
     if (!conv) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      return notFoundResponse();
     }
 
     const phoneNumbers = db.getPhoneNumbers(accountId);

@@ -219,22 +219,22 @@ export class EmailService {
 
       case 'weekly_report':
         return {
-          subject: `Weekly Report: ${businessName} recovered $${data.estimatedRecoveredValue || '2,450'} in missed calls`,
+          subject: `Weekly Report: ${businessName} recovered $${data.estimatedRecoveredValue ?? 0} in missed calls`,
           html: baseLayout(`
             <h2>Your Weekly Recovered-Jobs Report</h2>
             <p>Here is how MCR performed for <strong>${businessName}</strong> over the past 7 days:</p>
             <div class="highlight" style="font-size:14px;">
-              • <strong>Missed Calls Received:</strong> ${data.missedCallsCount || 14}<br>
-              • <strong>Customers Responded to SMS:</strong> ${data.recoveredConversationsCount || 11} (${data.responseRatePercent || 79}%)<br>
-              • <strong>Qualified Opportunities:</strong> ${data.qualifiedJobsCount || 7}<br>
-              • <strong>Marked Booked:</strong> ${data.bookedJobsCount || 2}<br>
-              • <strong style="color:#16a34a;">Estimated Opportunity Value:</strong> $${data.estimatedRecoveredValue || '2,450'}<br>
-              • <strong>Confirmed Booked Value:</strong> $${data.actualBookedValue || '720'}
+              • <strong>Missed Calls Received:</strong> ${data.missedCallsCount ?? 0}<br>
+              • <strong>Customers Responded to SMS:</strong> ${data.recoveredConversationsCount ?? 0} (${data.responseRatePercent ?? 0}%)<br>
+              • <strong>Qualified Opportunities:</strong> ${data.qualifiedJobsCount ?? 0}<br>
+              • <strong>Marked Booked:</strong> ${data.bookedJobsCount ?? 0}<br>
+              • <strong style="color:#16a34a;">Estimated Opportunity Value:</strong> $${data.estimatedRecoveredValue ?? 0}<br>
+              • <strong>Confirmed Booked Value:</strong> $${data.actualBookedValue ?? 0}
             </div>
             <p>Every one of these customers would have called a competitor if they reached an unanswered line.</p>
             <a href="${appUrl}/dashboard/reports" class="btn">Open Full Report</a>
           `),
-          text: `Weekly Recovery Report for ${businessName}: ${data.missedCallsCount} calls, ${data.qualifiedJobsCount} qualified, $${data.estimatedRecoveredValue} recovered value.`,
+          text: `Weekly Recovery Report for ${businessName}: ${data.missedCallsCount ?? 0} calls, ${data.qualifiedJobsCount ?? 0} qualified, $${data.estimatedRecoveredValue ?? 0} recovered value.`,
         };
 
       default:

@@ -350,7 +350,7 @@ export default function JobsPage() {
                     type="number"
                     value={actualValueInput}
                     onChange={(e) => setActualValueInput(e.target.value)}
-                    placeholder={`Enter actual invoice value (e.g. ${selectedJob.estimated_value || 450})`}
+                    placeholder={selectedJob.estimated_value ? `Enter actual invoice value (est. $${selectedJob.estimated_value})` : 'Enter actual invoice value'}
                     className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
@@ -440,7 +440,7 @@ export default function JobsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 350)}
+                  onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0)}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
                     selectedJob.status === 'BOOKED' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
@@ -450,7 +450,7 @@ export default function JobsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    const finalVal = parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 450;
+                    const finalVal = parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0;
                     handleStatusChange(selectedJob.id, 'COMPLETED', finalVal);
                   }}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${

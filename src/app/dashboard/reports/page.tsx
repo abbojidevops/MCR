@@ -192,10 +192,12 @@ export default function ReportsPage() {
             <div>
               <div className="text-[10px] text-slate-400 font-bold uppercase">Pipeline Value</div>
               <div className="text-lg font-black text-blue-700">${m.pipelineEstimatedValue.toLocaleString()}</div>
+              <div className="text-[9px] text-slate-400 mt-0.5">Based on ${m.averageTicketAssumption || 650} avg ticket</div>
             </div>
             <div className="border-l border-slate-200 pl-6">
               <div className="text-[10px] text-slate-400 font-bold uppercase">Potential Value</div>
               <div className="text-lg font-black text-slate-600">${m.potentialMissedCallValue.toLocaleString()}</div>
+              <div className="text-[9px] text-slate-400 mt-0.5">Based on ${m.averageTicketAssumption || 650} avg ticket</div>
             </div>
           </div>
         </div>
@@ -228,7 +230,14 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {m.recoveredJobsList.map((job) => (
+                {m.recoveredJobsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500 font-medium">
+                      No calls yet in this period — recovered jobs will appear here once calls are received.
+                    </td>
+                  </tr>
+                ) : (
+                  m.recoveredJobsList.map((job) => (
                   <tr key={job.id} className="hover:bg-slate-50/80">
                     <td className="py-3 px-3.5">
                       <div className="font-bold text-slate-900">{job.customerName}</div>
@@ -271,7 +280,7 @@ export default function ReportsPage() {
                       {job.completedDate || (job.status === 'COMPLETED' ? job.createdDate : 'In Progress')}
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

@@ -394,3 +394,36 @@ export const TRADE_TEMPLATES: Record<TradeKey, TradeTemplate> = {
     ],
   },
 };
+
+/**
+ * Retrieve trade template by trade key, with safe fallback to plumbing.
+ */
+export function getTradeTemplate(trade: TradeKey): TradeTemplate {
+  return TRADE_TEMPLATES[trade] || TRADE_TEMPLATES.plumbing;
+}
+
+/**
+ * List all available trade templates.
+ */
+export function getAllTradeTemplates(): TradeTemplate[] {
+  return Object.values(TRADE_TEMPLATES);
+}
+
+/**
+ * Checks whether an incoming message text contains emergency keywords for the trade.
+ */
+export function isEmergencyKeyword(trade: TradeKey, text: string): boolean {
+  if (!text) return false;
+  const template = getTradeTemplate(trade);
+  const lower = text.toLowerCase();
+  return template.emergency_keywords.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
+/**
+ * Formats the initial automated text-back with the contractor's business name.
+ */
+export function formatInitialTextBack(trade: TradeKey, businessName: string): string {
+  const template = getTradeTemplate(trade);
+  return template.initial_text_back.replace(/{{business_name}}/g, businessName);
+}
+

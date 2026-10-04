@@ -18,6 +18,18 @@ export interface User {
   updated_at: string;
 }
 
+export interface UserCredential {
+  id: string;
+  user_id: string;
+  account_id: string;
+  email: string;
+  password_hash: string; // scrypt$N$r$p$salt$hash
+  algorithm: 'scrypt';
+  created_at: string;
+  updated_at: string;
+}
+
+
 export interface Account {
   id: string;
   name: string;
@@ -48,6 +60,7 @@ export interface BusinessProfile {
   notification_phone?: string;
   carrier_name?: string;
   forwarding_configured: boolean;
+  average_ticket?: number;
   created_at: string;
   updated_at: string;
 }
@@ -97,6 +110,7 @@ export interface CallRecord {
   forwarded_status?: ForwardedStatus;
   text_back_status: TextBackStatus;
   deduplication_state: 'first_call' | 'duplicate_suppressed' | 'duplicate_escalated';
+  is_simulated?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -120,6 +134,7 @@ export interface Conversation {
   status: 'active' | 'closed' | 'archived';
   last_message_at: string;
   deduplication_key?: string;
+  is_simulated?: boolean;
   created_at: string;
   updated_at: string;
   contact?: Contact;
@@ -138,6 +153,7 @@ export interface Message {
   twilio_message_sid?: string;
   status: 'queued' | 'sent' | 'delivered' | 'failed' | 'received';
   error_code?: string;
+  is_simulated?: boolean;
   created_at: string;
 }
 
@@ -171,6 +187,7 @@ export interface IntakeSession {
   address?: string;
   photo_urls: string[];
   status: 'in_progress' | 'completed' | 'abandoned' | 'escalated';
+  is_simulated?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -195,6 +212,7 @@ export interface JobCard {
   estimated_value: number;
   actual_value?: number;
   notes?: string;
+  is_simulated?: boolean;
   first_call_time?: string;
   text_back_time?: string;
   qualified_time?: string;
@@ -251,6 +269,18 @@ export type ComplianceStatus =
   | 'sms_live'
   | 'rejected';
 
+export type ComplianceProvenance = 'customer' | 'carrier_webhook' | 'admin';
+
+export interface ComplianceHistoryEntry {
+  id: string;
+  from_status: ComplianceStatus;
+  to_status: ComplianceStatus;
+  updated_by: ComplianceProvenance;
+  actor_id?: string;
+  reason?: string;
+  timestamp: string;
+}
+
 export interface ComplianceRegistration {
   id: string;
   account_id: string;
@@ -267,6 +297,8 @@ export interface ComplianceRegistration {
   status: ComplianceStatus;
   rejection_reason?: string;
   sample_messages: string[];
+  last_updated_by?: ComplianceProvenance;
+  status_history?: ComplianceHistoryEntry[];
   created_at: string;
   updated_at: string;
 }

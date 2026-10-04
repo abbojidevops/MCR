@@ -1,4 +1,5 @@
 import { db } from '@/db/repository';
+import { computeMetrics } from '@/lib/metrics';
 
 export interface DailySummaryReport {
   date: string;
@@ -38,40 +39,30 @@ export function generateDailySummary(accountId: string, targetDate: Date = new D
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  const startIso = startOfDay.toISOString();
-  const endIso = endOfDay.toISOString();
+  const metrics = computeMetrics(accountId, {
+    startDate: startOfDay.toISOString(),
+    endDate: endOfDay.toISOString(),
+  });
 
-  const calls = db.getCallRecords(accountId).filter((c) => c.created_at >= startIso && c.created_at <= endIso);
-  const jobs = db.getJobs(accountId).filter((j) => j.created_at >= startIso && j.created_at <= endIso);
-  const conversations = db.getConversations(accountId).filter((cv) => cv.created_at >= startIso && cv.created_at <= endIso);
-
-  const missedCallsCount = calls.length;
-  const textBacksSent = calls.filter((c) => c.text_back_status === 'sent').length;
-  const customersResponded = conversations.length;
-  const qualifiedJobsCount = jobs.length;
-  const bookedJobsCount = jobs.filter((j) => j.status === 'BOOKED').length;
-
-  const potentiallyRecoveredRevenue = jobs.reduce((sum, j) => sum + (j.estimated_value || 0), 0);
-  const actualBookedRevenue = jobs
-    .filter((j) => j.status === 'BOOKED')
-    .reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
+  const potentiallyRecoveredRevenue = metrics.pipelineEstimatedValue + metrics.bookedRevenue + metrics.confirmedRevenue;
+  const actualBookedRevenue = metrics.confirmedRevenue;
 
   const summaryText = `TODAY'S MISSED-CALL REPORT for ${businessName}:
-• Missed calls: ${missedCallsCount}
-• Text-backs sent: ${textBacksSent}
-• Customers responded: ${customersResponded}
-• Qualified jobs: ${qualifiedJobsCount}
-• Booked: ${bookedJobsCount}
+• Missed calls: ${metrics.missedCallsCount}
+• Text-backs sent: ${metrics.textsDeliveredCount}
+• Customers responded: ${metrics.customersRespondedCount}
+• Qualified jobs: ${metrics.qualifiedLeadsCount}
+• Booked: ${metrics.bookedJobsCount}
 • Estimated opportunity value: $${potentiallyRecoveredRevenue.toFixed(2)}`;
 
   return {
     date: targetDate.toLocaleDateString(),
     businessName,
-    missedCallsCount,
-    textBacksSent,
-    customersResponded,
-    qualifiedJobsCount,
-    bookedJobsCount,
+    missedCallsCount: metrics.missedCallsCount,
+    textBacksSent: metrics.textsDeliveredCount,
+    customersResponded: metrics.customersRespondedCount,
+    qualifiedJobsCount: metrics.qualifiedLeadsCount,
+    bookedJobsCount: metrics.bookedJobsCount,
     potentiallyRecoveredRevenue,
     actualBookedRevenue,
     summaryText,
@@ -83,46 +74,34 @@ export function generateWeeklyReport(accountId: string, referenceDate: Date = ne
   const businessName = profile?.business_name || 'Business';
 
   const sevenDaysAgo = new Date(referenceDate.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const startIso = sevenDaysAgo.toISOString();
-  const endIso = referenceDate.toISOString();
+  const metrics = computeMetrics(accountId, {
+    startDate: sevenDaysAgo.toISOString(),
+    endDate: referenceDate.toISOString(),
+  });
 
-  const calls = db.getCallRecords(accountId).filter((c) => c.created_at >= startIso && c.created_at <= endIso);
-  const jobs = db.getJobs(accountId).filter((j) => j.created_at >= startIso && j.created_at <= endIso);
-  const conversations = db.getConversations(accountId).filter((cv) => cv.created_at >= startIso && cv.created_at <= endIso);
+  const responseRatePercent = metrics.missedCallsCount > 0
+    ? Math.min(100, Math.round((metrics.customersRespondedCount / metrics.missedCallsCount) * 100))
+    : 0;
 
-  const missedCallsCount = calls.length || 1; // avoid division by 0
-  const recoveredConversationsCount = conversations.length;
-  const qualifiedJobsCount = jobs.length;
-  const bookedJobsCount = jobs.filter((j) => j.status === 'BOOKED').length;
-  const deadLeadsCount = jobs.filter((j) => j.status === 'DEAD').length;
-
-  const responseRatePercent = Math.min(100, Math.round((recoveredConversationsCount / missedCallsCount) * 100));
-  const recoveryRatePercent = Math.min(100, Math.round((bookedJobsCount / (qualifiedJobsCount || 1)) * 100));
-
-  const estimatedRecoveredValue = jobs.reduce((sum, j) => sum + (j.estimated_value || 0), 0);
-  const actualBookedValue = jobs
-    .filter((j) => j.status === 'BOOKED')
-    .reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
-
-  const summaryText = `Last week ${businessName} received ${missedCallsCount} missed calls.
-${recoveredConversationsCount} customers responded to automatic text-back.
-${qualifiedJobsCount} became structured qualified job opportunities.
-${bookedJobsCount} were marked booked.
-Your estimated recovered opportunity value: $${estimatedRecoveredValue.toLocaleString()}.`;
+  const summaryText = `Last week ${businessName} received ${metrics.missedCallsCount} missed calls.
+${metrics.customersRespondedCount} customers responded to automatic text-back.
+${metrics.qualifiedLeadsCount} became structured qualified job opportunities.
+${metrics.bookedJobsCount} were marked booked.
+Your estimated recovered opportunity value: $${metrics.totalPotentialValue.toLocaleString()}.`;
 
   return {
     startDate: sevenDaysAgo.toLocaleDateString(),
     endDate: referenceDate.toLocaleDateString(),
     businessName,
-    missedCallsCount: calls.length,
-    recoveredConversationsCount,
-    qualifiedJobsCount,
-    bookedJobsCount,
-    deadLeadsCount,
+    missedCallsCount: metrics.missedCallsCount,
+    recoveredConversationsCount: metrics.customersRespondedCount,
+    qualifiedJobsCount: metrics.qualifiedLeadsCount,
+    bookedJobsCount: metrics.bookedJobsCount,
+    deadLeadsCount: metrics.deadJobsCount,
     responseRatePercent,
-    recoveryRatePercent,
-    estimatedRecoveredValue,
-    actualBookedValue,
+    recoveryRatePercent: metrics.recoveryRatePercent,
+    estimatedRecoveredValue: metrics.totalPotentialValue,
+    actualBookedValue: metrics.confirmedRevenue,
     summaryText,
   };
 }

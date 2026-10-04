@@ -17,6 +17,7 @@ import { COMPLIANCE_STATES } from '@/lib/compliance-machine';
 export default function CompliancePage() {
   const [compliance, setCompliance] = useState<ComplianceRegistration | null>(null);
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchCompliance = async () => {
     try {
@@ -36,6 +37,7 @@ export default function CompliancePage() {
 
   const handleAdvanceStatus = async () => {
     setIsAdvancing(true);
+    setErrorMsg(null);
     try {
       const res = await fetch('/api/compliance', {
         method: 'POST',
@@ -45,11 +47,13 @@ export default function CompliancePage() {
         }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setCompliance(data.compliance);
+      } else {
+        setErrorMsg(data.error || 'Customer cannot self-certify carrier registration status.');
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Request failed');
     } finally {
       setIsAdvancing(false);
     }
@@ -85,8 +89,19 @@ export default function CompliancePage() {
             className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 disabled:opacity-40"
           >
             <RotateCw className={`h-3.5 w-3.5 ${isAdvancing ? 'animate-spin' : ''}`} />
-            {isAdvancing ? 'Advancing...' : 'Advance Next State (Sim)'}
+            {isAdvancing ? 'Advancing...' : 'Advance Next State (Admin/Sim)'}
           </button>
+        </div>
+
+        {errorMsg && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <span className="font-bold">Carrier Security Rule: </span>
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="mt-3 text-[11px] text-slate-400">
+          Carrier provenance: <span className="font-semibold text-slate-600">{compliance?.last_updated_by ? compliance.last_updated_by.replace('_', ' ') : 'carrier network'}</span>
         </div>
 
         {/* Step-by-step progress visual */}

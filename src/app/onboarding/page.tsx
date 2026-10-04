@@ -36,6 +36,8 @@ export default function OnboardingPage() {
   const [trade, setTrade] = useState<TradeKey>('plumbing');
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [selectedCarrier, setSelectedCarrier] = useState('verizon');
   const [copiedCode, setCopiedCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,7 +111,7 @@ export default function OnboardingPage() {
   const handleFinishOnboarding = async () => {
     setIsSubmitting(true);
     try {
-      await fetch('/api/onboarding', {
+      const res = await fetch('/api/onboarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -117,15 +119,24 @@ export default function OnboardingPage() {
           trade,
           ownerName,
           phone: ownerPhone,
+          email,
+          password,
           carrierName: carrierGuide.carrier_name,
         }),
       });
-      router.push('/dashboard');
+      if (res.ok) {
+        router.push('/dashboard');
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to complete onboarding');
+        setIsSubmitting(false);
+      }
     } catch (err) {
       console.error('Failed to complete onboarding:', err);
       router.push('/dashboard');
     }
   };
+
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -284,6 +295,36 @@ export default function OnboardingPage() {
               <div className="mt-6 space-y-4">
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                    Account Email (Required for login)
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. owner@apexplumbing.com"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+                    Password (Min. 12 characters)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={12}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 12 characters"
+                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:outline-none"
+                  />
+                  {password && password.length < 12 && (
+                    <p className="mt-1 text-xs text-rose-500">Password must be at least 12 characters long ({password.length}/12)</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
                     Owner / Technician Name
                   </label>
                   <input
@@ -307,6 +348,7 @@ export default function OnboardingPage() {
                   />
                 </div>
               </div>
+
             </div>
           )}
 

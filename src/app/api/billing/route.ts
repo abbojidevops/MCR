@@ -2,14 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { PlanTier } from '@/types';
 import { SEED_PLANS } from '@/db/seed-data';
-import { getAuthenticatedAccountId } from '@/lib/session';
 import { PLAN_CONFIG } from '@/lib/constants';
+import { requireTenantAuth } from '@/lib/authz';
+import { checkSubscriptionEntitlement } from '@/lib/billing/entitlement';
+import {
+  createCheckoutSession,
+  createStripeCustomer,
+  cancelSubscriptionAtPeriodEnd,
+  reactivateSubscription,
+} from '@/lib/stripe';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
+    // Strict tenant isolation: returns only caller's subscription
     const info = db.getSubscription(accountId);
+    const entitlement = checkSubscriptionEntitlement(accountId);
 
     const callCap = info.plan?.included_calls || 200;
     const callsUsed = info.usage?.calls_count || 0;
@@ -18,6 +29,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       subscription: info.subscription,
+      entitlement,
       currentPlan: info.plan,
       usage: info.usage,
       availablePlans: SEED_PLANS,
@@ -35,59 +47,55 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
-    const { action, planTier } = body;
+    const { action, planTier, email } = body;
 
     const info = db.getSubscription(accountId);
     const stripeKey = process.env.STRIPE_SECRET_KEY;
     const isLiveStripe = Boolean(stripeKey && process.env.NEXT_PUBLIC_STRIPE_LIVE === 'true');
 
+    // 1. Create Checkout Session
     if (action === 'create_checkout_session') {
       const targetTier = (planTier || 'pro') as PlanTier;
-      const planPrice = targetTier === 'starter' ? 7900 : targetTier === 'business' ? 29900 : 14900;
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-
-      if (isLiveStripe) {
-        try {
-          const params = new URLSearchParams();
-          params.append('mode', 'subscription');
-          params.append('payment_method_types[]', 'card');
-          params.append('line_items[0][price_data][currency]', 'usd');
-          params.append('line_items[0][price_data][product_data][name]', `MCR ${targetTier.toUpperCase()} Plan`);
-          params.append('line_items[0][price_data][unit_amount]', planPrice.toString());
-          params.append('line_items[0][price_data][recurring][interval]', 'month');
-          params.append('line_items[0][quantity]', '1');
-          params.append('success_url', `${appUrl}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}&plan=${targetTier}`);
-          params.append('cancel_url', `${appUrl}/dashboard/billing`);
-
-          const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${stripeKey}`,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: params.toString(),
-          });
-          const sessionData = await stripeRes.json();
-          if (sessionData.url) {
-            return NextResponse.json({ url: sessionData.url });
-          }
-        } catch (e: any) {
-          console.warn('[Stripe API Error, falling back to instant upgrade]:', e.message);
-        }
-      }
-
-      // Fallback / instant test activation
-      if (info.subscription) {
-        info.subscription.plan_id = targetTier;
-        info.subscription.status = 'active';
-        db.logAudit(accountId, 'UPGRADE_SUBSCRIPTION_PLAN', { planTier: targetTier, mode: 'test_checkout' });
-      }
-      return NextResponse.json({ url: `/dashboard/billing?upgraded=true&plan=${targetTier}` });
+      const checkoutResult = await createCheckoutSession(accountId, targetTier, appUrl);
+      return NextResponse.json({ url: checkoutResult.url, customerId: checkoutResult.customerId });
     }
 
+    // 2. Create Stripe Customer (Real creation event)
+    if (action === 'create_customer') {
+      const profile = db.getBusinessProfile(accountId);
+      const cred = db.findCredentialByAccountId(accountId);
+      const targetEmail = email || cred?.email || `${accountId}@example.com`;
+      const custResult = await createStripeCustomer(accountId, targetEmail, profile?.business_name);
+      return NextResponse.json({ success: true, customerId: custResult.customerId });
+    }
+
+    // 3. Cancel Subscription at Period End
+    if (action === 'cancel_subscription') {
+      const updated = cancelSubscriptionAtPeriodEnd(accountId);
+      return NextResponse.json({
+        success: true,
+        cancelAtPeriodEnd: true,
+        subscription: updated,
+      });
+    }
+
+    // 4. Reactivate Subscription
+    if (action === 'reactivate_subscription') {
+      const updated = reactivateSubscription(accountId);
+      return NextResponse.json({
+        success: true,
+        cancelAtPeriodEnd: false,
+        subscription: updated,
+      });
+    }
+
+    // 5. Billing Portal
     if (action === 'create_portal_session') {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
       const customerId = info.subscription?.stripe_customer_id;
@@ -118,6 +126,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ url: `/dashboard/billing?portal_test=true` });
     }
 
+    // Direct plan upgrade
     if (info.subscription && planTier) {
       info.subscription.plan_id = planTier as PlanTier;
       info.subscription.status = 'active';

@@ -10,7 +10,7 @@ import { checkQuietHours, inferTimezoneFromPhone } from '@/lib/quiet-hours';
 import { isStopKeyword, isStartKeyword, isHelpKeyword } from '@/lib/compliance-machine';
 import { getCarrierGuide, CARRIER_GUIDES } from '@/lib/carrier-guides';
 import { generateDailySummary, generateWeeklyReport } from '@/lib/reports';
-import { getRevenueMetrics } from '@/lib/metrics';
+import { getRevenueMetrics, effectiveJobsForAccount } from '@/lib/metrics';
 import { createSessionToken, verifySessionToken } from '@/lib/session';
 
 test('1. Strict Multi-Tenant Isolation', () => {
@@ -109,11 +109,12 @@ test('3. Missed-Call Detection & Text-Back Delivery', async () => {
   // Verify conversation and message were created in DB
   const contact = db.getOrCreateContact('acc-apex-plumbing', caller);
   const conv = db.getOrCreateConversation('acc-apex-plumbing', contact.id);
-  const messages = db.getMessages('acc-apex-plumbing', conv.id);
+  const messages = db.getMessages('acc-apex-plumbing', conv.id) || [];
 
   assert.ok(messages.length >= 1, 'Outbound text-back message must be saved');
   assert.equal(messages[0].direction, 'outbound');
   assert.match(messages[0].body, /Apex Plumbing/);
+
 });
 
 test('4. 2-Hour Deduplication Window (No Repeated Text-Backs)', async () => {
@@ -307,7 +308,7 @@ test('10. Daily & Weekly Recovery Report Computation', () => {
 test('11. Single Source of Truth Metrics Reconciliation', () => {
   const accountId = 'acc-apex-plumbing';
   const metrics = getRevenueMetrics(accountId);
-  const jobs = db.getJobs(accountId);
+  const jobs = effectiveJobsForAccount(accountId);
   const subInfo = db.getSubscription(accountId);
   const subPrice = subInfo.plan?.monthly_price_cents ? subInfo.plan.monthly_price_cents / 100 : 149;
 

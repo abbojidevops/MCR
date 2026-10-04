@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { getCarrierGuide } from '@/lib/carrier-guides';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
+import { notFoundResponse } from '@/lib/api-errors';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
 
     const account = db.getAccount(accountId);
     const profile = db.getBusinessProfile(accountId);
@@ -29,12 +31,17 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
     const { updates } = body;
 
     const updatedProfile = db.updateBusinessProfile(accountId, updates);
+    if (!updatedProfile) {
+      return notFoundResponse();
+    }
 
     return NextResponse.json({ success: true, profile: updatedProfile });
   } catch (err: any) {

@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
-import { getAuthenticatedAccountId } from '@/lib/session';
+import { requireTenantAuth } from '@/lib/authz';
 
 export async function GET(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const cannedReplies = db.getCannedReplies(accountId);
     return NextResponse.json({ cannedReplies });
   } catch (err: any) {
@@ -15,8 +17,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Derive account identity exclusively from session (Part 1.2)
-    const accountId = await getAuthenticatedAccountId(req);
+    const auth = await requireTenantAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    const { accountId } = auth;
+
     const body = await req.json();
     const { title, shortcut, bodyText } = body;
 

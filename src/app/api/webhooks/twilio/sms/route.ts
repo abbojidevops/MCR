@@ -1,24 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TwilioService, TwilioSmsWebhookParams } from '@/lib/telecom/twilio-service';
+import {
+  TwilioService,
+  TwilioSmsWebhookParams,
+  getCandidateWebhookUrls,
+} from '@/lib/telecom/twilio-service';
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const params: Record<string, string> = {};
+    // 1. Fail-closed: TWILIO_AUTH_TOKEN must be configured
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!authToken || !authToken.trim()) {
+      return new NextResponse(
+        'Twilio Webhook Service Unavailable: TWILIO_AUTH_TOKEN not configured (fail-closed)',
+        { status: 503 }
+      );
+    }
 
-    formData.forEach((val, key) => {
-      params[key] = val.toString();
+    // 2. Read raw request bytes directly before parsing
+    const rawBody = await req.text();
+    const searchParams = new URLSearchParams(rawBody);
+    const params: Record<string, string> = {};
+    searchParams.forEach((val, key) => {
+      params[key] = val;
     });
 
     const signature = req.headers.get('x-twilio-signature');
-    const url = req.url;
-    const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+    const candidateUrls = getCandidateWebhookUrls(req);
 
-    // Validate Signature
-    const isValid = TwilioService.validateSignature(authToken, signature, url, params);
+    // 3. Cryptographic Signature Validation
+    const isValid = TwilioService.validateSignature(authToken, signature, candidateUrls, params);
     if (!isValid) {
-      console.warn('Twilio SMS Webhook: Invalid Signature');
-      return new NextResponse('Invalid Twilio Signature', { status: 403 });
+      console.warn('Twilio SMS Webhook: Refused forged/unsigned request (403)');
+      return new NextResponse('Forbidden: Invalid Twilio Webhook Signature', { status: 403 });
     }
 
     const smsParams: TwilioSmsWebhookParams = {

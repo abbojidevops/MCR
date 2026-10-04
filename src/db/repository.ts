@@ -6,6 +6,9 @@ import {
   CallRecord,
   CannedReply,
   ComplianceRegistration,
+  ComplianceHistoryEntry,
+  ComplianceProvenance,
+  ComplianceStatus,
   ConsentLog,
   Contact,
   Conversation,
@@ -20,6 +23,7 @@ import {
   SuppressionEntry,
   UsageRecord,
   TradeKey,
+  UserCredential,
 } from '@/types';
 import {
   SEED_ACCOUNTS,
@@ -36,7 +40,9 @@ import {
   SEED_PROFILES,
   SEED_SUBSCRIPTIONS,
   SEED_USAGE,
+  SEED_USER_CREDENTIALS,
 } from './seed-data';
+
 
 interface DatabaseState {
   accounts: Account[];
@@ -58,6 +64,8 @@ interface DatabaseState {
   notifications: Notification[];
   processedWebhooks: Record<string, { processedAt: string; provider: string; eventType: string }>;
   auditLogs: { id: string; accountId: string; action: string; timestamp: string; details?: any }[];
+  userCredentials: UserCredential[];
+  revokedSessions: string[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -93,6 +101,8 @@ class DatabaseRepository {
       notifications: [...SEED_NOTIFICATIONS],
       processedWebhooks: {},
       auditLogs: [],
+      userCredentials: [...SEED_USER_CREDENTIALS],
+      revokedSessions: [],
     };
   }
 
@@ -104,7 +114,25 @@ class DatabaseRepository {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
-        this.state = { ...this.getInitialState(), ...parsed };
+        this.state = {
+          ...this.getInitialState(),
+          ...parsed,
+          userCredentials: parsed.userCredentials || [...SEED_USER_CREDENTIALS],
+          revokedSessions: parsed.revokedSessions || [],
+        };
+        // Normalize simulation provenance
+        this.state.callRecords.forEach((c) => {
+          if (c.twilio_call_sid?.startsWith('CA_SIM_')) c.is_simulated = true;
+        });
+        this.state.conversations.forEach((conv) => {
+          const simCall = this.state.callRecords.find((c) => c.is_simulated && c.account_id === conv.account_id);
+          if (simCall && (conv as any).id?.includes('conv-sim')) conv.is_simulated = true;
+        });
+        this.state.jobs.forEach((j) => {
+          if (j.call_record_id && this.state.callRecords.find((c) => c.id === j.call_record_id)?.is_simulated) {
+            j.is_simulated = true;
+          }
+        });
       } else {
         this.saveToFile();
       }
@@ -116,6 +144,9 @@ class DatabaseRepository {
   }
 
   private saveToFile() {
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
     try {
       if (!fs.existsSync(DATA_DIR)) {
         fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -126,8 +157,84 @@ class DatabaseRepository {
     }
   }
 
+
   public resetDatabase(): void {
     this.state = this.getInitialState();
+    this.saveToFile();
+  }
+
+  // --------------------------------------------------------------------------
+  // User Credentials & Authentication
+  // --------------------------------------------------------------------------
+  public findCredentialByEmail(email: string): UserCredential | undefined {
+    const normalized = email.trim().toLowerCase();
+    return this.state.userCredentials.find((c) => c.email.toLowerCase() === normalized);
+  }
+
+  public findCredentialByAccountId(accountId: string): UserCredential | undefined {
+    return this.state.userCredentials.find((c) => c.account_id === accountId);
+  }
+
+  public getAllUserCredentials(): UserCredential[] {
+    return [...this.state.userCredentials];
+  }
+
+  public getAllSubscriptions(): Subscription[] {
+    return [...this.state.subscriptions];
+  }
+
+  public getAllCompliance(): ComplianceRegistration[] {
+    return [...this.state.compliance];
+  }
+
+  public getAllConsentLogs(): ConsentLog[] {
+    return [...this.state.consentLogs];
+  }
+
+  public recordConsentLog(log: Omit<ConsentLog, 'id' | 'created_at'>): ConsentLog {
+    const entry: ConsentLog = {
+      ...log,
+      id: `consent-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      created_at: new Date().toISOString(),
+    };
+    this.state.consentLogs.push(entry);
+    this.saveToFile();
+    return entry;
+  }
+
+  public createUserCredential(cred: Omit<UserCredential, 'id' | 'created_at' | 'updated_at'>): UserCredential {
+    const newCred: UserCredential = {
+      id: `cred-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      user_id: cred.user_id,
+      account_id: cred.account_id,
+      email: cred.email.trim().toLowerCase(),
+      password_hash: cred.password_hash,
+      algorithm: 'scrypt',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.state.userCredentials.push(newCred);
+    this.saveToFile();
+    return newCred;
+  }
+
+  public revokeSession(tokenOrSignature: string): void {
+    if (!tokenOrSignature) return;
+    const key = tokenOrSignature.includes('.') ? tokenOrSignature.split('.')[1] : tokenOrSignature;
+    if (!this.state.revokedSessions.includes(key)) {
+      this.state.revokedSessions.push(key);
+      this.saveToFile();
+    }
+  }
+
+  public isSessionRevoked(tokenOrSignature: string): boolean {
+    if (!tokenOrSignature) return true;
+    const key = tokenOrSignature.includes('.') ? tokenOrSignature.split('.')[1] : tokenOrSignature;
+    return this.state.revokedSessions.includes(key) || this.state.revokedSessions.includes(tokenOrSignature);
+  }
+
+  public clearRevokedSessions(): void {
+    this.state.revokedSessions = [];
     this.saveToFile();
   }
 
@@ -135,6 +242,7 @@ class DatabaseRepository {
   // Multi-Tenant Isolation Enforcer
   // --------------------------------------------------------------------------
   public assertTenantAccess(requestedAccountId: string, resourceAccountId: string) {
+
     if (requestedAccountId !== resourceAccountId) {
       throw new Error(`TENANT_ISOLATION_VIOLATION: Access denied to tenant ${resourceAccountId}`);
     }
@@ -155,13 +263,14 @@ class DatabaseRepository {
     return this.state.profiles.find((p) => p.account_id === accountId);
   }
 
-  public updateBusinessProfile(accountId: string, updates: Partial<BusinessProfile>): BusinessProfile {
+  public updateBusinessProfile(accountId: string, updates: Partial<BusinessProfile>): BusinessProfile | null {
     const profile = this.state.profiles.find((p) => p.account_id === accountId);
-    if (!profile) throw new Error(`Profile not found for account ${accountId}`);
+    if (!profile) return null;
     Object.assign(profile, updates, { updated_at: new Date().toISOString() });
     this.saveToFile();
     return profile;
   }
+
 
   public createAccount(
     name: string,
@@ -262,6 +371,64 @@ class DatabaseRepository {
     return { account, profile, phoneNumber };
   }
 
+  public getAccountCount(): number {
+    return this.state.accounts.length;
+  }
+
+  public deleteAccount(accountId: string): boolean {
+    if (!accountId || typeof accountId !== 'string') {
+      throw new Error('deleteAccount requires a non-empty string accountId');
+    }
+    // Never allow pattern/wildcard deletion or broad matchers
+    if (accountId.includes('%') || accountId.includes('*') || accountId.includes('?') || accountId.trim() === '') {
+      throw new Error(`deleteAccount rejects pattern or wildcard accountId: "${accountId}". Exact ID required.`);
+    }
+
+    const cleanId = accountId.trim();
+    const existingIndex = this.state.accounts.findIndex((a) => a.id === cleanId);
+    if (existingIndex === -1) {
+      return false;
+    }
+
+    // Exact ID deletion across all collections
+    this.state.accounts.splice(existingIndex, 1);
+    this.state.profiles = this.state.profiles.filter((p) => p.account_id !== cleanId);
+    this.state.phoneNumbers = this.state.phoneNumbers.filter((p) => p.account_id !== cleanId);
+    this.state.compliance = this.state.compliance.filter((c) => c.account_id !== cleanId);
+    this.state.subscriptions = this.state.subscriptions.filter((s) => s.account_id !== cleanId);
+    this.state.usage = this.state.usage.filter((u) => u.account_id !== cleanId);
+    this.state.userCredentials = this.state.userCredentials.filter((c) => c.account_id !== cleanId);
+    this.state.auditLogs = this.state.auditLogs.filter((a) => a.accountId !== cleanId);
+    this.state.jobs = this.state.jobs.filter((j) => j.account_id !== cleanId);
+    this.state.conversations = this.state.conversations.filter((c) => c.account_id !== cleanId);
+    this.state.messages = this.state.messages.filter((m) => m.account_id !== cleanId);
+    this.state.contacts = this.state.contacts.filter((c) => c.account_id !== cleanId);
+    this.state.callRecords = this.state.callRecords.filter((c) => c.account_id !== cleanId);
+    this.state.intakeSessions = this.state.intakeSessions.filter((i) => i.account_id !== cleanId);
+    this.state.cannedReplies = this.state.cannedReplies.filter((r) => r.account_id !== cleanId);
+    this.state.suppressionList = this.state.suppressionList.filter((s) => s.account_id !== cleanId);
+    this.state.consentLogs = this.state.consentLogs.filter((c) => c.account_id !== cleanId);
+    this.state.notifications = this.state.notifications.filter((n) => n.account_id !== cleanId);
+
+    // Dual persistence: PostgreSQL deletion if configured
+    if (this.isPostgresConfigured()) {
+      try {
+        const { getPostgresPool } = require('./postgres');
+        const pool = getPostgresPool();
+        if (pool) {
+          pool.query('DELETE FROM accounts WHERE id = $1', [cleanId]).catch((err: any) => {
+            console.warn('[Postgres deleteAccount error]:', err?.message);
+          });
+        }
+      } catch (err: any) {
+        console.warn('[Postgres deleteAccount pool error]:', err?.message);
+      }
+    }
+
+    this.saveToFile();
+    return true;
+  }
+
   // --------------------------------------------------------------------------
   // Phone Number Resolution
   // --------------------------------------------------------------------------
@@ -331,6 +498,7 @@ class DatabaseRepository {
     );
 
     const isDeduplicated = !!recentCall;
+    const isSimulated = Boolean(params.twilioCallSid && params.twilioCallSid.startsWith('CA_SIM_'));
 
     const callRecord: CallRecord = {
       id: `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -346,6 +514,7 @@ class DatabaseRepository {
       forwarded_status: params.forwardedStatus || 'conditionally-forwarded',
       text_back_status: isDeduplicated ? 'deduplicated' : 'pending',
       deduplication_state: isDeduplicated ? 'duplicate_suppressed' : 'first_call',
+      is_simulated: isSimulated,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -374,10 +543,14 @@ class DatabaseRepository {
     return this.state.callRecords.filter((c) => c.account_id === accountId);
   }
 
+  public getCallBySid(sid: string): CallRecord | undefined {
+    return this.state.callRecords.find((c) => c.twilio_call_sid === sid || c.id === sid);
+  }
+
   // --------------------------------------------------------------------------
   // Conversations & Messages
   // --------------------------------------------------------------------------
-  public getOrCreateConversation(accountId: string, contactId: string): Conversation {
+  public getOrCreateConversation(accountId: string, contactId: string, isSimulated?: boolean): Conversation {
     let conv = this.state.conversations.find((c) => c.account_id === accountId && c.contact_id === contactId);
     if (!conv) {
       conv = {
@@ -385,11 +558,15 @@ class DatabaseRepository {
         account_id: accountId,
         contact_id: contactId,
         status: 'active',
+        is_simulated: !!isSimulated,
         last_message_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       this.state.conversations.unshift(conv);
+      this.saveToFile();
+    } else if (isSimulated && !conv.is_simulated) {
+      conv.is_simulated = true;
       this.saveToFile();
     }
     return conv;
@@ -412,12 +589,19 @@ class DatabaseRepository {
     });
   }
 
-  public getMessages(accountId: string, conversationId: string): Message[] {
-    const conv = this.state.conversations.find((c) => c.id === conversationId);
-    if (conv) {
-      this.assertTenantAccess(accountId, conv.account_id);
+  public getConversation(accountId: string, conversationId: string): (Conversation & { contact?: Contact }) | undefined {
+    const conv = this.state.conversations.find((c) => c.id === conversationId && c.account_id === accountId);
+    if (!conv) return undefined;
+    const contact = this.state.contacts.find((ct) => ct.id === conv.contact_id);
+    return { ...conv, contact };
+  }
+
+  public getMessages(accountId: string, conversationId: string): Message[] | null {
+    const conv = this.state.conversations.find((c) => c.id === conversationId && c.account_id === accountId);
+    if (!conv) {
+      return null;
     }
-    return this.state.messages.filter((m) => m.conversation_id === conversationId);
+    return this.state.messages.filter((m) => m.conversation_id === conversationId && m.account_id === accountId);
   }
 
   public addMessage(params: {
@@ -429,12 +613,19 @@ class DatabaseRepository {
     body: string;
     mediaUrls?: string[];
     twilioMessageSid?: string;
-  }): Message {
-    const conv = this.state.conversations.find((c) => c.id === params.conversationId);
-    if (conv) {
-      this.assertTenantAccess(params.accountId, conv.account_id);
-      conv.last_message_at = new Date().toISOString();
-      conv.updated_at = new Date().toISOString();
+  }): Message | null {
+    const conv = this.state.conversations.find((c) => c.id === params.conversationId && c.account_id === params.accountId);
+    if (!conv) {
+      return null;
+    }
+    conv.last_message_at = new Date().toISOString();
+    conv.updated_at = new Date().toISOString();
+
+    const isSimulatedMessage = Boolean(
+      conv.is_simulated || (params.twilioMessageSid && params.twilioMessageSid.startsWith('SM_SIM_'))
+    );
+    if (isSimulatedMessage && !conv.is_simulated) {
+      conv.is_simulated = true;
     }
 
     const message: Message = {
@@ -448,6 +639,7 @@ class DatabaseRepository {
       media_urls: params.mediaUrls || [],
       twilio_message_sid: params.twilioMessageSid,
       status: params.direction === 'inbound' ? 'received' : 'delivered',
+      is_simulated: isSimulatedMessage,
       created_at: new Date().toISOString(),
     };
 
@@ -466,11 +658,14 @@ class DatabaseRepository {
     return message;
   }
 
+
   // --------------------------------------------------------------------------
   // Intake Sessions
   // --------------------------------------------------------------------------
   public getOrCreateIntakeSession(accountId: string, conversationId: string, trade: TradeKey): IntakeSession {
     let session = this.state.intakeSessions.find((s) => s.conversation_id === conversationId);
+    const conv = this.state.conversations.find((c) => c.id === conversationId);
+    const isSimulated = conv?.is_simulated === true;
     if (!session) {
       session = {
         id: `intake-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -481,10 +676,14 @@ class DatabaseRepository {
         is_emergency: false,
         photo_urls: [],
         status: 'in_progress',
+        is_simulated: isSimulated,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       this.state.intakeSessions.push(session);
+      this.saveToFile();
+    } else if (isSimulated && !session.is_simulated) {
+      session.is_simulated = true;
       this.saveToFile();
     }
     return session;
@@ -520,6 +719,21 @@ class DatabaseRepository {
     const now = new Date().toISOString();
     const defaultRecoverySource = `Missed Call — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
 
+    // Inherit simulation provenance downstream from call, intake session, or conversation
+    let isSimulated = Boolean(jobData.is_simulated);
+    if (!isSimulated && jobData.call_record_id) {
+      const origCall = this.state.callRecords.find((c) => c.id === jobData.call_record_id);
+      if (origCall?.is_simulated) isSimulated = true;
+    }
+    if (!isSimulated && jobData.intake_session_id) {
+      const origIntake = this.state.intakeSessions.find((s) => s.id === jobData.intake_session_id);
+      if (origIntake?.is_simulated) isSimulated = true;
+    }
+    if (!isSimulated && jobData.conversation_id) {
+      const origConv = this.state.conversations.find((c) => c.id === jobData.conversation_id);
+      if (origConv?.is_simulated) isSimulated = true;
+    }
+
     // Duplicate Prevention: Check if job already exists for this intake session, conversation, or call
     const existing = this.state.jobs.find(
       (j) =>
@@ -532,6 +746,7 @@ class DatabaseRepository {
 
     if (existing) {
       Object.assign(existing, jobData, {
+        is_simulated: isSimulated || existing.is_simulated || false,
         recovery_source: existing.recovery_source || jobData.recovery_source || defaultRecoverySource,
         updated_at: now,
       });
@@ -543,6 +758,7 @@ class DatabaseRepository {
       id: `job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       recovery_source: jobData.recovery_source || defaultRecoverySource,
       ...jobData,
+      is_simulated: isSimulated,
       created_at: now,
       updated_at: now,
     };
@@ -580,9 +796,10 @@ class DatabaseRepository {
     return job;
   }
 
-  public updateJob(accountId: string, jobId: string, updates: Partial<JobCard>): JobCard {
+  public updateJob(accountId: string, jobId: string, updates: Partial<JobCard>): JobCard | null {
     const job = this.state.jobs.find((j) => j.id === jobId && j.account_id === accountId);
-    if (!job) throw new Error(`Job ${jobId} not found for account ${accountId}`);
+    if (!job) return null;
+
 
     const now = new Date().toISOString();
     Object.assign(job, updates, { updated_at: now });
@@ -728,13 +945,81 @@ class DatabaseRepository {
         business_type: 'LLC',
         status: 'signed_up',
         sample_messages: [],
+        last_updated_by: 'customer',
+        status_history: [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
       this.state.compliance.push(comp);
     }
+    if (!comp.status_history) comp.status_history = [];
     Object.assign(comp, updates, { updated_at: new Date().toISOString() });
     this.saveToFile();
+    return comp;
+  }
+
+  public recordComplianceTransition(
+    accountId: string,
+    toStatus: ComplianceStatus,
+    updatedBy: ComplianceProvenance,
+    actorId?: string,
+    reason?: string,
+    extraUpdates?: Partial<ComplianceRegistration>
+  ): ComplianceRegistration {
+    let comp = this.state.compliance.find((c) => c.account_id === accountId);
+    const now = new Date().toISOString();
+    if (!comp) {
+      comp = {
+        id: `comp-${Date.now().toString(36)}`,
+        account_id: accountId,
+        legal_name: 'Business LLC',
+        business_type: 'LLC',
+        status: 'signed_up',
+        sample_messages: [],
+        last_updated_by: updatedBy,
+        status_history: [],
+        created_at: now,
+        updated_at: now,
+      };
+      this.state.compliance.push(comp);
+    }
+    if (!comp.status_history) comp.status_history = [];
+
+    const historyEntry: ComplianceHistoryEntry = {
+      id: `chist-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+      from_status: comp.status,
+      to_status: toStatus,
+      updated_by: updatedBy,
+      actor_id: actorId,
+      reason,
+      timestamp: now,
+    };
+
+    comp.status_history.push(historyEntry);
+    comp.status = toStatus;
+    comp.last_updated_by = updatedBy;
+    comp.updated_at = now;
+
+    if (toStatus === 'rejected') {
+      comp.rejection_reason = reason || 'Carrier compliance verification failed';
+    } else if (comp.rejection_reason && (toStatus === 'brand_submitted' || toStatus === 'brand_approved')) {
+      comp.rejection_reason = undefined;
+    }
+
+    if (extraUpdates) {
+      Object.assign(comp, extraUpdates);
+    }
+
+    this.saveToFile();
+
+    this.logAudit(accountId, 'COMPLIANCE_STATUS_TRANSITION', {
+      fromStatus: historyEntry.from_status,
+      toStatus: historyEntry.to_status,
+      updatedBy,
+      actorId,
+      reason,
+    });
+
     return comp;
   }
 
@@ -750,6 +1035,31 @@ class DatabaseRepository {
     const plan = subscription ? this.state.plans.find((p) => p.id === subscription.plan_id) : undefined;
     const usage = this.state.usage.find((u) => u.account_id === accountId);
     return { subscription, plan, usage };
+  }
+
+  public updateSubscription(
+    accountId: string,
+    updates: Partial<Subscription>
+  ): Subscription | undefined {
+    const sub = this.state.subscriptions.find((s) => s.account_id === accountId);
+    if (!sub) return undefined;
+    Object.assign(sub, updates, { updated_at: new Date().toISOString() });
+    this.saveToFile();
+    return sub;
+  }
+
+  public createSubscription(
+    subData: Omit<Subscription, 'id' | 'created_at' | 'updated_at'>
+  ): Subscription {
+    const newSub: Subscription = {
+      ...subData,
+      id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.state.subscriptions.push(newSub);
+    this.saveToFile();
+    return newSub;
   }
 
   // --------------------------------------------------------------------------
@@ -793,6 +1103,45 @@ class DatabaseRepository {
 
   public getStorageEngine(): 'postgresql' | 'file_json' {
     return process.env.DATABASE_URL ? 'postgresql' : 'file_json';
+  }
+
+  public getProcessedWebhooks(): Record<string, { processedAt: string; provider: string; eventType: string }> {
+    return { ...this.state.processedWebhooks };
+  }
+
+  public clearProcessedWebhooks(): void {
+    this.state.processedWebhooks = {};
+    this.saveToFile();
+  }
+
+  public deleteUserCredential(id: string): boolean {
+    const idx = this.state.userCredentials.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      this.state.userCredentials.splice(idx, 1);
+      this.saveToFile();
+      return true;
+    }
+    return false;
+  }
+
+  public deleteConsentLog(id: string): boolean {
+    const idx = this.state.consentLogs.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      this.state.consentLogs.splice(idx, 1);
+      this.saveToFile();
+      return true;
+    }
+    return false;
+  }
+
+  public deleteSubscription(id: string): boolean {
+    const idx = this.state.subscriptions.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      this.state.subscriptions.splice(idx, 1);
+      this.saveToFile();
+      return true;
+    }
+    return false;
   }
 }
 

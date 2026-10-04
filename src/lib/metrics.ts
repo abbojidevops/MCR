@@ -1,6 +1,6 @@
 import { db } from '@/db/repository';
 import { JobCard, Contact, CallRecord, Conversation } from '@/types';
-import { DEFAULT_GROSS_MARGIN } from '@/lib/constants';
+import { DEFAULT_GROSS_MARGIN, DEFAULT_AVERAGE_TICKET } from '@/lib/constants';
 
 export type DateRangePreset = 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all';
 
@@ -90,8 +90,9 @@ export interface UnifiedMCRMetrics {
   // Legacy alias for confirmedRevenue so existing components continue to work
   confirmedActualRevenue: number;
 
-  // Potential Missed Call Value estimate
+  // Potential Missed Call Value estimate and basis
   potentialMissedCallValue: number;
+  averageTicketAssumption: number;
 
   // Recovery Rate: (Booked + Completed) / Missed Calls
   recoveryRatePercent: number;
@@ -135,6 +136,46 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
+/**
+ * Effective helpers: Filter out any simulated activity from customer-facing calculations.
+ * (Reference: simulation.ts, src/lib/metrics.ts effective* helpers)
+ */
+export function effectiveCallsForAccount(accountId: string): CallRecord[] {
+  return db.getCallRecords(accountId).filter((c) => !c.is_simulated);
+}
+
+export function effectiveJobsForAccount(accountId: string): (JobCard & { contact?: Contact })[] {
+  return db.getJobs(accountId).filter((j) => !j.is_simulated);
+}
+
+export function effectiveConversationsForAccount(accountId: string): Conversation[] {
+  return db.getConversations(accountId).filter((cv) => !cv.is_simulated);
+}
+
+export function getSimulatedExclusions(accountId: string): {
+  callsCount: number;
+  jobsCount: number;
+  conversationsCount: number;
+  disclosure: string | null;
+} {
+  const allCalls = db.getCallRecords(accountId);
+  const allJobs = db.getJobs(accountId);
+  const allConvs = db.getConversations(accountId);
+
+  const callsCount = allCalls.filter((c) => c.is_simulated).length;
+  const jobsCount = allJobs.filter((j) => j.is_simulated).length;
+  const conversationsCount = allConvs.filter((cv) => cv.is_simulated).length;
+
+  let disclosure: string | null = null;
+  if (callsCount > 0 || jobsCount > 0) {
+    const callText = `${callsCount} simulated call${callsCount === 1 ? '' : 's'}`;
+    const jobText = `${jobsCount} simulated job${jobsCount === 1 ? '' : 's'}`;
+    disclosure = `${callText} and ${jobText} are excluded from these numbers`;
+  }
+
+  return { callsCount, jobsCount, conversationsCount, disclosure };
+}
+
 export function computeMetrics(
   accountId: string = 'acc-apex-plumbing',
   options: DateFilterOptions = {}
@@ -152,7 +193,7 @@ export function computeMetrics(
 
   // Date filtering logic
   const now = new Date();
-  const preset = options.preset || 'month';
+  const preset = options.preset || (options.startDate || options.endDate ? 'month' : 'all');
 
   let start: Date;
   let end: Date = now;
@@ -186,38 +227,48 @@ export function computeMetrics(
       periodLabel = 'All Time';
       break;
     }
-    case 'month':
-    default: {
+    case 'month': {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       periodLabel = `${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} (Current Month)`;
       break;
     }
+    default: {
+      start = new Date('2020-01-01T00:00:00Z');
+      periodLabel = 'All Time';
+      break;
+    }
   }
 
-  if (options.startDate) {
-    start = new Date(options.startDate);
-  }
-  if (options.endDate) {
-    end = new Date(options.endDate);
+  if (options.startDate || options.endDate) {
+    if (options.startDate) {
+      start = new Date(options.startDate);
+    }
+    if (options.endDate) {
+      end = new Date(options.endDate);
+    }
+    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    periodLabel = `${startStr} – ${endStr}`;
   }
 
   const startIso = start.toISOString();
   const endIso = end.toISOString();
 
-  // Load raw records directly from repository
-  const allCalls = db.getCallRecords(accountId);
-  const allJobs = db.getJobs(accountId);
-  const allConvs = db.getConversations(accountId);
+  // Load records filtered strictly to exclude simulated records
+  const allCalls = effectiveCallsForAccount(accountId);
+  const allJobs = effectiveJobsForAccount(accountId);
+  const allConvs = effectiveConversationsForAccount(accountId);
 
   // Filter strictly by date interval
   const callsInPeriod = allCalls.filter((c) => c.created_at >= startIso && c.created_at <= endIso);
   const jobsInPeriod = allJobs.filter((j) => j.created_at >= startIso && j.created_at <= endIso);
   const convsInPeriod = allConvs.filter((cv) => cv.created_at >= startIso && cv.created_at <= endIso);
 
-  // For demo account, include all seed records so prospective buyers always see the complete pipeline and confirmed revenue
-  const effectiveCalls = isDemo ? allCalls : (callsInPeriod.length > 0 ? callsInPeriod : allCalls);
-  const effectiveJobs = isDemo ? allJobs : (jobsInPeriod.length > 0 ? jobsInPeriod : allJobs);
-  const effectiveConvs = isDemo ? allConvs : (convsInPeriod.length > 0 ? convsInPeriod : allConvs);
+  // Strict honest filtering: an empty period reports empty. Preset 'all' includes all records.
+  const isAllTime = preset === 'all' && !options.startDate && !options.endDate;
+  const effectiveCalls = isAllTime ? allCalls : callsInPeriod;
+  const effectiveJobs = isAllTime ? allJobs : jobsInPeriod;
+  const effectiveConvs = isAllTime ? allConvs : convsInPeriod;
 
   // Single source counts
   const missedCallsCount = effectiveCalls.length;
@@ -262,8 +313,10 @@ export function computeMetrics(
   // Alias for backward compatibility
   const confirmedActualRevenue = confirmedRevenue;
 
+  const averageTicketAssumption = profile?.average_ticket || DEFAULT_AVERAGE_TICKET;
+
   // Potential Missed Call Value: early opportunity estimate ($650 average ticket * total missed calls)
-  const potentialMissedCallValue = missedCallsCount * 650;
+  const potentialMissedCallValue = missedCallsCount * averageTicketAssumption;
 
   // Recovery Rate: (Booked + Completed jobs) / eligible missed calls
   const recoveryRatePercent =
@@ -299,9 +352,9 @@ export function computeMetrics(
   const totalUndelivered = Math.max(0, missedCallsCount - textsDeliveredCount);
 
   const textBackGapAnalysis: TextBackGapAnalysis = {
-    suppressedDedupe: suppressedDedupe > 0 ? suppressedDedupe : Math.max(0, totalUndelivered - 2),
-    suppressedOptOut: suppressedOptOut > 0 ? suppressedOptOut : 1,
-    suppressedQuietHours: suppressedQuietHours > 0 ? suppressedQuietHours : 1,
+    suppressedDedupe,
+    suppressedOptOut,
+    suppressedQuietHours,
     failedDelivery,
     totalUndelivered,
   };
@@ -401,7 +454,7 @@ export function computeMetrics(
     .slice(0, 5);
 
   // Traceable Recovered Jobs Attribution List
-  const recoveredJobsList: RecoveredJobAttribution[] = allJobs
+  const recoveredJobsList: RecoveredJobAttribution[] = effectiveJobs
     .map((job) => {
       const contact = job.contact || db.getContact(job.contact_id);
       const customerName = contact?.full_name?.trim() ? contact.full_name : 'Unknown Caller';
@@ -448,6 +501,7 @@ export function computeMetrics(
     totalPotentialValue,
     confirmedActualRevenue,
     potentialMissedCallValue,
+    averageTicketAssumption,
     recoveryRatePercent,
     revenuePerSubscriptionDollar,
     marginAdjustedMultiple,
@@ -472,6 +526,7 @@ export function computeMetrics(
       totalPotentialValue,
       confirmedActualRevenue,
       potentialMissedCallValue,
+      averageTicketAssumption,
       revenuePerSubscriptionDollar,
       marginAdjustedMultiple,
       grossMarginAssumption: DEFAULT_GROSS_MARGIN,
@@ -479,10 +534,10 @@ export function computeMetrics(
       reportedRecoveredRevenue: confirmedRevenue,
     },
     forwardingStatus: {
-      configured: profile?.forwarding_configured || true,
-      carrierName: profile?.carrier_name || 'Verizon Wireless',
-      emergencyPhone: profile?.emergency_phone || '+12175550199',
-      notificationPhone: profile?.notification_phone || '+12175550144',
+      configured: profile?.forwarding_configured ?? (isDemo ? true : false),
+      carrierName: profile?.carrier_name || (isDemo ? 'Verizon Wireless' : ''),
+      emergencyPhone: profile?.emergency_phone || (isDemo ? '+12175550199' : ''),
+      notificationPhone: profile?.notification_phone || (isDemo ? '+12175550144' : ''),
     },
   };
 }
