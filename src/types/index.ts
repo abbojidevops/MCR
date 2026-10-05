@@ -292,8 +292,8 @@ export interface ComplianceRegistration {
   contact_name?: string;
   contact_email?: string;
   contact_phone?: string;
-  brand_sid?: string;
-  campaign_sid?: string;
+  brand_sid?: string | null;
+  campaign_sid?: string | null;
   status: ComplianceStatus;
   rejection_reason?: string;
   sample_messages: string[];

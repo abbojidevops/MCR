@@ -136,7 +136,7 @@ test('C4: Customer Permitted Action: submit_registration (signed_up -> brand_sub
   assert.equal(data.success, true);
   assert.equal(data.compliance.status, 'brand_submitted');
   assert.equal(data.compliance.last_updated_by, 'customer');
-  assert.ok(data.compliance.brand_sid.startsWith('BN_'));
+  assert.equal(data.compliance.brand_sid, null, 'brand_sid must stay null until supplied by carrier/operator');
 
   // Verify history entry recorded
   assert.ok(data.compliance.status_history.length > 0);
@@ -327,7 +327,11 @@ test('C8: End-to-End Carrier Pipeline & Provenance Audit Trail (All Transitions 
         cookie: customerToken,
         body: {
           action: 'submit_registration',
-          registrationData: { legal_name: 'Apex Plumbing LLC' },
+          registrationData: {
+            legal_name: 'Apex Plumbing LLC',
+            ein: '12-3456789',
+            business_type: 'LLC',
+          },
         },
       })
     );
@@ -700,3 +704,175 @@ test('C9: State Machine Function Unit Assertions', () => {
   assert.equal(isValidTransition('brand_submitted', 'brand_approved'), true);
   assert.equal(isValidTransition('brand_submitted', 'rejected'), true);
 });
+
+// ============================================================================
+// TASK 15 — Carrier Fact Authority & Whitelist Tests
+// ============================================================================
+
+test('T15-1: Injected Fields Refused (400) Naming Each Rejected Field', async () => {
+  db.updateCompliance(TEST_ACCOUNT, {
+    status: 'signed_up',
+    status_history: [],
+    last_updated_by: 'admin',
+    campaign_sid: null,
+    brand_sid: null,
+  });
+
+  const customerToken = createSessionToken({
+    accountId: TEST_ACCOUNT,
+    userId: 'usr-customer-owner',
+    role: 'owner',
+    isDemo: false,
+  });
+
+  const req = createMockRequest('http://localhost:3001/api/compliance', {
+    method: 'POST',
+    cookie: customerToken,
+    body: {
+      action: 'submit_registration',
+      registrationData: {
+        legal_name: 'Alpha Mechanical LLC',
+        ein: '88-7654321',
+        business_type: 'LLC',
+        campaign_sid: 'CM_injected_by_customer',
+        status: 'sms_live',
+        last_updated_by: 'carrier_webhook',
+        carrier_source: 'carrier_api',
+      },
+    },
+  });
+
+  const res = await compliancePost(req);
+  assert.equal(res.status, 400, 'Injected fields must be refused with 400 Bad Request');
+
+  const data = await res.json();
+  assert.ok(Array.isArray(data.rejected), 'Response must contain rejected array');
+  assert.deepEqual(
+    data.rejected.sort(),
+    ['campaign_sid', 'carrier_source', 'last_updated_by', 'status'].sort(),
+    'Response must explicitly name all four rejected fields'
+  );
+  assert.match(
+    data.error,
+    /These fields are not yours to set:.*A carrier decides brand and campaign identifiers/
+  );
+
+  // Assert database was NOT modified
+  const comp = db.getCompliance(TEST_ACCOUNT);
+  assert.equal(comp?.status, 'signed_up', 'Database status must remain signed_up');
+  assert.notEqual(comp?.campaign_sid, 'CM_injected_by_customer', 'Database must not contain injected campaign_sid');
+  assert.notEqual(comp?.last_updated_by, 'carrier_webhook', 'Database must not contain injected last_updated_by');
+});
+
+test('T15-2: No Identifier Synthesized — brand_sid and campaign_sid stay null', async () => {
+  db.updateCompliance(TEST_ACCOUNT, { status: 'signed_up', status_history: [] });
+
+  const customerToken = createSessionToken({
+    accountId: TEST_ACCOUNT,
+    userId: 'usr-customer-owner',
+    role: 'owner',
+    isDemo: false,
+  });
+
+  const req = createMockRequest('http://localhost:3001/api/compliance', {
+    method: 'POST',
+    cookie: customerToken,
+    body: {
+      action: 'submit_registration',
+      registrationData: {
+        legal_name: 'Alpha Mechanical LLC',
+        ein: '88-7654321',
+        business_type: 'LLC',
+        address: '100 Main St, Chicago, IL 60601',
+      },
+    },
+  });
+
+  const res = await compliancePost(req);
+  assert.equal(res.status, 200, 'Valid submission must succeed with 200');
+
+  const data = await res.json();
+  assert.equal(data.compliance.status, 'brand_submitted');
+  assert.equal(data.compliance.brand_sid, null, 'brand_sid must stay null (no clock-derived identifier)');
+  assert.equal(data.compliance.campaign_sid, null, 'campaign_sid must stay null');
+  assert.equal(data.compliance.last_updated_by, 'customer');
+
+  // Verify in database directly
+  const comp = db.getCompliance(TEST_ACCOUNT);
+  assert.equal(comp?.brand_sid, null, 'Database brand_sid must be null');
+  assert.equal(comp?.campaign_sid, null, 'Database campaign_sid must be null');
+});
+
+test('T15-3: Provenance and Status are Server-Assigned, Never from Caller', async () => {
+  db.updateCompliance(TEST_ACCOUNT, { status: 'signed_up', status_history: [] });
+
+  const customerToken = createSessionToken({
+    accountId: TEST_ACCOUNT,
+    userId: 'usr-customer-owner',
+    role: 'owner',
+    isDemo: false,
+  });
+
+  // Attempt to supply last_updated_by and status at the request root
+  const req = createMockRequest('http://localhost:3001/api/compliance', {
+    method: 'POST',
+    cookie: customerToken,
+    body: {
+      action: 'submit_registration',
+      status: 'sms_live', // Root-level injection attempt
+      last_updated_by: 'carrier_webhook', // Root-level injection attempt
+      registrationData: {
+        legal_name: 'Alpha Mechanical LLC',
+        ein: '88-7654321',
+        business_type: 'LLC',
+      },
+    },
+  });
+
+  const res = await compliancePost(req);
+  assert.equal(res.status, 200, 'Valid registration payload must succeed');
+
+  const data = await res.json();
+  assert.equal(data.compliance.status, 'brand_submitted', 'Status must be server-assigned brand_submitted');
+  assert.equal(data.compliance.last_updated_by, 'customer', 'Provenance must be server-assigned customer');
+
+  const comp = db.getCompliance(TEST_ACCOUNT);
+  assert.equal(comp?.status, 'brand_submitted');
+  assert.equal(comp?.last_updated_by, 'customer');
+});
+
+test('T15-4: Missing Required Payload Fields Named with 400', async () => {
+  db.updateCompliance(TEST_ACCOUNT, { status: 'signed_up', status_history: [] });
+
+  const customerToken = createSessionToken({
+    accountId: TEST_ACCOUNT,
+    userId: 'usr-customer-owner',
+    role: 'owner',
+    isDemo: false,
+  });
+
+  const req = createMockRequest('http://localhost:3001/api/compliance', {
+    method: 'POST',
+    cookie: customerToken,
+    body: {
+      action: 'submit_registration',
+      registrationData: {
+        legal_name: 'Alpha Mechanical LLC',
+        // ein is missing
+        // business_type is missing
+      },
+    },
+  });
+
+  const res = await compliancePost(req);
+  assert.equal(res.status, 400, 'Payload with missing required fields must return 400');
+
+  const data = await res.json();
+  assert.ok(Array.isArray(data.missing), 'Response must include missing array');
+  assert.deepEqual(data.missing.sort(), ['business_type', 'ein'].sort());
+  assert.match(data.error, /Missing required registration fields/);
+
+  // Clean up TEST_ACCOUNT compliance back to pristine signed_up
+  db.updateCompliance(TEST_ACCOUNT, { status: 'signed_up', status_history: [] });
+});
+

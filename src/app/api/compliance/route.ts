@@ -8,9 +8,21 @@ import {
   isCarrierControlledStatus,
 } from '@/lib/compliance-machine';
 import { requireTenantAuth, AuthenticatedContext } from '@/lib/authz';
-import { ComplianceProvenance, ComplianceStatus } from '@/types';
+import { ComplianceProvenance, ComplianceStatus, ComplianceRegistration } from '@/types';
 
 const BURNED_CARRIER_SECRET = 'mcr-carrier-webhook-secret-2026';
+
+const REGISTRATION_WHITELIST = new Set([
+  'legal_name',
+  'ein',
+  'business_type',
+  'address',
+  'website',
+  'contact_name',
+  'contact_email',
+  'contact_phone',
+  'sample_messages',
+]);
 
 export async function GET(req: NextRequest) {
   try {
@@ -240,9 +252,65 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const extraUpdates: any = {
-        ...(registrationData || {}),
-        brand_sid: `BN_${Date.now().toString(36)}`,
+      if (!registrationData || typeof registrationData !== 'object' || Array.isArray(registrationData)) {
+        return NextResponse.json(
+          { error: 'registrationData object is required' },
+          { status: 400 }
+        );
+      }
+
+      // Acceptance criterion 1: Whitelist enforcement
+      const rejected = Object.keys(registrationData).filter(
+        (key) => !REGISTRATION_WHITELIST.has(key)
+      );
+
+      if (rejected.length > 0) {
+        return NextResponse.json(
+          {
+            error: `These fields are not yours to set: ${rejected.join(', ')}. A carrier decides brand and campaign identifiers and approval status — supply your business identity and we submit it.`,
+            rejected,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Acceptance criterion 4: Validate submitted payload only (never merged with stored record), naming each missing field
+      const missing: string[] = [];
+      if (!registrationData.legal_name || typeof registrationData.legal_name !== 'string' || !registrationData.legal_name.trim()) {
+        missing.push('legal_name');
+      }
+      if (!registrationData.ein || typeof registrationData.ein !== 'string' || !registrationData.ein.trim()) {
+        missing.push('ein');
+      }
+      if (!registrationData.business_type || typeof registrationData.business_type !== 'string' || !registrationData.business_type.trim()) {
+        missing.push('business_type');
+      }
+
+      if (missing.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Missing required registration fields: ${missing.join(', ')}`,
+            missing,
+          },
+          { status: 400 }
+        );
+      }
+
+      // Acceptance criterion 2 & 3: Delete every synthesized identifier.
+      // brand_sid and campaign_sid stay null.
+      // Provenance and status assigned strictly by writer, never from caller.
+      const cleanUpdates: Partial<ComplianceRegistration> = {
+        legal_name: registrationData.legal_name.trim(),
+        ein: registrationData.ein.trim(),
+        business_type: registrationData.business_type.trim(),
+        address: typeof registrationData.address === 'string' ? registrationData.address.trim() : undefined,
+        website: typeof registrationData.website === 'string' ? registrationData.website.trim() : undefined,
+        contact_name: typeof registrationData.contact_name === 'string' ? registrationData.contact_name.trim() : undefined,
+        contact_email: typeof registrationData.contact_email === 'string' ? registrationData.contact_email.trim() : undefined,
+        contact_phone: typeof registrationData.contact_phone === 'string' ? registrationData.contact_phone.trim() : undefined,
+        sample_messages: Array.isArray(registrationData.sample_messages) ? registrationData.sample_messages : [],
+        brand_sid: null,
+        campaign_sid: null,
       };
 
       comp = db.recordComplianceTransition(
@@ -251,9 +319,10 @@ export async function POST(req: NextRequest) {
         'customer',
         actorId,
         'Customer submitted business details for 10DLC brand registration',
-        extraUpdates
+        cleanUpdates
       );
 
+      // Acceptance criterion 5: The record returned to customer reads brand_submitted, brand_sid: null, last_updated_by: 'customer'
       return NextResponse.json({ success: true, compliance: comp });
     }
 
@@ -268,12 +337,46 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const cleanUpdates: Partial<ComplianceRegistration> = {
+        brand_sid: null,
+        campaign_sid: null,
+        rejection_reason: undefined,
+      };
+
+      if (registrationData && typeof registrationData === 'object' && !Array.isArray(registrationData)) {
+        // Whitelist enforcement on resubmission
+        const rejected = Object.keys(registrationData).filter(
+          (key) => !REGISTRATION_WHITELIST.has(key)
+        );
+
+        if (rejected.length > 0) {
+          return NextResponse.json(
+            {
+              error: `These fields are not yours to set: ${rejected.join(', ')}. A carrier decides brand and campaign identifiers and approval status — supply your business identity and we submit it.`,
+              rejected,
+            },
+            { status: 400 }
+          );
+        }
+
+        if (registrationData.legal_name) cleanUpdates.legal_name = String(registrationData.legal_name).trim();
+        if (registrationData.ein) cleanUpdates.ein = String(registrationData.ein).trim();
+        if (registrationData.business_type) cleanUpdates.business_type = String(registrationData.business_type).trim();
+        if (registrationData.address) cleanUpdates.address = String(registrationData.address).trim();
+        if (registrationData.website) cleanUpdates.website = String(registrationData.website).trim();
+        if (registrationData.contact_name) cleanUpdates.contact_name = String(registrationData.contact_name).trim();
+        if (registrationData.contact_email) cleanUpdates.contact_email = String(registrationData.contact_email).trim();
+        if (registrationData.contact_phone) cleanUpdates.contact_phone = String(registrationData.contact_phone).trim();
+        if (Array.isArray(registrationData.sample_messages)) cleanUpdates.sample_messages = registrationData.sample_messages;
+      }
+
       comp = db.recordComplianceTransition(
         accountId,
         'brand_submitted',
         'customer',
         actorId,
-        'Customer corrected details and resubmitted for carrier vetting'
+        'Customer corrected details and resubmitted for carrier vetting',
+        cleanUpdates
       );
 
       return NextResponse.json({ success: true, compliance: comp });
@@ -303,10 +406,8 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const extraUpdates: any = {};
-      if (nextStatus === 'campaign_submitted' && !comp?.campaign_sid) {
-        extraUpdates.campaign_sid = `CM_${Date.now().toString(36)}`;
-      }
+      // Acceptance criterion 2: Delete every synthesized identifier. No CM_${Date.now()}, brand_sid/campaign_sid stay null
+      const extraUpdates: Partial<ComplianceRegistration> = {};
 
       comp = db.recordComplianceTransition(
         accountId,
