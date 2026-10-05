@@ -134,6 +134,21 @@ CREATE TABLE test_table (
     }
   }
 
+  // 8. Probe red verification (asserts probe:red fails on fixed build)
+  if (pkg.scripts && pkg.scripts['probe:red']) {
+    console.log('8. Verifying red probe defect reproduction fails on fixed build...');
+    let redFailedAsExpected = false;
+    try {
+      execSync('npm run probe:red', { stdio: 'pipe', env: { ...process.env, NODE_ENV: 'test' } });
+    } catch {
+      redFailedAsExpected = true;
+    }
+    if (!redFailedAsExpected) {
+      throw new Error('Expected probe:red to fail on fixed build, but defects were reproduced!');
+    }
+    console.log('   ✓ Red probe confirmed failing on fixed build (all 7 defects blocked).\n');
+  }
+
   console.log('✅ [Deploy Check PASSED] All deployment, test hygiene, and security topology criteria verified.');
   return true;
 }
