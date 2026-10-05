@@ -298,6 +298,7 @@ export interface ComplianceRegistration {
   rejection_reason?: string;
   sample_messages: string[];
   last_updated_by?: ComplianceProvenance;
+  carrier_source?: 'carrier_api' | 'operator_recorded' | 'carrier_webhook' | 'demo' | string | null;
   status_history?: ComplianceHistoryEntry[];
   created_at: string;
   updated_at: string;

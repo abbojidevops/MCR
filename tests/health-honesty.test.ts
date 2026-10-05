@@ -91,8 +91,11 @@ test('H3: Operator Authentication Detailed Diagnostic Exposure', async () => {
 test('H4: Compliance Subsystem Honesty — Not Claimed Healthy on Config Alone', async () => {
   // Ensure non-demo account does not have carrier-asserted live registration
   db.updateCompliance('acc-coolbreeze-hvac', {
-    status: 'campaign_approved',
+    status: 'signed_up',
     last_updated_by: 'admin',
+    carrier_source: 'demo',
+    brand_sid: null,
+    campaign_sid: null,
   });
 
   const adminToken = createSessionToken({
@@ -120,13 +123,18 @@ test('H4: Compliance Subsystem Honesty — Not Claimed Healthy on Config Alone',
 });
 
 test('H5: Compliance Subsystem Reports Healthy Once Carrier Asserts sms_live on Non-Demo Tenant', async () => {
-  // Simulate carrier asserting sms_live via webhook on non-demo tenant
+  // Simulate carrier asserting sms_live via webhook on non-demo tenant with valid 32-hex identifiers
   db.recordComplianceTransition(
     'acc-coolbreeze-hvac',
     'sms_live',
     'carrier_webhook',
     'tcr_carrier_webhook',
-    'Carrier vetting approved and 10DLC live'
+    'Carrier vetting approved and 10DLC live',
+    {
+      carrier_source: 'carrier_webhook',
+      brand_sid: 'BN0123456789abcdef0123456789abcdef',
+      campaign_sid: 'CM0123456789abcdef0123456789abcdef',
+    }
   );
 
   const adminToken = createSessionToken({
@@ -143,9 +151,12 @@ test('H5: Compliance Subsystem Reports Healthy Once Carrier Asserts sms_live on 
   const compliance = body.checks.compliance;
   assert.equal(compliance.status, 'healthy', 'Compliance must report healthy when carrier has asserted sms_live');
 
-  // Reset back to pre-test state
+  // Reset back to pristine seed state
   db.updateCompliance('acc-coolbreeze-hvac', {
-    status: 'campaign_approved',
+    status: 'signed_up',
     last_updated_by: 'admin',
+    carrier_source: 'demo',
+    brand_sid: null,
+    campaign_sid: null,
   });
 });

@@ -6,6 +6,7 @@ import { db } from '@/db/repository';
 import { evaluateLaunchGates, LaunchGateReport } from '@/lib/launch-gate';
 import { createFixtureTracker } from '@/lib/test-hygiene';
 import { hashPasswordSync } from '@/lib/auth/password';
+import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 const tracker = createFixtureTracker();
 
@@ -160,9 +161,13 @@ test('G4: Dynamic Dual-Sided Stability Under Legitimate Database Changes', () =>
   const subGateBefore = evaluateLaunchGates().gates.find((g) => g.id === 'three_paying_customers')!;
   assert.equal(subGateBefore.status, 'failed', 'Initially fewer than 3 paying non-demo customers');
 
-  // Add 3 non-demo paying subscriptions
+  // Add 3 non-demo paying subscriptions with real non-demo accounts
+  const a1 = tracker.createAccount('Pilot 1', 'plumbing', '+12175550991');
+  const a2 = tracker.createAccount('Pilot 2', 'hvac', '+12175550992');
+  const a3 = tracker.createAccount('Pilot 3', 'electrical', '+12175550993');
+
   const sub1 = db.createSubscription({
-    account_id: 'acc-pilot-1',
+    account_id: a1.account.id,
     plan_id: 'pro',
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -170,7 +175,7 @@ test('G4: Dynamic Dual-Sided Stability Under Legitimate Database Changes', () =>
     cancel_at_period_end: false,
   });
   const sub2 = db.createSubscription({
-    account_id: 'acc-pilot-2',
+    account_id: a2.account.id,
     plan_id: 'pro',
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -178,7 +183,7 @@ test('G4: Dynamic Dual-Sided Stability Under Legitimate Database Changes', () =>
     cancel_at_period_end: false,
   });
   const sub3 = db.createSubscription({
-    account_id: 'acc-pilot-3',
+    account_id: a3.account.id,
     plan_id: 'business',
     status: 'active',
     current_period_start: new Date().toISOString(),
@@ -189,7 +194,7 @@ test('G4: Dynamic Dual-Sided Stability Under Legitimate Database Changes', () =>
   const repSubsPassed = evaluateLaunchGates();
   const subGateAfter = repSubsPassed.gates.find((g) => g.id === 'three_paying_customers')!;
   assert.equal(subGateAfter.status, 'passed', 'With 3 paying subscriptions, gate passes');
-  assert.ok(subGateAfter.evidence?.tenantId?.includes('acc-pilot-1'));
+  assert.ok(subGateAfter.evidence?.tenantId?.includes(a1.account.id));
   assert.ok(subGateAfter.evidence?.recordId?.includes(sub1.id));
 
   // Clean up subscriptions
@@ -207,3 +212,146 @@ test('G4: Dynamic Dual-Sided Stability Under Legitimate Database Changes', () =>
   }
   tracker.cleanup();
 });
+
+// ============================================================================
+// TASK 17 — Carrier Gate Hardening & Flag-Based Verification Tests
+// ============================================================================
+
+test('T17-1: Committed Seed Data Starts Honest and Fails Carrier Gate ("seeded row cannot pass" test)', () => {
+  const report = evaluateLaunchGates();
+  const carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+
+  assert.ok(carrierGate, 'a2p_10dlc_carrier_verified gate must exist');
+  assert.equal(carrierGate.status, 'failed', 'Clean repository clone must start RED for carrier gate');
+  assert.match(
+    carrierGate.evidence?.details || '',
+    /No non-demo accounts have carrier-asserted.*approved status/i,
+    'Evidence details must state shortfall in carrier verification'
+  );
+
+  // Directly verify every seeded compliance record in committed DB fails carrier predicate
+  const compliances = db.getAllCompliance();
+  for (const comp of compliances) {
+    const acc = db.getAccount(comp.account_id);
+    assert.equal(
+      isCarrierVerifiedRegistration(comp, acc),
+      false,
+      `Seeded compliance ${comp.id} for account ${comp.account_id} must NOT satisfy carrier predicate`
+    );
+  }
+});
+
+test('T17-2: Gate Reads is_demo Flag, Not account_id Substring (No Demo Substring Bypass)', () => {
+  // Account ID contains NO "demo" substring, but is_demo flag is true
+  const created = tracker.createAccount('Flag Bypass Contractor', 'plumbing', '+12175550881');
+  const accId = created.account.id;
+  db.updateAccount(accId, { is_demo: true });
+
+  // Add carrier-approved compliance record with 32-hex identifiers and carrier_api provenance
+  db.recordComplianceTransition(
+    accId,
+    'campaign_approved',
+    'carrier_webhook',
+    'tcr_carrier_webhook',
+    'Carrier approved campaign',
+    {
+      carrier_source: 'carrier_api',
+      brand_sid: 'BN0123456789abcdef0123456789abcdef',
+      campaign_sid: 'CM0123456789abcdef0123456789abcdef',
+    }
+  );
+
+  // The gate must FAIL because account.is_demo is true (even though accountId has no 'demo' substring)
+  const report = evaluateLaunchGates();
+  const carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGate.status, 'failed', 'Gate must reject demo account despite account_id not including demo substring');
+
+  // Verify predicate directly returns false
+  const comp = db.getCompliance(accId);
+  const acc = db.getAccount(accId);
+  assert.equal(isCarrierVerifiedRegistration(comp, acc), false);
+
+  tracker.cleanup();
+});
+
+test('T17-3: Gate Rejects Seed-Shaped Records Lacking Carrier Provenance or 32-Hex Identifiers ("seed-shaped record cannot pass" test)', () => {
+  const created = tracker.createAccount('Non-Demo Contractor', 'hvac', '+12175550882');
+  const accId = created.account.id;
+  db.updateAccount(accId, { is_demo: false });
+
+  // Case A: carrier_source is 'demo' -> Gate must fail
+  db.recordComplianceTransition(
+    accId,
+    'campaign_approved',
+    'admin',
+    'tcr_admin',
+    'Manual approval',
+    {
+      carrier_source: 'demo',
+      brand_sid: 'BN0123456789abcdef0123456789abcdef',
+      campaign_sid: 'CM0123456789abcdef0123456789abcdef',
+    }
+  );
+  let report = evaluateLaunchGates();
+  let carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGate.status, 'failed', 'Gate must reject carrier_source: demo');
+
+  // Case B: provenance customer / admin without carrier provenance -> Gate must fail
+  db.updateCompliance(accId, {
+    carrier_source: null,
+    last_updated_by: 'customer',
+  });
+  report = evaluateLaunchGates();
+  carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGate.status, 'failed', 'Gate must reject customer-written record');
+
+  // Case C: Non-hex identifiers (e.g. clock-synthesized or non-32-hex) -> Gate must fail
+  db.updateCompliance(accId, {
+    carrier_source: 'carrier_api',
+    brand_sid: 'BN_clock_synthesized_id',
+    campaign_sid: 'CM_invalid_short',
+  });
+  report = evaluateLaunchGates();
+  carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGate.status, 'failed', 'Gate must reject invalid identifier shapes');
+
+  tracker.cleanup();
+});
+
+test('T17-4: Carrier-Asserted Verification Passes and Evidence Traces All Fields', () => {
+  const created = tracker.createAccount('Authentic Live Contractor', 'plumbing', '+12175550883');
+  const accId = created.account.id;
+  db.updateAccount(accId, { is_demo: false });
+
+  const brandSid = 'BN0123456789abcdef0123456789abcdef';
+  const campaignSid = 'CM0123456789abcdef0123456789abcdef';
+
+  const trans = db.recordComplianceTransition(
+    accId,
+    'campaign_approved',
+    'carrier_webhook',
+    'tcr_carrier_webhook',
+    'TCR campaign verified and approved',
+    {
+      carrier_source: 'carrier_api',
+      brand_sid: brandSid,
+      campaign_sid: campaignSid,
+    }
+  );
+
+  const report = evaluateLaunchGates();
+  const carrierGate = report.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGate.status, 'passed', 'Authentic carrier-verified non-demo account passes gate');
+
+  // Acceptance Criterion 4: Evidence names the account, the record, the provenance source and timestamp
+  assert.ok(carrierGate.evidence, 'Evidence must exist');
+  assert.equal(carrierGate.evidence.tenantId, accId, 'Evidence must name tenantId');
+  assert.equal(carrierGate.evidence.recordId, trans.id, 'Evidence must name recordId');
+  assert.ok(carrierGate.evidence.timestamp, 'Evidence must name timestamp');
+  assert.ok(carrierGate.evidence.details.includes('carrier_api'), 'Evidence must name provenance source');
+  assert.ok(carrierGate.evidence.details.includes(brandSid), 'Evidence must name brand_sid');
+  assert.ok(carrierGate.evidence.details.includes(campaignSid), 'Evidence must name campaign_sid');
+
+  tracker.cleanup();
+});
+

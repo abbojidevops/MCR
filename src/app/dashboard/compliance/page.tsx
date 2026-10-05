@@ -12,7 +12,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { ComplianceRegistration } from '@/types';
-import { COMPLIANCE_STATES } from '@/lib/compliance-machine';
+import { COMPLIANCE_STATES, isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 export default function CompliancePage() {
   const [compliance, setCompliance] = useState<ComplianceRegistration | null>(null);
@@ -100,8 +100,24 @@ export default function CompliancePage() {
           </div>
         )}
 
-        <div className="mt-3 text-[11px] text-slate-400">
-          Carrier provenance: <span className="font-semibold text-slate-600">{compliance?.last_updated_by ? compliance.last_updated_by.replace('_', ' ') : 'carrier network'}</span>
+        <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
+          <div>
+            Carrier provenance:{' '}
+            <span className="font-semibold text-slate-600">
+              {compliance?.carrier_source || (compliance?.last_updated_by ? compliance.last_updated_by.replace('_', ' ') : 'unverified')}
+            </span>
+          </div>
+          <div>
+            {isCarrierVerifiedRegistration(compliance, false) ? (
+              <span className="inline-flex items-center gap-1 font-bold text-emerald-600">
+                <CheckCircle className="h-3 w-3" /> Carrier Verified (TCR Approved)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-medium text-amber-600">
+                <Clock className="h-3 w-3" /> Carrier Verification Pending
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Step-by-step progress visual */}

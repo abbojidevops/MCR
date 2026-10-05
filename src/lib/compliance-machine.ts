@@ -171,3 +171,72 @@ export function isValidTransition(from: ComplianceStatus, to: ComplianceStatus):
   }
 }
 
+export const CARRIER_ASSERTED_SOURCES = new Set<string>([
+  'carrier_api',
+  'operator_recorded',
+  'carrier_webhook',
+]);
+
+// Identifier shape: BN + 32 hex chars; (CM|QE) + 32 hex chars
+export const BRAND_SID_REGEX = /^BN[0-9a-fA-F]{32}$/;
+export const CAMPAIGN_SID_REGEX = /^(CM|QE)[0-9a-fA-F]{32}$/;
+
+export interface CarrierVerificationRecord {
+  status?: ComplianceStatus | string | null;
+  carrier_source?: string | null;
+  last_updated_by?: string | null;
+  brand_sid?: string | null;
+  campaign_sid?: string | null;
+  account_id?: string;
+}
+
+/**
+ * Canonical exported predicate for carrier-asserted regulatory compliance (Task 17).
+ * Criteria required to pass:
+ * 1. Non-demo account (!account.is_demo)
+ * 2. Status in approved carrier states: campaign_approved, number_linked, sms_live
+ * 3. Provenance carrier-asserted: carrier_source in {carrier_api, operator_recorded, carrier_webhook}
+ *    (or last_updated_by === 'carrier_webhook' if carrier_source is omitted)
+ * 4. Identifier shape: brand_sid matches BN + 32 hex; campaign_sid matches (CM|QE) + 32 hex
+ */
+export function isCarrierVerifiedRegistration(
+  comp: CarrierVerificationRecord | null | undefined,
+  accountOrIsDemo?: { is_demo?: boolean } | boolean | null
+): boolean {
+  if (!comp) return false;
+
+  // 1. Account must be non-demo
+  const isDemo =
+    typeof accountOrIsDemo === 'boolean'
+      ? accountOrIsDemo
+      : accountOrIsDemo
+      ? Boolean(accountOrIsDemo.is_demo)
+      : false;
+  if (isDemo) return false;
+
+  // 2. Status must be carrier approved / live
+  const validStatuses = new Set(['campaign_approved', 'number_linked', 'sms_live']);
+  if (!comp.status || !validStatuses.has(comp.status)) {
+    return false;
+  }
+
+  // 3. Provenance must be carrier-asserted:
+  // carrier_source in {carrier_api, operator_recorded, carrier_webhook}
+  // (also honoring last_updated_by === 'carrier_webhook' if carrier_source omitted)
+  const source = comp.carrier_source || (comp.last_updated_by === 'carrier_webhook' ? 'carrier_webhook' : null);
+  if (!source || !CARRIER_ASSERTED_SOURCES.has(source)) {
+    return false;
+  }
+
+  // 4. Identifier shape: BN + 32 hex; (CM|QE) + 32 hex
+  if (!comp.brand_sid || !BRAND_SID_REGEX.test(comp.brand_sid)) {
+    return false;
+  }
+  if (!comp.campaign_sid || !CAMPAIGN_SID_REGEX.test(comp.campaign_sid)) {
+    return false;
+  }
+
+  return true;
+}
+
+

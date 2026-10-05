@@ -271,6 +271,14 @@ class DatabaseRepository {
     return profile;
   }
 
+  public updateAccount(accountId: string, updates: Partial<Account>): Account | null {
+    const account = this.state.accounts.find((a) => a.id === accountId);
+    if (!account) return null;
+    Object.assign(account, updates, { updated_at: new Date().toISOString() });
+    this.saveToFile();
+    return account;
+  }
+
 
   public createAccount(
     name: string,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { getSession } from '@/lib/session';
+import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 export async function GET(req: NextRequest) {
   // 1. Operator session check
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   const nonDemoAccounts = allAccounts.filter((a) => !a.is_demo);
   const liveNonDemo = nonDemoAccounts.filter((a) => {
     const comp = db.getCompliance(a.id);
-    return comp && comp.status === 'sms_live' && comp.last_updated_by === 'carrier_webhook';
+    return Boolean(comp && comp.status === 'sms_live' && isCarrierVerifiedRegistration(comp, a));
   });
 
   const totalCalls = allAccounts.reduce((sum, a) => sum + db.getCallRecords(a.id).length, 0);

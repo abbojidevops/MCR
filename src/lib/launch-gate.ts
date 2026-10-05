@@ -1,6 +1,7 @@
 import { db } from '@/db/repository';
 import { verifyPasswordSync } from '@/lib/auth/password';
 import { checkQuietHours } from '@/lib/quiet-hours';
+import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 export type GateStatus = 'passed' | 'failed' | 'manual';
 
@@ -97,9 +98,11 @@ export function evaluateLaunchGates(): LaunchGateReport {
   // Gate 2: Three Paying Pilot Customers (Live Subscriptions)
   // ==========================================================================
   const subscriptions = db.getAllSubscriptions();
-  const payingSubs = subscriptions.filter(
-    (s) => s.status === 'active' && !s.account_id.includes('demo')
-  );
+  const payingSubs = subscriptions.filter((s) => {
+    if (s.status !== 'active') return false;
+    const account = db.getAccount(s.account_id);
+    return account ? !account.is_demo : false;
+  });
 
   if (payingSubs.length >= 3) {
     gates.push({
@@ -134,13 +137,22 @@ export function evaluateLaunchGates(): LaunchGateReport {
 
   // ==========================================================================
   // Gate 3: A2P 10DLC Carrier Registration Verified (Live Compliance)
+  // Must satisfy canonical isCarrierVerifiedRegistration predicate:
+  // - carrier_source in {carrier_api, operator_recorded, carrier_webhook}
+  // - non-demo account (!account.is_demo)
+  // - valid identifier shapes: BN + 32 hex; (CM|QE) + 32 hex
   // ==========================================================================
   const compliances = db.getAllCompliance();
-  const verifiedCarrierComp = compliances.find(
-    (c) => (c.status === 'campaign_approved' || c.status === 'brand_approved') && !c.account_id.includes('demo')
-  );
+  const verifiedCarrierComp = compliances.find((c) => {
+    const account = db.getAccount(c.account_id);
+    return isCarrierVerifiedRegistration(c, account);
+  });
 
   if (verifiedCarrierComp) {
+    const provenanceSource =
+      verifiedCarrierComp.carrier_source ||
+      verifiedCarrierComp.last_updated_by ||
+      'carrier_webhook';
     gates.push({
       id: 'a2p_10dlc_carrier_verified',
       label: 'A2P 10DLC registration verified with TCR',
@@ -153,7 +165,7 @@ export function evaluateLaunchGates(): LaunchGateReport {
         tenantId: verifiedCarrierComp.account_id,
         recordId: verifiedCarrierComp.id,
         timestamp: verifiedCarrierComp.updated_at,
-        details: `TCR carrier campaign approved for ${verifiedCarrierComp.legal_name}`,
+        details: `TCR carrier campaign approved for ${verifiedCarrierComp.legal_name} (provenance: ${provenanceSource}, brand: ${verifiedCarrierComp.brand_sid}, campaign: ${verifiedCarrierComp.campaign_sid})`,
       },
     });
   } else {
@@ -164,9 +176,9 @@ export function evaluateLaunchGates(): LaunchGateReport {
       description: 'Brand vetting and campaign submission confirmed with The Campaign Registry.',
       isManual: false,
       status: 'failed',
-      statusReason: 'A2P 10DLC registration unsubmitted or pending TCR carrier vetting',
+      statusReason: 'No carrier-asserted A2P 10DLC registration verified in compliance records',
       evidence: {
-        details: 'No non-demo accounts have approved A2P 10DLC carrier status in compliance table',
+        details: 'No non-demo accounts have carrier-asserted (carrier_api / operator_recorded / carrier_webhook) approved status with valid TCR identifier shapes in compliance table',
       },
     });
   }
