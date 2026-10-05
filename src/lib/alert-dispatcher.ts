@@ -39,20 +39,32 @@ export async function dispatchAlert(alert: AlertPayload): Promise<AlertDispatchR
 
   // 2. Webhook Dispatch (if configured)
   const webhookUrl = process.env.ALERT_WEBHOOK_URL;
-  if (webhookUrl && webhookUrl.startsWith('http')) {
+  if (webhookUrl && (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))) {
     try {
-      await fetch(webhookUrl, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(webhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-MCR-Alert-Level': alert.level,
+          'User-Agent': 'MCR-Alert-Dispatcher/1.0',
+        },
         body: JSON.stringify({
           alertId,
           ...alert,
           timestamp,
         }),
+        signal: controller.signal,
       });
-      return { dispatched: true, channel: 'webhook', alertId, timestamp };
-    } catch (err) {
-      console.error(`[AlertDispatcher] Failed to send webhook to ${webhookUrl}:`, err);
+      clearTimeout(timeout);
+      if (res.ok) {
+        return { dispatched: true, channel: 'webhook', alertId, timestamp };
+      } else {
+        console.warn(`[AlertDispatcher] Webhook returned non-200 status: ${res.status}`);
+      }
+    } catch (err: any) {
+      console.error(`[AlertDispatcher] Failed to send webhook to ${webhookUrl}:`, err?.message);
     }
   }
 
@@ -69,4 +81,56 @@ export async function dispatchAlert(alert: AlertPayload): Promise<AlertDispatchR
  */
 export function isAlertDispatcherActive(): boolean {
   return typeof dispatchAlert === 'function';
+}
+
+/**
+ * Returns live status of the alert dispatching subsystem.
+ */
+export function getAlertDispatcherStatus(): {
+  active: boolean;
+  webhookConfigured: boolean;
+  webhookUrl?: string;
+  totalAlertsDispatched: number;
+  lastAlert?: any;
+} {
+  const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+  const webhookConfigured = Boolean(
+    webhookUrl &&
+    (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://')) &&
+    !webhookUrl.includes('placeholder')
+  );
+
+  const alertAudits = db.getAuditLogs().filter((a) => a.action === 'ALERT_DISPATCHED');
+  const lastAlert = alertAudits.length > 0 ? alertAudits[0] : undefined;
+
+  return {
+    active: isAlertDispatcherActive(),
+    webhookConfigured,
+    webhookUrl: webhookConfigured ? webhookUrl : undefined,
+    totalAlertsDispatched: alertAudits.length,
+    lastAlert,
+  };
+}
+
+/**
+ * Retrieves all recorded dispatched alerts from audit logs.
+ */
+export function getDispatchedAlerts(accountId?: string) {
+  const audits = db.getAuditLogs(accountId).filter((a) => a.action === 'ALERT_DISPATCHED');
+  return audits.map((a) => ({
+    auditId: a.id,
+    accountId: a.accountId,
+    timestamp: a.timestamp,
+    ...a.details,
+  }));
+}
+
+/**
+ * Clears dispatched alerts from audit logs (for test teardowns).
+ */
+export function clearDispatchedAlerts(): void {
+  const audits = db.getAuditLogs().filter((a) => a.action === 'ALERT_DISPATCHED');
+  for (const a of audits) {
+    db.deleteAuditLog(a.id);
+  }
 }

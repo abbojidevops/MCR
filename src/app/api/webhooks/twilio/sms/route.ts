@@ -4,6 +4,7 @@ import {
   TwilioSmsWebhookParams,
   getCandidateWebhookUrls,
 } from '@/lib/telecom/twilio-service';
+import { dispatchAlert } from '@/lib/alert-dispatcher';
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,6 +32,13 @@ export async function POST(req: NextRequest) {
     const isValid = TwilioService.validateSignature(authToken, signature, candidateUrls, params);
     if (!isValid) {
       console.warn('Twilio SMS Webhook: Refused forged/unsigned request (403)');
+      dispatchAlert({
+        level: 'warning',
+        source: 'twilio_sms_webhook',
+        title: 'Forged/Unsigned Twilio SMS Request Refused',
+        message: `Unauthorized SMS webhook request from IP ${req.headers.get('x-forwarded-for') || 'unknown'}`,
+        metadata: { messageSid: params.MessageSid, from: params.From, to: params.To },
+      }).catch(() => {});
       return new NextResponse('Forbidden: Invalid Twilio Webhook Signature', { status: 403 });
     }
 
@@ -59,6 +67,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error('Error in Twilio SMS Webhook:', error);
+    dispatchAlert({
+      level: 'error',
+      source: 'twilio_sms_webhook',
+      title: 'Twilio SMS Inbound Processing Error',
+      message: error?.message || 'Unknown SMS webhook exception',
+      metadata: { error: String(error?.stack || error) },
+    }).catch(() => {});
     return new NextResponse('<Response/>', {
       status: 500,
       headers: { 'Content-Type': 'text/xml' },

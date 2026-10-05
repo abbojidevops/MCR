@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { verifyStripeSignature, processStripeWebhookEvent } from '@/lib/stripe';
+import { dispatchAlert } from '@/lib/alert-dispatcher';
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,10 +12,22 @@ export async function POST(req: NextRequest) {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (webhookSecret && process.env.NODE_ENV === 'production' && process.env.STRIPE_LIVE === 'true') {
       if (!signature) {
+        dispatchAlert({
+          level: 'warning',
+          source: 'stripe_webhook',
+          title: 'Missing Stripe Webhook Signature',
+          message: 'Stripe webhook received without stripe-signature header',
+        }).catch(() => {});
         return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
       }
       const isValid = verifyStripeSignature(rawBody, signature, webhookSecret);
       if (!isValid) {
+        dispatchAlert({
+          level: 'warning',
+          source: 'stripe_webhook',
+          title: 'Invalid Stripe Webhook Signature',
+          message: 'Stripe webhook signature validation failed (possible forgery)',
+        }).catch(() => {});
         return NextResponse.json({ error: 'Invalid stripe-signature' }, { status: 400 });
       }
     }
@@ -48,6 +61,13 @@ export async function POST(req: NextRequest) {
     }, { status: 200 });
   } catch (err: any) {
     console.error('Error handling Stripe webhook:', err);
+    dispatchAlert({
+      level: 'error',
+      source: 'stripe_webhook',
+      title: 'Stripe Webhook Processing Exception',
+      message: err?.message || 'Unknown stripe webhook exception',
+      metadata: { error: String(err?.stack || err) },
+    }).catch(() => {});
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

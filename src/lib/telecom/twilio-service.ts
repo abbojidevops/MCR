@@ -7,6 +7,7 @@ import { checkQuietHours, inferTimezoneFromPhone } from '@/lib/quiet-hours';
 import { TradeKey } from '@/types';
 import { checkSubscriptionEntitlement } from '@/lib/billing/entitlement';
 import { TwilioClient } from './twilio-client';
+import { dispatchAlert } from '@/lib/alert-dispatcher';
 
 export interface TwilioVoiceWebhookParams {
   CallSid: string;
@@ -268,6 +269,17 @@ export class TwilioService {
       body: initialMessageBody,
     });
 
+    if (sendRes.status === 'failed') {
+      dispatchAlert({
+        level: 'error',
+        accountId,
+        source: 'telephony_textback_dispatch',
+        title: 'Missed Call Text-Back Outbound Failure',
+        message: `Failed to dispatch text-back to ${From}: ${sendRes.error || 'Carrier dispatch error'}`,
+        metadata: { callId: callRecord.id, from: To, to: From, error: sendRes.error },
+      }).catch(() => {});
+    }
+
     db.addMessage({
       accountId,
       conversationId: conversation.id,
@@ -458,6 +470,19 @@ export class TwilioService {
     const hasEmergencyKeywords = template.emergency_keywords.some((kw) => lowerBody.includes(kw));
     if (hasEmergencyKeywords && !intake.is_emergency) {
       intake.is_emergency = true;
+      dispatchAlert({
+        level: 'critical',
+        accountId,
+        source: 'sms_emergency_keyword_triage',
+        title: '🚨 Emergency Keyword Triage Triggered',
+        message: `Caller ${contact.full_name || From} reported urgent emergency: "${Body}"`,
+        metadata: {
+          conversationId: conversation.id,
+          contactId: contact.id,
+          callerPhone: From,
+          trade: profile?.trade || 'plumbing',
+        },
+      }).catch(() => {});
       db.addNotification({
         account_id: accountId,
         title: '🚨 EMERGENCY KEYWORD DETECTED',

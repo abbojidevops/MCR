@@ -1190,6 +1190,21 @@ class DatabaseRepository {
     return [...this.state.auditLogs];
   }
 
+  public deleteAuditLog(id: string): boolean {
+    const idx = this.state.auditLogs.findIndex((a) => a.id === id);
+    if (idx >= 0) {
+      this.state.auditLogs.splice(idx, 1);
+      this.saveToFile();
+      return true;
+    }
+    return false;
+  }
+
+  public clearAuditLogs(): void {
+    this.state.auditLogs = [];
+    this.saveToFile();
+  }
+
   // --------------------------------------------------------------------------
   // Persistence Health
   // --------------------------------------------------------------------------
