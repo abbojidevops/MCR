@@ -30,7 +30,20 @@ export interface CampaignRegistrationParams {
   sampleMessages: string[];
 }
 
+export interface CarrierSubmissionResult {
+  ok: boolean;
+  status: number;
+  brandSid?: string;
+  campaignSid?: string;
+  is_simulated?: boolean;
+  error?: string;
+}
+
 export class TwilioClient {
+  public static getApiBase(): string {
+    return process.env.TWILIO_API_BASE || 'https://api.twilio.com';
+  }
+
   public static isLive(): boolean {
     return (
       process.env.TWILIO_MOCK_MODE !== 'true' &&
@@ -82,7 +95,7 @@ export class TwilioClient {
 
     const accountSid = process.env.TWILIO_ACCOUNT_SID!;
     const authToken = process.env.TWILIO_AUTH_TOKEN!;
-    const endpoint = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
+    const endpoint = `${this.getApiBase()}/2010-04-01/Accounts/${accountSid}/Messages.json`;
 
     const formData = new URLSearchParams();
     formData.append('To', to);
@@ -130,39 +143,140 @@ export class TwilioClient {
   }
 
   /**
-   * Submit A2P 10DLC Brand Registration to Twilio / The Campaign Registry
+   * Submit A2P 10DLC Brand Registration to Twilio / The Campaign Registry.
+   * In live mode, contacts the carrier API directly.
+   * If the carrier is unreachable or fails, returns { ok: false, status: 0, error: 'carrier unreachable' }.
+   * Never synthesizes an identifier in live mode.
    */
-  public static async submitBrand(params: BrandRegistrationParams): Promise<{ brandSid: string; status: string }> {
+  public static async submitBrand(params: BrandRegistrationParams): Promise<CarrierSubmissionResult> {
     if (!this.isLive()) {
       return {
-        brandSid: `BN_${Date.now().toString(36)}`,
-        status: 'brand_submitted',
+        ok: true,
+        status: 200,
+        brandSid: `BN_MOCK_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`,
+        is_simulated: true,
       };
     }
 
-    // In production with live credentials, call Twilio Messaging Brand API:
-    // POST https://trusthub.twilio.com/v1/CustomerProfiles / TrustProducts
-    return {
-      brandSid: `BN_LIVE_${Date.now().toString(36)}`,
-      status: 'brand_submitted',
-    };
+    const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+    const authToken = process.env.TWILIO_AUTH_TOKEN!;
+    const endpoint = `${this.getApiBase()}/v1/Messaging/BrandRegistrations`;
+
+    try {
+      const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: response.status,
+          error: data?.message || `Carrier returned HTTP ${response.status}`,
+        };
+      }
+
+      const sid = data?.sid || data?.brandSid || data?.brand_sid;
+      if (!sid) {
+        return {
+          ok: false,
+          status: response.status,
+          error: 'Carrier returned 200 but no identifier was provided',
+        };
+      }
+
+      return {
+        ok: true,
+        status: response.status,
+        brandSid: sid,
+      };
+    } catch {
+      return {
+        ok: false,
+        status: 0,
+        error: 'carrier unreachable',
+      };
+    }
   }
 
   /**
-   * Submit A2P 10DLC Campaign Registration to Twilio / The Campaign Registry
+   * Submit A2P 10DLC Campaign Registration to Twilio / The Campaign Registry.
+   * In live mode, contacts the carrier API directly.
+   * If the carrier is unreachable or fails, returns { ok: false, status: 0, error: 'carrier unreachable' }.
+   * Never synthesizes an identifier in live mode.
    */
-  public static async submitCampaign(params: CampaignRegistrationParams): Promise<{ campaignSid: string; status: string }> {
+  public static async submitCampaign(params: CampaignRegistrationParams): Promise<CarrierSubmissionResult> {
     if (!this.isLive()) {
       return {
-        campaignSid: `CP_${Date.now().toString(36)}`,
-        status: 'campaign_submitted',
+        ok: true,
+        status: 200,
+        campaignSid: `CM_MOCK_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`,
+        is_simulated: true,
       };
     }
 
-    // In production with live credentials, call Twilio A2P Campaign API
-    return {
-      campaignSid: `CP_LIVE_${Date.now().toString(36)}`,
-      status: 'campaign_submitted',
-    };
+    const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+    const authToken = process.env.TWILIO_AUTH_TOKEN!;
+    const endpoint = `${this.getApiBase()}/v1/Messaging/Campaigns`;
+
+    try {
+      const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: response.status,
+          error: data?.message || `Carrier returned HTTP ${response.status}`,
+        };
+      }
+
+      const sid = data?.sid || data?.campaignSid || data?.campaign_sid;
+      if (!sid) {
+        return {
+          ok: false,
+          status: response.status,
+          error: 'Carrier returned 200 but no identifier was provided',
+        };
+      }
+
+      return {
+        ok: true,
+        status: response.status,
+        campaignSid: sid,
+      };
+    } catch {
+      return {
+        ok: false,
+        status: 0,
+        error: 'carrier unreachable',
+      };
+    }
   }
 }

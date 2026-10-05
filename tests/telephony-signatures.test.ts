@@ -2,10 +2,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { NextRequest } from 'next/server';
 
 import { db } from '@/db/repository';
 import { TwilioService } from '@/lib/telecom/twilio-service';
+import { TwilioClient } from '@/lib/telecom/twilio-client';
 import { POST as smsWebhookPost } from '@/app/api/webhooks/twilio/sms/route';
 import { POST as voiceWebhookPost } from '@/app/api/webhooks/twilio/voice/route';
 
@@ -239,4 +241,234 @@ test('W8: Cryptographic Unit Assertions (TwilioService.validateSignature)', () =
 
   // 6. Wrong URL fails
   assert.equal(TwilioService.validateSignature(TEST_SECRET, sig, 'https://different.com/webhook', params), false);
+});
+
+test('T19-1: Mock Mode Is Explicit and Unmistakable (is_simulated: true, non-hex prefixes)', async () => {
+  const oldMock = process.env.TWILIO_MOCK_MODE;
+  try {
+    process.env.TWILIO_MOCK_MODE = 'true';
+
+    // 1. Brand submission mock
+    const brandRes = await TwilioClient.submitBrand({
+      legalName: 'Alpha Mechanical LLC',
+      ein: '88-7654321',
+      address: '123 Test St',
+      city: 'Chicago',
+      state: 'IL',
+      zip: '60601',
+      contactEmail: 'owner@alpha.com',
+      contactPhone: '+12175550100',
+    });
+    assert.equal(brandRes.ok, true);
+    assert.equal(brandRes.status, 200);
+    assert.equal(brandRes.is_simulated, true);
+    assert.ok(brandRes.brandSid?.startsWith('BN_MOCK_'));
+    // Must NOT match real carrier hex format (BN + 32 hex)
+    assert.equal(/^BN[0-9a-fA-F]{32}$/.test(brandRes.brandSid!), false);
+
+    // 2. Campaign submission mock
+    const campRes = await TwilioClient.submitCampaign({
+      brandSid: brandRes.brandSid!,
+      description: 'Customer dispatch notices',
+      sampleMessages: ['Hello from Alpha Mechanical'],
+    });
+    assert.equal(campRes.ok, true);
+    assert.equal(campRes.status, 200);
+    assert.equal(campRes.is_simulated, true);
+    assert.ok(campRes.campaignSid?.startsWith('CM_MOCK_'));
+    // Must NOT match real carrier hex format ((CM|QE) + 32 hex)
+    assert.equal(/^(CM|QE)[0-9a-fA-F]{32}$/.test(campRes.campaignSid!), false);
+  } finally {
+    if (oldMock !== undefined) process.env.TWILIO_MOCK_MODE = oldMock;
+    else delete process.env.TWILIO_MOCK_MODE;
+  }
+});
+
+test('T19-2: Live Mode Against Stub Server — Success Returns Carrier\'s Exact ID and Provenance', async () => {
+  const envBackup = {
+    MOCK: process.env.TWILIO_MOCK_MODE,
+    SID: process.env.TWILIO_ACCOUNT_SID,
+    TOKEN: process.env.TWILIO_AUTH_TOKEN,
+    BASE: process.env.TWILIO_API_BASE,
+  };
+
+  let stubServer: http.Server | null = null;
+  let receivedAuthHeader = '';
+
+  try {
+    stubServer = http.createServer((req, res) => {
+      receivedAuthHeader = req.headers.authorization || '';
+      if (req.url === '/v1/Messaging/BrandRegistrations') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          sid: 'BN0123456789abcdef0123456789abcdef',
+          status: 'in_progress',
+        }));
+      } else if (req.url === '/v1/Messaging/Campaigns') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          sid: 'CM0123456789abcdef0123456789abcdef',
+          status: 'in_progress',
+        }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    await new Promise<void>((resolve) => stubServer!.listen(0, '127.0.0.1', resolve));
+    const port = (stubServer.address() as any).port;
+
+    delete process.env.TWILIO_MOCK_MODE;
+    process.env.TWILIO_ACCOUNT_SID = 'AC_test_stub_account';
+    process.env.TWILIO_AUTH_TOKEN = 'test_stub_token_12345';
+    process.env.TWILIO_API_BASE = `http://127.0.0.1:${port}`;
+
+    assert.equal(TwilioClient.isLive(), true);
+
+    // 1. Submit brand
+    const brandRes = await TwilioClient.submitBrand({
+      legalName: 'Alpha Mechanical LLC',
+      ein: '88-7654321',
+      address: '123 Test St',
+      city: 'Chicago',
+      state: 'IL',
+      zip: '60601',
+      contactEmail: 'owner@alpha.com',
+      contactPhone: '+12175550100',
+    });
+    assert.equal(brandRes.ok, true);
+    assert.equal(brandRes.status, 200);
+    assert.equal(brandRes.brandSid, 'BN0123456789abcdef0123456789abcdef');
+    assert.equal(brandRes.is_simulated, undefined);
+    assert.ok(receivedAuthHeader.startsWith('Basic '));
+
+    // 2. Submit campaign
+    const campRes = await TwilioClient.submitCampaign({
+      brandSid: brandRes.brandSid!,
+      description: 'Customer dispatch notices',
+      sampleMessages: ['Hello from Alpha Mechanical'],
+    });
+    assert.equal(campRes.ok, true);
+    assert.equal(campRes.status, 200);
+    assert.equal(campRes.campaignSid, 'CM0123456789abcdef0123456789abcdef');
+    assert.equal(campRes.is_simulated, undefined);
+  } finally {
+    if (stubServer) await new Promise((resolve) => stubServer!.close(resolve));
+    if (envBackup.MOCK !== undefined) process.env.TWILIO_MOCK_MODE = envBackup.MOCK; else delete process.env.TWILIO_MOCK_MODE;
+    if (envBackup.SID !== undefined) process.env.TWILIO_ACCOUNT_SID = envBackup.SID; else delete process.env.TWILIO_ACCOUNT_SID;
+    if (envBackup.TOKEN !== undefined) process.env.TWILIO_AUTH_TOKEN = envBackup.TOKEN; else delete process.env.TWILIO_AUTH_TOKEN;
+    if (envBackup.BASE !== undefined) process.env.TWILIO_API_BASE = envBackup.BASE; else delete process.env.TWILIO_API_BASE;
+  }
+});
+
+test('T19-3: Live Mode Against Stub Server — 200 With No ID Records Nothing (Never Fabricates Identifier)', async () => {
+  const envBackup = {
+    MOCK: process.env.TWILIO_MOCK_MODE,
+    SID: process.env.TWILIO_ACCOUNT_SID,
+    TOKEN: process.env.TWILIO_AUTH_TOKEN,
+    BASE: process.env.TWILIO_API_BASE,
+  };
+
+  let stubServer: http.Server | null = null;
+
+  try {
+    stubServer = http.createServer((_req, res) => {
+      // Return 200 OK but with NO identifier inside payload
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        message: 'Request received and placed into queue, SID will be assigned asynchronously',
+      }));
+    });
+
+    await new Promise<void>((resolve) => stubServer!.listen(0, '127.0.0.1', resolve));
+    const port = (stubServer.address() as any).port;
+
+    delete process.env.TWILIO_MOCK_MODE;
+    process.env.TWILIO_ACCOUNT_SID = 'AC_test_stub_account';
+    process.env.TWILIO_AUTH_TOKEN = 'test_stub_token_12345';
+    process.env.TWILIO_API_BASE = `http://127.0.0.1:${port}`;
+
+    // 1. Submit brand: 200 with no sid must record nothing
+    const brandRes = await TwilioClient.submitBrand({
+      legalName: 'Alpha Mechanical LLC',
+      ein: '88-7654321',
+      address: '123 Test St',
+      city: 'Chicago',
+      state: 'IL',
+      zip: '60601',
+      contactEmail: 'owner@alpha.com',
+      contactPhone: '+12175550100',
+    });
+    assert.equal(brandRes.ok, false);
+    assert.equal(brandRes.status, 200);
+    assert.equal(brandRes.brandSid, undefined, 'Must not synthesize or record brandSid when 200 lacks ID');
+    assert.ok(brandRes.error?.includes('no identifier'));
+
+    // 2. Submit campaign: 200 with no sid must record nothing
+    const campRes = await TwilioClient.submitCampaign({
+      brandSid: 'BN_whatever',
+      description: 'Customer dispatch notices',
+      sampleMessages: ['Hello from Alpha Mechanical'],
+    });
+    assert.equal(campRes.ok, false);
+    assert.equal(campRes.status, 200);
+    assert.equal(campRes.campaignSid, undefined, 'Must not synthesize or record campaignSid when 200 lacks ID');
+    assert.ok(campRes.error?.includes('no identifier'));
+  } finally {
+    if (stubServer) await new Promise((resolve) => stubServer!.close(resolve));
+    if (envBackup.MOCK !== undefined) process.env.TWILIO_MOCK_MODE = envBackup.MOCK; else delete process.env.TWILIO_MOCK_MODE;
+    if (envBackup.SID !== undefined) process.env.TWILIO_ACCOUNT_SID = envBackup.SID; else delete process.env.TWILIO_ACCOUNT_SID;
+    if (envBackup.TOKEN !== undefined) process.env.TWILIO_AUTH_TOKEN = envBackup.TOKEN; else delete process.env.TWILIO_AUTH_TOKEN;
+    if (envBackup.BASE !== undefined) process.env.TWILIO_API_BASE = envBackup.BASE; else delete process.env.TWILIO_API_BASE;
+  }
+});
+
+test('T19-4: Live Mode Against Stub Server — Unreachable Carrier Returns Failure and Does Not Throw / 500', async () => {
+  const envBackup = {
+    MOCK: process.env.TWILIO_MOCK_MODE,
+    SID: process.env.TWILIO_ACCOUNT_SID,
+    TOKEN: process.env.TWILIO_AUTH_TOKEN,
+    BASE: process.env.TWILIO_API_BASE,
+  };
+
+  try {
+    delete process.env.TWILIO_MOCK_MODE;
+    process.env.TWILIO_ACCOUNT_SID = 'AC_test_stub_account';
+    process.env.TWILIO_AUTH_TOKEN = 'test_stub_token_12345';
+    // Port 1 will reliably refuse connection
+    process.env.TWILIO_API_BASE = 'http://127.0.0.1:1';
+
+    // 1. Submit brand to unreachable carrier
+    const brandRes = await TwilioClient.submitBrand({
+      legalName: 'Alpha Mechanical LLC',
+      ein: '88-7654321',
+      address: '123 Test St',
+      city: 'Chicago',
+      state: 'IL',
+      zip: '60601',
+      contactEmail: 'owner@alpha.com',
+      contactPhone: '+12175550100',
+    });
+    assert.equal(brandRes.ok, false);
+    assert.equal(brandRes.status, 0);
+    assert.equal(brandRes.brandSid, undefined);
+    assert.equal(brandRes.error, 'carrier unreachable');
+
+    // 2. Submit campaign to unreachable carrier
+    const campRes = await TwilioClient.submitCampaign({
+      brandSid: 'BN_some_brand',
+      description: 'Customer dispatch notices',
+      sampleMessages: ['Hello from Alpha Mechanical'],
+    });
+    assert.equal(campRes.ok, false);
+    assert.equal(campRes.status, 0);
+    assert.equal(campRes.campaignSid, undefined);
+    assert.equal(campRes.error, 'carrier unreachable');
+  } finally {
+    if (envBackup.MOCK !== undefined) process.env.TWILIO_MOCK_MODE = envBackup.MOCK; else delete process.env.TWILIO_MOCK_MODE;
+    if (envBackup.SID !== undefined) process.env.TWILIO_ACCOUNT_SID = envBackup.SID; else delete process.env.TWILIO_ACCOUNT_SID;
+    if (envBackup.TOKEN !== undefined) process.env.TWILIO_AUTH_TOKEN = envBackup.TOKEN; else delete process.env.TWILIO_AUTH_TOKEN;
+    if (envBackup.BASE !== undefined) process.env.TWILIO_API_BASE = envBackup.BASE; else delete process.env.TWILIO_API_BASE;
+  }
 });
