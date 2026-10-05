@@ -355,3 +355,8 @@ test('T17-4: Carrier-Asserted Verification Passes and Evidence Traces All Fields
   tracker.cleanup();
 });
 
+// Suite Teardown: ensure all fixture accounts are strictly deleted
+test.after(() => {
+  tracker.cleanup();
+});
+

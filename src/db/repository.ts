@@ -187,6 +187,54 @@ class DatabaseRepository {
     return [...this.state.compliance];
   }
 
+  public getAllJobs(): JobCard[] {
+    return [...this.state.jobs];
+  }
+
+  public getAllConversations(): Conversation[] {
+    return [...this.state.conversations];
+  }
+
+  public getAllCallRecords(): CallRecord[] {
+    return [...this.state.callRecords];
+  }
+
+  public getTableCounts(): {
+    accounts: number;
+    credentials: number;
+    compliance: number;
+    jobs: number;
+    conversations: number;
+    calls: number;
+  } {
+    return {
+      accounts: this.state.accounts.length,
+      credentials: this.state.userCredentials.length,
+      compliance: this.state.compliance.length,
+      jobs: this.state.jobs.length,
+      conversations: this.state.conversations.length,
+      calls: this.state.callRecords.length,
+    };
+  }
+
+  public getTableSnapshots(): {
+    accounts: string[];
+    credentials: string[];
+    compliance: string[];
+    jobs: string[];
+    conversations: string[];
+    calls: string[];
+  } {
+    return {
+      accounts: this.state.accounts.map((a) => a.id).sort(),
+      credentials: this.state.userCredentials.map((c) => c.id).sort(),
+      compliance: this.state.compliance.map((c) => c.id).sort(),
+      jobs: this.state.jobs.map((j) => j.id).sort(),
+      conversations: this.state.conversations.map((c) => c.id).sort(),
+      calls: this.state.callRecords.map((c) => c.id).sort(),
+    };
+  }
+
   public getAllConsentLogs(): ConsentLog[] {
     return [...this.state.consentLogs];
   }

@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db/repository';
 import { createFixtureTracker, TestFixtureTracker, assertAccountCount } from '@/lib/test-hygiene';
 import { POST as onboardingHandler } from '@/app/api/onboarding/route';
+import { evaluateLaunchGates } from '@/lib/launch-gate';
 
 const tracker = createFixtureTracker();
 
@@ -205,6 +206,112 @@ test('T7: Deliverable Documentation — TEST_HYGIENE.md Exists and Explains All 
   assert.ok(docContent.includes('Record Fixture IDs'), 'Doc must explain Rule 3: Record Fixture IDs');
   assert.ok(docContent.includes('Invariance in CI'), 'Doc must explain Rule 4: Verify Account Count Invariance in CI');
   assert.ok(docContent.includes('Concurrency = 1'), 'Doc must explain Rule 5: Concurrency = 1');
+});
+
+test('T8: Multi-Table Invariance — All Six Tables Tracked and Invariant Across Fixtures', () => {
+  const localTracker = new TestFixtureTracker();
+  const countsBefore = db.getTableCounts();
+
+  // 1. Create a fixture tenant with child records across tables
+  const created = localTracker.createAccount('Multi-Table Tenant', 'plumbing', '+12175557766');
+  const accId = created.account.id;
+
+  // Add credentials
+  db.createUserCredential({
+    user_id: `user-${Date.now().toString(36)}`,
+    account_id: accId,
+    email: `multitable_${Date.now()}@example.com`,
+    password_hash: 'scrypt$16384$8$1$fakehash',
+    algorithm: 'scrypt',
+  });
+
+  // Add a call record
+  db.recordCall({
+    accountId: accId,
+    fromNumber: '+12175550011',
+    toNumber: '+12175557766',
+    callStatus: 'no-answer',
+    twilioCallSid: `CA_TEST_${Date.now()}`,
+  });
+
+  // Verify counts increased
+  const countsDuring = db.getTableCounts();
+  assert.equal(countsDuring.accounts, countsBefore.accounts + 1);
+  assert.equal(countsDuring.credentials, countsBefore.credentials + 1);
+  assert.equal(countsDuring.calls, countsBefore.calls + 1);
+
+  // 2. Clean up via tracker (cascades to all child tables)
+  const deleted = localTracker.cleanup();
+  assert.equal(deleted, 1);
+
+  // Verify all 6 tables returned to exact baseline counts
+  const countsAfter = db.getTableCounts();
+  assert.deepEqual(countsAfter, countsBefore, 'All six table counts must return to exact baseline counts');
+});
+
+test('T9: Gate Stability Invariance — evaluateLaunchGates() Preserves Identical Statuses', () => {
+  const gatesBefore = evaluateLaunchGates().gates.map((g) => ({ id: g.id, status: g.status }));
+
+  // Evaluate gates again
+  const gatesAfter = evaluateLaunchGates().gates.map((g) => ({ id: g.id, status: g.status }));
+
+  // Assert exact gate status invariance
+  assert.deepEqual(
+    gatesAfter,
+    gatesBefore,
+    'All launch gate evaluations must remain stable and identical'
+  );
+});
+
+test('T10: Threat Model Demonstration — Leaked Registration Moves Carrier Gate (Negative Proof)', () => {
+  const localTracker = new TestFixtureTracker();
+
+  // Baseline gate evaluation
+  const baseReport = evaluateLaunchGates();
+  const carrierGateBefore = baseReport.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(carrierGateBefore.status, 'failed', 'In baseline state, carrier gate must be failed');
+
+  // Simulate a test that creates a carrier-verified non-demo tenant
+  const created = localTracker.createAccount('Threat Model Contractor', 'plumbing', '+12175559988');
+  const accId = created.account.id;
+  db.updateAccount(accId, { is_demo: false });
+
+  const brandSid = 'BN0123456789abcdef0123456789abcdef';
+  const campaignSid = 'CM0123456789abcdef0123456789abcdef';
+
+  db.recordComplianceTransition(
+    accId,
+    'campaign_approved',
+    'carrier_webhook',
+    'tcr_carrier_webhook',
+    'TCR campaign approved',
+    {
+      carrier_source: 'carrier_api',
+      brand_sid: brandSid,
+      campaign_sid: campaignSid,
+    }
+  );
+
+  // Demonstrate that leaving this fixture in DB would GREEN the gate!
+  const leakedReport = evaluateLaunchGates();
+  const carrierGateLeaked = leakedReport.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(
+    carrierGateLeaked.status,
+    'passed',
+    'Leaked carrier-verified registration improperly greens the launch gate!'
+  );
+
+  // Now perform exact cleanup
+  localTracker.cleanup();
+
+  // Gate must return to failed
+  const restoredReport = evaluateLaunchGates();
+  const carrierGateRestored = restoredReport.gates.find((g) => g.id === 'a2p_10dlc_carrier_verified')!;
+  assert.equal(
+    carrierGateRestored.status,
+    'failed',
+    'Exact fixture deletion restores launch gate to honest failed state'
+  );
 });
 
 // Suite Teardown

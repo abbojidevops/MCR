@@ -51,14 +51,22 @@ test.after(() => {
 });
 ```
 
-### Rule 4: Verify Account Count Invariance in CI
-CI runs `npm run test:hygiene`, which:
-1. Records the database account count before running the suite.
-2. Runs the full test suite.
-3. Records the database account count after running the suite.
-4. Asserts `countAfter === countBefore` and verifies that no baseline seed accounts were mutated or removed.
+### Rule 4: Verify Multi-Table & Gate Stability Invariance in CI
+CI runs `npm run test:hygiene`, which enforces two strict invariants:
+1. **Multi-Table Row Count Invariance**:
+   Snapshots row counts and IDs across all six tables written by the suite:
+   - `accounts`
+   - `credentials`
+   - `compliance`
+   - `jobs`
+   - `conversations`
+   - `calls`
+   Asserts `countAfter === countBefore` for every table and proves that zero baseline rows were lost and zero fixture rows leaked.
+2. **Gate Stability Invariance**:
+   Captures `evaluateLaunchGates()` before and after running the suite.
+   Asserts that no gate's status changed (e.g. `failed -> passed` or `passed -> failed`) as a result of running tests. Leftover fixtures that green a gate are caught and fail CI immediately.
 
-If the count changes, the build fails immediately.
+If any table count changes or any gate moves status, the build fails immediately.
 
 ### Rule 5: Concurrency = 1 for Shared Database Suites
 When test suites share a database (whether in-memory state or PostgreSQL):

@@ -112,7 +112,29 @@ CREATE TABLE test_table (
   }
   console.log('   ✓ RUNBOOK.md §2 documents ADMIN_PASSWORD and fail-closed 503 guarantee.\n');
 
-  console.log('✅ [Deploy Check PASSED] All deployment and security topology criteria verified.');
+  // 6. Test Suite & Multi-Table Gate Stability Invariance Check
+  console.log('6. Running test suite and multi-table hygiene check...');
+  try {
+    execSync('npm run test:hygiene', { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'test' } });
+    console.log('   ✓ Full test suite and hygiene invariance passed.\n');
+  } catch {
+    throw new Error('Test suite execution or hygiene invariance check failed');
+  }
+
+  // 7. Probe scripts verification (runs green probes if defined)
+  const pkgPath = path.join(process.cwd(), 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  if (pkg.scripts && pkg.scripts['probe:green']) {
+    console.log('7. Running green probe verification...');
+    try {
+      execSync('npm run probe:green', { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'test' } });
+      console.log('   ✓ Green probes passed cleanly.\n');
+    } catch {
+      throw new Error('Green probes failed!');
+    }
+  }
+
+  console.log('✅ [Deploy Check PASSED] All deployment, test hygiene, and security topology criteria verified.');
   return true;
 }
 
