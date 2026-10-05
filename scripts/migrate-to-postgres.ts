@@ -10,7 +10,7 @@ async function main() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
     console.error('❌ Error: DATABASE_URL environment variable is not defined.');
-    console.log('Example: DATABASE_URL=postgresql://mcr_user:mcr_password@localhost:5432/mcr_db');
+    console.log('Example: DATABASE_URL=postgresql://mcr_user:<SECURE_PASSWORD>@localhost:5432/mcr_db');
     process.exit(1);
   }
 

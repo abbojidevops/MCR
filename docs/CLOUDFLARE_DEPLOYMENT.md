@@ -96,10 +96,10 @@ In your Cloudflare Zero Trust Dashboard:
 1. Open your domain in the **Cloudflare Dashboard**.
 2. Go to **Security** > **WAF** > **Custom Rules** > **Create rule**.
 3. Configure the rule:
-   - **Rule Name:** `Allow Telecom & Billing Webhooks`
-   - **Field / Expression:**
+   - **Rule Name:** `Allow Telecom & Billing Webhooks (Scoped)`
+   - **Field / Expression (Strictly Scoped to Webhook Paths):**
      ```text
-     (http.request.uri.path contains "/api/webhooks/")
+     (http.request.uri.path starts_with "/api/webhooks/")
      ```
    - **Action:** **Skip**
    - **Under "WAF components to skip", check:**
@@ -110,11 +110,21 @@ In your Cloudflare Zero Trust Dashboard:
      - `Rate Limiting Rules`
 4. Click **Deploy**.
 
-#### Security Rationale
-Skipping Cloudflare WAF on `/api/webhooks/*` is secure because MCR independently validates every inbound request at the application layer:
-- **Twilio Webhooks:** Validated using Twilio HMAC-SHA1 cryptographic signatures (`X-Twilio-Signature`) via `TwilioService.validateSignature()`.
-- **Stripe Webhooks:** Validated using Stripe HMAC-SHA256 signatures (`Stripe-Signature`) via `stripe.webhooks.constructEvent()`.
-- Forged, unsigned, or tampered requests are immediately rejected by MCR with HTTP `403 Forbidden`.
+#### Security Rationale & Control Invariant
+
+> [!IMPORTANT]
+> **THE WAF SKIP RULE IS NOT THE SECURITY CONTROL:**
+> The Cloudflare WAF exemption is strictly a transport-availability configuration to prevent automated third-party webhooks from being dropped by interactive JavaScript/CAPTCHA challenges. 
+> 
+> **The actual security boundary is enforced 100% at the application layer:**
+> - **Twilio Voice & SMS:** Validated using Twilio HMAC-SHA1 cryptographic signatures (`X-Twilio-Signature`) via `TwilioService.validateSignature()`.
+> - **Stripe Billing:** Validated using Stripe HMAC-SHA256 signatures (`Stripe-Signature`) via `stripe.webhooks.constructEvent()`.
+> - **Carrier Vetting:** Validated using carrier HMAC-SHA256 signatures (`x-carrier-signature`, `x-carrier-timestamp`) via `verifyCarrierHmac()`.
+> 
+> **Fail-Closed Guarantees:**
+> - If auth tokens/secrets are unset: MCR immediately fails closed with **HTTP 503 Service Unavailable**.
+> - If signatures are unsigned, forged, or replayed: MCR immediately refuses with **HTTP 403 Forbidden** (or **HTTP 409 Conflict**) and writes nothing to the database.
+> - With the WAF exemption active, an unauthenticated attacker sending raw requests to `/api/webhooks/*` is still completely blocked by the application's cryptographic verification.
 
 ---
 
@@ -131,23 +141,26 @@ In the Cloudflare Dashboard under **SSL/TLS**:
 
 ---
 
-## 5. Client IP Preservation (`CF-Connecting-IP`)
+## 5. Client IP Attribution & Spoofing Protection (`CF-Connecting-IP`)
 
-When traffic is proxied through Cloudflare, the origin socket sees Cloudflare's edge IP rather than the end-user's IP.
+When traffic is proxied through Cloudflare, the origin socket sees Cloudflare's edge IP rather than the end-user's IP. However, blindly trusting client-supplied headers like `X-Forwarded-For` or `CF-Connecting-IP` allows attackers to bypass rate limiting by rotating headers.
 
-MCR natively inspects the `CF-Connecting-IP` request header in:
-- Authentication & rate limiting ([`src/app/api/auth/login/route.ts`](file:///c:/Users/abboj/OneDrive/Desktop/MCR/src/app/api/auth/login/route.ts))
-- Audit logging ([`src/db/repository.ts`](file:///c:/Users/abboj/OneDrive/Desktop/MCR/src/db/repository.ts))
+MCR implements hardened client IP resolution in [`src/lib/security/client-ip.ts`](file:///c:/Users/abboj/OneDrive/Desktop/MCR/src/lib/security/client-ip.ts):
 
 ```typescript
-const clientIp =
-  req.headers.get('cf-connecting-ip') ||
-  req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-  req.headers.get('x-real-ip') ||
-  '127.0.0.1';
+import { resolveClientIp } from '@/lib/security/client-ip';
+
+const clientIp = resolveClientIp(req);
 ```
 
-Because `CF-Connecting-IP` is populated by Cloudflare's edge proxy, it cannot be spoofed by incoming clients.
+### Verification & Fallback Hierarchy:
+1. **Demonstrable Cloudflare Origin Required:** `CF-Connecting-IP` is trusted **only** when the request demonstrably originated from Cloudflare, verified via:
+   - Request socket IP matching Cloudflare's published CIDRs (`173.245.48.0/20`, `103.21.244.0/22`, `104.16.0.0/13`, `172.64.0.0/13`, etc.), OR
+   - Cloudflare Tunnel shared secret (`CLOUDFLARE_TUNNEL_SECRET` validated against `x-cf-tunnel-secret`).
+2. **Unverified Fallback to Socket Address:** If the request arrives directly at the origin without demonstrating Cloudflare provenance:
+   - `CF-Connecting-IP`, `X-Forwarded-For`, and `X-Real-IP` are **strictly ignored**.
+   - The client IP falls back to the unforgeable TCP socket address.
+   - Brute-force attacks sending rotating `X-Forwarded-For` or `CF-Connecting-IP` headers to port 3000 are attributed to the socket IP and throttled with HTTP 429 after 5 failed attempts.
 
 ---
 

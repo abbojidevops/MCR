@@ -61,11 +61,16 @@ TWILIO_AUTH_TOKEN=your_auth_token_here
 TWILIO_PHONE_NUMBER=+15551234567
 TWILIO_MOCK_MODE=false # Set to false in production
 
-# Database
-# If DATABASE_URL is not set, MCR falls back to file-persistent JSON at ./data/mcr_db.json
-DATABASE_URL=postgresql://postgres:password@localhost:5432/mcr_db
+# Database (PostgreSQL)
+# In development, MCR falls back to file-persistent JSON at ./data/mcr_db.json if DATABASE_URL is unset.
+# In Docker deployments, Postgres credentials must be supplied via environment variables.
+# The legacy password 'mcr_password' is permanently burned and rejected loudly at startup by scripts/db-init.mjs.
+POSTGRES_USER=mcr_user
+POSTGRES_PASSWORD=generate_a_secure_random_postgres_password_32_chars
+POSTGRES_DB=mcr_db
+DATABASE_URL=postgresql://mcr_user:generate_a_secure_random_postgres_password_32_chars@postgres:5432/mcr_db
 # Security rule: In Docker deployments, Postgres port 5432 is never published to the host machine.
-# Migrations & schema application are executed on container startup via scripts/db-init.mjs.
+# Migrations & schema application are executed on container startup via scripts/db-init.mjs (which fails loudly on missing or burned default passwords).
 
 # Stripe Billing
 STRIPE_SECRET_KEY=sk_live_...

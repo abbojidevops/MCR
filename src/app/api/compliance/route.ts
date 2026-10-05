@@ -9,6 +9,7 @@ import {
 } from '@/lib/compliance-machine';
 import { requireTenantAuth, AuthenticatedContext } from '@/lib/authz';
 import { ComplianceProvenance, ComplianceStatus, ComplianceRegistration } from '@/types';
+import { resolveClientIp } from '@/lib/security/client-ip';
 
 const BURNED_CARRIER_SECRET = 'mcr-carrier-webhook-secret-2026';
 
@@ -53,11 +54,7 @@ export async function POST(req: NextRequest) {
 
     const { action, registrationData, rejectionReason, targetStatus, accountId: webhookAccountId } = body || {};
 
-    const clientIp =
-      req.headers.get('cf-connecting-ip') ||
-      req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-      req.headers.get('x-real-ip') ||
-      '127.0.0.1';
+    const clientIp = resolveClientIp(req);
 
     // 1. Check for Carrier Webhook Authentication (Twilio / TCR inbound event)
     const isCarrierWebhookAttempt =

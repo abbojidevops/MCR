@@ -3,6 +3,7 @@ import { db } from '@/db/repository';
 import { verifyPassword } from '@/lib/auth/password';
 import { isLoginRateLimited, recordFailedLogin, resetLoginRateLimit } from '@/lib/auth/rate-limiter';
 import { setSessionCookie } from '@/lib/session';
+import { resolveClientIp } from '@/lib/security/client-ip';
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,11 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
 
-    const clientIp =
-      req.headers.get('cf-connecting-ip') ||
-      req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
-      req.headers.get('x-real-ip') ||
-      '127.0.0.1';
+    const clientIp = resolveClientIp(req);
     const normalizedEmail = email.trim().toLowerCase();
 
     // 3. Rate limiting check (per source IP and per email)

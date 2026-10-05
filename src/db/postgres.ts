@@ -5,9 +5,41 @@ import path from 'path';
 let pool: Pool | null = null;
 let isConnected = false;
 
+const BURNED_PASSWORDS = new Set([
+  'mcr_password',
+  'password',
+  'postgres',
+  'admin',
+  'root',
+  '123456',
+]);
+
+export function isBurnedDatabasePassword(password?: string | null): boolean {
+  if (!password) return true;
+  return BURNED_PASSWORDS.has(password.trim().toLowerCase());
+}
+
+export function extractDatabasePassword(dbUrl: string): string | null {
+  try {
+    const parsed = new URL(dbUrl);
+    return parsed.password || null;
+  } catch {
+    const match = dbUrl.match(/:([^:@]+)@/);
+    return match ? match[1] : null;
+  }
+}
+
 export function getPostgresPool(): Pool | null {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) return null;
+
+  const password = extractDatabasePassword(dbUrl);
+  if (!password || isBurnedDatabasePassword(password)) {
+    console.warn(
+      '[Postgres Security]: Refusing to connect using empty, default, or burned password. Set a rotated secure password in DATABASE_URL.'
+    );
+    return null;
+  }
 
   if (!pool) {
     try {

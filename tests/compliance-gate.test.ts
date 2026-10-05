@@ -648,6 +648,7 @@ test('CW-7: Cross-Tenant Isolation — Signed Request for Tenant A Cannot Touch 
 test('CW-8: Audit Trail Verification — Carrier Webhook Transitions Recorded in Audit Log', async () => {
   const originalSecret = process.env.CARRIER_WEBHOOK_SECRET;
   process.env.CARRIER_WEBHOOK_SECRET = TEST_CARRIER_SECRET;
+  process.env.CLOUDFLARE_TUNNEL_SECRET = 'carrier-audit-tunnel-secret';
 
   try {
     db.updateCompliance(TEST_ACCOUNT, { status: 'brand_submitted' });
@@ -658,6 +659,7 @@ test('CW-8: Audit Trail Verification — Carrier Webhook Transitions Recorded in
       accountId: TEST_ACCOUNT,
     });
     headers['cf-connecting-ip'] = '198.51.100.42';
+    headers['x-cf-tunnel-secret'] = 'carrier-audit-tunnel-secret';
 
     const req = createMockRequest('http://localhost:3001/api/compliance', {
       method: 'POST',
@@ -683,6 +685,7 @@ test('CW-8: Audit Trail Verification — Carrier Webhook Transitions Recorded in
     // Clean up TEST_ACCOUNT compliance back to pristine signed_up
     db.updateCompliance(TEST_ACCOUNT, { status: 'signed_up', status_history: [] });
   } finally {
+    delete process.env.CLOUDFLARE_TUNNEL_SECRET;
     if (originalSecret !== undefined) process.env.CARRIER_WEBHOOK_SECRET = originalSecret;
     else delete process.env.CARRIER_WEBHOOK_SECRET;
   }

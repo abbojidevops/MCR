@@ -73,9 +73,76 @@ export function validateSchemaSyntax(sqlContent) {
 }
 
 /**
+ * List of known insecure or publicly burned database passwords.
+ * The legacy password 'mcr_password' is permanently burned and rejected.
+ */
+export const BURNED_DATABASE_PASSWORDS = new Set([
+  'mcr_password',
+  'password',
+  'postgres',
+  'admin',
+  'root',
+  '123456',
+]);
+
+/**
+ * Validates that database credentials are provided from the environment and do not
+ * use missing, default, or publicly burned passwords. Fails loudly on violations.
+ */
+export function validateDatabaseCredentials(options = {}) {
+  const dbUrl = options.databaseUrl || process.env.DATABASE_URL;
+  const pgPassword = process.env.POSTGRES_PASSWORD;
+  const isProduction = process.env.NODE_ENV === 'production' && !options.allowNoDb;
+
+  // 1. Check explicit POSTGRES_PASSWORD if provided
+  if (pgPassword !== undefined && pgPassword !== null) {
+    const cleanPw = String(pgPassword).trim().toLowerCase();
+    if (!cleanPw) {
+      throw new Error('FATAL: POSTGRES_PASSWORD cannot be empty.');
+    }
+    if (BURNED_DATABASE_PASSWORDS.has(cleanPw)) {
+      throw new Error(
+        `FATAL: Refusing to start with burned or default database password in POSTGRES_PASSWORD ("${pgPassword}"). You must rotate to a strong secret.`
+      );
+    }
+  }
+
+  // 2. Check DATABASE_URL
+  if (dbUrl) {
+    let parsedPassword = '';
+    try {
+      const parsed = new URL(dbUrl);
+      parsedPassword = parsed.password;
+    } catch {
+      const match = dbUrl.match(/:([^:@]+)@/);
+      if (match) parsedPassword = match[1];
+    }
+
+    if (!parsedPassword || parsedPassword.trim() === '') {
+      throw new Error(
+        'FATAL: DATABASE_URL must specify a password (password cannot be empty).'
+      );
+    }
+
+    if (BURNED_DATABASE_PASSWORDS.has(parsedPassword.trim().toLowerCase())) {
+      throw new Error(
+        `FATAL: Refusing to start with burned or default database password in DATABASE_URL ("${parsedPassword}"). Set a strong, rotated password in POSTGRES_PASSWORD and DATABASE_URL.`
+      );
+    }
+  } else if (isProduction) {
+    throw new Error('FATAL: DATABASE_URL is required in production deployment');
+  }
+
+  return true;
+}
+
+/**
  * Runs full database initialization: migrations, schema application, and exit-code validation.
  */
 export async function runDatabaseInit(options = {}) {
+  // 1. Validate credentials and reject burned/default passwords loudly
+  validateDatabaseCredentials(options);
+
   const schemaPath = options.schemaPath || path.join(rootDir, 'src', 'db', 'schema.sql');
   console.log(`[db-init] Checking schema file at: ${schemaPath}`);
 
@@ -85,16 +152,13 @@ export async function runDatabaseInit(options = {}) {
 
   const sql = fs.readFileSync(schemaPath, 'utf-8');
 
-  // 1. Validate SQL syntax upfront (fails loudly on missing commas or syntax flaws)
+  // 2. Validate SQL syntax upfront (fails loudly on missing commas or syntax flaws)
   console.log('[db-init] Validating schema SQL syntax...');
   validateSchemaSyntax(sql);
   console.log('   ✓ Schema SQL syntax validated.');
 
   const dbUrl = options.databaseUrl || process.env.DATABASE_URL;
   if (!dbUrl) {
-    if (process.env.NODE_ENV === 'production' && !options.allowNoDb) {
-      throw new Error('DATABASE_URL is required in production deployment');
-    }
     console.log('[db-init] No DATABASE_URL provided; schema syntax verified successfully.');
     return { success: true, schemaValidated: true };
   }
