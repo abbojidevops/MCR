@@ -206,6 +206,7 @@ class DatabaseRepository {
     jobs: number;
     conversations: number;
     calls: number;
+    consentLogs: number;
   } {
     return {
       accounts: this.state.accounts.length,
@@ -214,6 +215,7 @@ class DatabaseRepository {
       jobs: this.state.jobs.length,
       conversations: this.state.conversations.length,
       calls: this.state.callRecords.length,
+      consentLogs: this.state.consentLogs.length,
     };
   }
 
@@ -224,6 +226,7 @@ class DatabaseRepository {
     jobs: string[];
     conversations: string[];
     calls: string[];
+    consentLogs: string[];
   } {
     return {
       accounts: this.state.accounts.map((a) => a.id).sort(),
@@ -232,6 +235,7 @@ class DatabaseRepository {
       jobs: this.state.jobs.map((j) => j.id).sort(),
       conversations: this.state.conversations.map((c) => c.id).sort(),
       calls: this.state.callRecords.map((c) => c.id).sort(),
+      consentLogs: this.state.consentLogs.map((c) => c.id).sort(),
     };
   }
 

@@ -35,6 +35,7 @@ export function verifyStateInvariance(options: { runTests?: boolean } = {}): Hyg
   console.log(`   Jobs:          ${beforeCounts.jobs}`);
   console.log(`   Conversations: ${beforeCounts.conversations}`);
   console.log(`   Calls:         ${beforeCounts.calls}`);
+  console.log(`   Consent Logs:  ${beforeCounts.consentLogs}`);
   console.log(`   Launch Gates:  ${beforeGates.filter(g => g.status === 'passed').length} passed, ${beforeGates.filter(g => g.status === 'failed').length} failed`);
 
   // 2. Optionally run test suite
@@ -60,9 +61,10 @@ export function verifyStateInvariance(options: { runTests?: boolean } = {}): Hyg
   console.log(`   Jobs:          ${afterCounts.jobs} (delta: ${afterCounts.jobs - beforeCounts.jobs})`);
   console.log(`   Conversations: ${afterCounts.conversations} (delta: ${afterCounts.conversations - beforeCounts.conversations})`);
   console.log(`   Calls:         ${afterCounts.calls} (delta: ${afterCounts.calls - beforeCounts.calls})`);
+  console.log(`   Consent Logs:  ${afterCounts.consentLogs} (delta: ${afterCounts.consentLogs - beforeCounts.consentLogs})`);
 
   // 4. Multi-Table Invariance Checks
-  const tables = ['accounts', 'credentials', 'compliance', 'jobs', 'conversations', 'calls'] as const;
+  const tables = ['accounts', 'credentials', 'compliance', 'jobs', 'conversations', 'calls', 'consentLogs'] as const;
   for (const table of tables) {
     const beforeC = beforeCounts[table];
     const afterC = afterCounts[table];
@@ -102,7 +104,7 @@ export function verifyStateInvariance(options: { runTests?: boolean } = {}): Hyg
       console.error(`   - ${v}`);
     }
   } else {
-    console.log(`\n✅ [Test Hygiene PASSED] Database left in exact pristine state across all 6 tables.`);
+    console.log(`\n✅ [Test Hygiene PASSED] Database left in exact pristine state across all 7 tables.`);
     console.log(`✅ [Gate Stability PASSED] All ${beforeGates.length} launch gates maintained identical status.`);
   }
 

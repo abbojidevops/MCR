@@ -208,7 +208,7 @@ test('T7: Deliverable Documentation — TEST_HYGIENE.md Exists and Explains All 
   assert.ok(docContent.includes('Concurrency = 1'), 'Doc must explain Rule 5: Concurrency = 1');
 });
 
-test('T8: Multi-Table Invariance — All Six Tables Tracked and Invariant Across Fixtures', () => {
+test('T8: Multi-Table Invariance — All Seven Tables Tracked and Invariant Across Fixtures', () => {
   const localTracker = new TestFixtureTracker();
   const countsBefore = db.getTableCounts();
 
@@ -234,19 +234,29 @@ test('T8: Multi-Table Invariance — All Six Tables Tracked and Invariant Across
     twilioCallSid: `CA_TEST_${Date.now()}`,
   });
 
+  // Add a consent log record
+  db.recordConsentLog({
+    account_id: accId,
+    phone_number: '+12175557766',
+    consent_type: 'explicit_consent',
+    consent_status: 'granted',
+    source: 'test_fixture',
+  });
+
   // Verify counts increased
   const countsDuring = db.getTableCounts();
   assert.equal(countsDuring.accounts, countsBefore.accounts + 1);
   assert.equal(countsDuring.credentials, countsBefore.credentials + 1);
   assert.equal(countsDuring.calls, countsBefore.calls + 1);
+  assert.equal(countsDuring.consentLogs, countsBefore.consentLogs + 1);
 
   // 2. Clean up via tracker (cascades to all child tables)
   const deleted = localTracker.cleanup();
   assert.equal(deleted, 1);
 
-  // Verify all 6 tables returned to exact baseline counts
+  // Verify all 7 tables returned to exact baseline counts
   const countsAfter = db.getTableCounts();
-  assert.deepEqual(countsAfter, countsBefore, 'All six table counts must return to exact baseline counts');
+  assert.deepEqual(countsAfter, countsBefore, 'All seven table counts must return to exact baseline counts');
 });
 
 test('T9: Gate Stability Invariance — evaluateLaunchGates() Preserves Identical Statuses', () => {

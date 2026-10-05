@@ -197,6 +197,18 @@ export class TwilioService {
       };
     }
 
+    // 5b. Record Inbound Call TCPA Consent Opt-In (Genuine non-simulated callers)
+    if (!callRecord.is_simulated) {
+      db.recordConsentLog({
+        account_id: accountId,
+        phone_number: From,
+        consent_type: 'inbound_call_opt_in',
+        consent_status: 'granted',
+        source: 'voice_call_intake',
+        audit_notes: `Caller initiated inbound call to ${To}; automated text-back opt-in recorded`,
+      });
+    }
+
     // 6. Subscription Entitlement & Dunning Gate
     const effectiveNow = params.referenceDate || (process.env.NODE_ENV === 'test' ? new Date('2026-03-15T16:00:00Z') : new Date());
     const entitlement = checkSubscriptionEntitlement(accountId, effectiveNow);

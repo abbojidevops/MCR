@@ -2,13 +2,31 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { NextRequest } from 'next/server';
 import { db } from '@/db/repository';
 import { evaluateLaunchGates, LaunchGateReport } from '@/lib/launch-gate';
 import { createFixtureTracker } from '@/lib/test-hygiene';
 import { hashPasswordSync } from '@/lib/auth/password';
 import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
+import { POST as onboardingHandler } from '@/app/api/onboarding/route';
+import { TwilioService } from '@/lib/telecom/twilio-service';
 
 const tracker = createFixtureTracker();
+
+function createMockRequest(
+  url: string,
+  options: { method?: string; body?: any; headers?: Record<string, string> } = {}
+) {
+  const reqHeaders = new Headers(options.headers || {});
+  if (options.body) {
+    reqHeaders.set('content-type', 'application/json');
+  }
+  return new NextRequest(new URL(url, 'http://localhost:3001'), {
+    method: options.method || 'GET',
+    headers: reqHeaders,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+}
 
 test('G1: Live State Evidence Naming — Every Automated Gate Reads Live Records and Names Evidence', () => {
   const report = evaluateLaunchGates();
@@ -353,6 +371,151 @@ test('T17-4: Carrier-Asserted Verification Passes and Evidence Traces All Fields
   assert.ok(carrierGate.evidence.details.includes(campaignSid), 'Evidence must name campaign_sid');
 
   tracker.cleanup();
+});
+
+// ============================================================================
+// TASK 24 — TCPA Consent Lifecycle & Gate 4 Invariance Tests
+// ============================================================================
+
+test('T24-1: Contractor Onboarding Records Explicit TCPA Consent with Client IP and Passes Gate 4', async () => {
+  const uniqueNum = Math.floor(1000 + Math.random() * 9000);
+  const email = `consent_contractor_${uniqueNum}@example.com`;
+  const phone = `+1217555${uniqueNum}`;
+
+  const req = createMockRequest('http://localhost:3001/api/onboarding', {
+    method: 'POST',
+    headers: {
+      'x-forwarded-for': '203.0.113.195', // Untrusted spoof header ignored by secure client-ip resolver
+    },
+    body: {
+      email,
+      password: 'ConsentSecure2026!',
+      businessName: `Consent Plumbing ${uniqueNum}`,
+      trade: 'plumbing',
+      phone,
+    },
+  });
+
+  const res = await onboardingHandler(req);
+  assert.equal(res.status, 200, 'Onboarding request must succeed with 200');
+  const body = await res.json();
+  const accountId = tracker.recordSignupResponse(body);
+
+  // 1. Verify consent log exists in database
+  const consentLogs = db.getAllConsentLogs().filter((c) => c.account_id === accountId);
+  assert.equal(consentLogs.length, 1, 'Exactly one explicit consent log must be created on onboarding');
+
+  const log = consentLogs[0];
+  assert.equal(log.account_id, accountId);
+  assert.equal(log.phone_number, phone);
+  assert.equal(log.consent_type, 'explicit_consent');
+  assert.equal(log.consent_status, 'granted');
+  assert.equal(log.source, 'contractor_onboarding_portal');
+  assert.ok(log.ip_address, 'Consent log must record client IP address');
+  assert.equal(log.ip_address, '127.0.0.1', 'Normalized socket fallback IP must be recorded (spoofed header ignored)');
+  assert.match(log.audit_notes || '', /explicitly accepted Terms of Service/i);
+
+  // 2. Verify Gate 4 (legal_consent_recorded) passes with concrete evidence
+  const report = evaluateLaunchGates();
+  const consentGate = report.gates.find((g) => g.id === 'legal_consent_recorded')!;
+  assert.equal(consentGate.status, 'passed', 'Gate 4 must pass with live consent record');
+  assert.equal(consentGate.evidence?.tenantId, accountId);
+  assert.equal(consentGate.evidence?.recordId, log.id);
+  assert.equal(consentGate.evidence?.timestamp, log.created_at);
+  assert.ok(consentGate.evidence?.details.includes(phone));
+  assert.ok(consentGate.evidence?.details.includes('explicit_consent'));
+
+  // 3. Teardown via tracker cascades deletion of account and consent log
+  tracker.cleanup();
+
+  const consentLogsAfter = db.getAllConsentLogs().filter((c) => c.account_id === accountId);
+  assert.equal(consentLogsAfter.length, 0, 'Consent logs must cascade-delete with account');
+
+  const reportAfter = evaluateLaunchGates();
+  const consentGateAfter = reportAfter.gates.find((g) => g.id === 'legal_consent_recorded')!;
+  assert.equal(consentGateAfter.status, 'failed', 'Gate 4 must return to failed after fixture cleanup');
+});
+
+test('T24-2: Inbound Voice Telephony Records Inbound Call Opt-In Consent and Cascades on Deletion', async () => {
+  const created = tracker.createAccount('Voice Consent Rooter', 'plumbing', '+12175550912');
+  const accId = created.account.id;
+  const contractorNumber = created.phoneNumber.phone_number;
+  const callerNumber = `+1217555${Math.floor(1000 + Math.random() * 9000)}`;
+  const callSid = `CA_real_voice_${Date.now()}`;
+
+  // Genuine non-simulated inbound call
+  const callResult = await TwilioService.handleInboundCall({
+    CallSid: callSid,
+    From: callerNumber,
+    To: contractorNumber,
+    CallStatus: 'no-answer',
+  });
+
+  assert.ok(callResult.callRecordId);
+
+  // Verify inbound_call_opt_in consent log recorded
+  const consentLogs = db.getAllConsentLogs().filter((c) => c.account_id === accId);
+  assert.equal(consentLogs.length, 1, 'Inbound call must record 1 inbound_call_opt_in consent log');
+
+  const log = consentLogs[0];
+  assert.equal(log.account_id, accId);
+  assert.equal(log.phone_number, callerNumber);
+  assert.equal(log.consent_type, 'inbound_call_opt_in');
+  assert.equal(log.consent_status, 'granted');
+  assert.equal(log.source, 'voice_call_intake');
+  assert.match(log.audit_notes || '', /Caller initiated inbound call/i);
+
+  // Teardown
+  tracker.cleanup();
+
+  const logsAfter = db.getAllConsentLogs().filter((c) => c.account_id === accId);
+  assert.equal(logsAfter.length, 0, 'Consent logs must be deleted on account teardown');
+});
+
+test('T24-3: Inbound SMS Lifecycle Records Opt-Out on STOP and Resubscription Opt-In on START', async () => {
+  const created = tracker.createAccount('SMS Consent HVAC', 'hvac', '+12175550913');
+  const accId = created.account.id;
+  const contractorNumber = created.phoneNumber.phone_number;
+  const consumerNumber = `+1217555${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // 1. Consumer texts STOP -> opt_out revoked
+  const stopRes = await TwilioService.handleInboundSms({
+    MessageSid: `SM_stop_${Date.now()}`,
+    From: consumerNumber,
+    To: contractorNumber,
+    Body: 'STOP',
+  });
+  assert.equal(stopRes.status, 'opt_out_processed');
+
+  const stopLogs = db.getAllConsentLogs().filter((c) => c.account_id === accId && c.consent_type === 'opt_out');
+  assert.equal(stopLogs.length, 1, 'STOP keyword must record opt_out consent log');
+  assert.equal(stopLogs[0].consent_status, 'revoked');
+  assert.equal(stopLogs[0].source, 'inbound_sms_stop');
+
+  // Verify suppression list updated
+  assert.equal(db.isNumberSuppressed(accId, consumerNumber), true);
+
+  // 2. Consumer texts START -> explicit_consent granted
+  const startRes = await TwilioService.handleInboundSms({
+    MessageSid: `SM_start_${Date.now()}`,
+    From: consumerNumber,
+    To: contractorNumber,
+    Body: 'START',
+  });
+  assert.equal(startRes.status, 'opt_in_processed');
+
+  const startLogs = db.getAllConsentLogs().filter((c) => c.account_id === accId && c.consent_type === 'explicit_consent');
+  assert.equal(startLogs.length, 1, 'START keyword must record explicit_consent log');
+  assert.equal(startLogs[0].consent_status, 'granted');
+  assert.equal(startLogs[0].source, 'inbound_sms_start');
+
+  // Verify suppression list removed
+  assert.equal(db.isNumberSuppressed(accId, consumerNumber), false);
+
+  // Teardown
+  tracker.cleanup();
+  const allLogs = db.getAllConsentLogs().filter((c) => c.account_id === accId);
+  assert.equal(allLogs.length, 0, 'All consent logs must be removed on cleanup');
 });
 
 // Suite Teardown: ensure all fixture accounts are strictly deleted

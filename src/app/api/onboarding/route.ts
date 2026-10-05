@@ -3,6 +3,7 @@ import { db } from '@/db/repository';
 import { TradeKey } from '@/types';
 import { setSessionCookie } from '@/lib/session';
 import { hashPassword, validatePasswordStrength } from '@/lib/auth/password';
+import { resolveClientIp } from '@/lib/security/client-ip';
 
 export async function POST(req: NextRequest) {
   try {
@@ -82,11 +83,25 @@ export async function POST(req: NextRequest) {
       algorithm: 'scrypt',
     });
 
+    const clientIp = resolveClientIp(req);
+
+    // 6. Record TCPA Explicit Consent Log
+    db.recordConsentLog({
+      account_id: account.id,
+      phone_number: phone,
+      consent_type: 'explicit_consent',
+      consent_status: 'granted',
+      source: 'contractor_onboarding_portal',
+      ip_address: clientIp,
+      audit_notes: `Contractor explicitly accepted Terms of Service and TCPA compliance policies during onboarding signup for ${businessName}`,
+    });
+
     db.logAudit(account.id, 'SIGNUP_COMPLETED', {
       businessName,
       trade,
       phone,
       email: normalizedEmail,
+      ip: clientIp,
     });
 
     const response = NextResponse.json({

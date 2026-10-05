@@ -54,13 +54,14 @@ test.after(() => {
 ### Rule 4: Verify Multi-Table & Gate Stability Invariance in CI
 CI runs `npm run test:hygiene`, which enforces two strict invariants:
 1. **Multi-Table Row Count Invariance**:
-   Snapshots row counts and IDs across all six tables written by the suite:
+   Snapshots row counts and IDs across all seven tables written by the suite:
    - `accounts`
    - `credentials`
    - `compliance`
    - `jobs`
    - `conversations`
    - `calls`
+   - `consentLogs`
    Asserts `countAfter === countBefore` for every table and proves that zero baseline rows were lost and zero fixture rows leaked.
 2. **Gate Stability Invariance**:
    Captures `evaluateLaunchGates()` before and after running the suite.
