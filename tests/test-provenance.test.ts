@@ -14,6 +14,8 @@ import {
   getSimulatedExclusions,
 } from '@/lib/metrics';
 import { generateDailySummary, generateWeeklyReport } from '@/lib/reports';
+import { verifyPassword } from '@/lib/auth/password';
+import { runDemo } from '../scripts/demo-walkthrough';
 
 const TEST_ACCOUNT = 'acc-apex-plumbing';
 
@@ -183,3 +185,55 @@ test('P6: Non-Deletion & Dashboard Disclosure — Rows persist and exclusions ar
   assert.match(exclusions.disclosure!, /simulated call/i);
   assert.match(exclusions.disclosure!, /excluded from these numbers/i);
 });
+
+test('P7 (T20): Scripted Walkthrough End-to-End Simulation — Real Telecom Handler Execution Preserves Metrics and Report Equality Field-by-Field', async () => {
+  // 1. Verify demo login fixture and password verification via scrypt
+  const cred = db.findCredentialByEmail('demo@apexplumbing.com');
+  assert.ok(cred, 'demo@apexplumbing.com must exist in committed fixtures');
+  const valid = await verifyPassword('ApexDemo2026!Secure', cred.password_hash);
+  assert.equal(valid, true, 'Demo password must verify successfully via scrypt');
+
+  const demoAccount = db.getAccount(cred.account_id);
+  assert.ok(demoAccount, 'Account for demo user must exist');
+  assert.equal(demoAccount.is_demo, true, 'Demo tenant must have is_demo: true');
+
+  // 2. Capture baseline metrics & reports before walkthrough
+  const fixedEnd = new Date().toISOString();
+  const metricsBefore = computeMetrics(TEST_ACCOUNT, { preset: 'all', endDate: fixedEnd });
+  const dailyBefore = generateDailySummary(TEST_ACCOUNT);
+  const weeklyBefore = generateWeeklyReport(TEST_ACCOUNT);
+
+  // 3. Execute the full scripted walkthrough with zero artificial delay
+  await runDemo({ delayMs: 0 });
+
+  // 4. Capture metrics & reports after walkthrough
+  const metricsAfter = computeMetrics(TEST_ACCOUNT, { preset: 'all', endDate: fixedEnd });
+  const dailyAfter = generateDailySummary(TEST_ACCOUNT);
+  const weeklyAfter = generateWeeklyReport(TEST_ACCOUNT);
+
+  // 5. Assert field-by-field payload equality
+  assert.deepEqual(
+    metricsAfter,
+    metricsBefore,
+    'Unified metrics payload must remain 100% identical before and after full walkthrough'
+  );
+
+  // 6. Assert prose report equality
+  assert.equal(dailyAfter.summaryText, dailyBefore.summaryText, 'Daily summary prose must remain identical');
+  assert.equal(weeklyAfter.summaryText, weeklyBefore.summaryText, 'Weekly report prose must remain identical');
+  assert.equal(dailyAfter.missedCallsCount, dailyBefore.missedCallsCount);
+  assert.equal(weeklyAfter.missedCallsCount, weeklyBefore.missedCallsCount);
+  assert.equal(weeklyAfter.estimatedRecoveredValue, weeklyBefore.estimatedRecoveredValue);
+  assert.equal(weeklyAfter.actualBookedValue, weeklyBefore.actualBookedValue);
+  assert.equal(weeklyAfter.responseRatePercent, weeklyBefore.responseRatePercent);
+  assert.equal(weeklyAfter.recoveryRatePercent, weeklyBefore.recoveryRatePercent);
+
+  // 7. Verify simulation disclosure
+  const exclusions = getSimulatedExclusions(TEST_ACCOUNT);
+  assert.ok(exclusions.callsCount > 0);
+  assert.ok(exclusions.jobsCount > 0);
+  assert.match(exclusions.disclosure!, /simulated call/i);
+  assert.match(exclusions.disclosure!, /simulated job/i);
+  assert.match(exclusions.disclosure!, /excluded from these numbers/i);
+});
+

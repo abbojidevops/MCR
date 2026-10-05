@@ -79,6 +79,22 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 CARRIER_WEBHOOK_SECRET=your_32_byte_hex_carrier_webhook_secret
 ```
 
+### Seeded Tenant Credentials & Demo Walkthrough
+
+MCR commits standard seeded fixtures for evaluation, automated test suites, and interactive sales walkthroughs:
+
+| Tenant Name | Account ID | Email | Password | `is_demo` Flag | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Apex Plumbing & Rooter** | `acc-apex-plumbing` | `demo@apexplumbing.com` | `ApexDemo2026!Secure` | `true` | Interactive Demo Walkthrough (`npm run demo`) |
+| **CoolBreeze Heating & Air** | `acc-coolbreeze-hvac` | `owner@coolbreezehvac.com` | `CoolBreeze2026!Secure` | `false` | Production Non-Demo Baseline Tenant |
+
+* **Demo Tenant Invariant**: `acc-apex-plumbing` is strictly marked `is_demo: true`. All simulated walkthrough calls, conversations, and jobs generated for this tenant are unconditionally tagged `is_simulated: true` and excluded from paid customer metrics and reports.
+* **Running the Interactive Walkthrough**:
+  ```bash
+  npm run demo
+  ```
+  This simulates an inbound missed call through real telecom webhook handlers (`TwilioService.handleInboundCall` and `TwilioService.handleInboundSms`), auto-dispatches text-back, triages emergency leak keywords, accepts MMS photo attachments, generates a qualified job card, and books the job — while proving 100% field-by-field payload invariance across all paid customer metrics.
+
 ---
 
 ## 3. Production Deployment Guide
