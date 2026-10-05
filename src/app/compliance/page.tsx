@@ -4,6 +4,9 @@ import { ArrowLeft, ShieldCheck, CheckCircle2, Clock, AlertTriangle, PhoneCall, 
 import { getDerivedComplianceClaim } from '@/lib/marketing-claims';
 import { getSystemCarrierLiveStatus } from '@/lib/marketing-claims-server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export const metadata = {
   title: 'Compliance & Telecom Standards — MCR',
   description: 'TCPA quiet hours, CTIA guidelines, A2P 10DLC registration timelines, and carrier compliance guardrails.',

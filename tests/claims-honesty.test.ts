@@ -125,3 +125,148 @@ test('MKT-6: TCPA Quiet Hours Enforcement Linkage & Revocation Keywords Asserted
   }
   assert.ok(STOP_KEYWORDS.size >= 7, 'Must support at least 7 revocation keywords');
 });
+
+test('MKT-7 (T18): Claim Page Exports dynamic = "force-dynamic" and revalidate = 0', async () => {
+  const compliancePath = path.join(process.cwd(), 'src/app/compliance/page.tsx');
+  const complianceSrc = fs.readFileSync(compliancePath, 'utf-8');
+
+  // Source-level assertions
+  assert.ok(
+    complianceSrc.includes("export const dynamic = 'force-dynamic'"),
+    'src/app/compliance/page.tsx must export dynamic = "force-dynamic"'
+  );
+  assert.ok(
+    complianceSrc.includes('export const revalidate = 0'),
+    'src/app/compliance/page.tsx must export revalidate = 0'
+  );
+
+  // Runtime module exports assertions
+  const complianceModule = await import('@/app/compliance/page');
+  assert.equal(complianceModule.dynamic, 'force-dynamic', 'Module export dynamic must be "force-dynamic"');
+  assert.equal(complianceModule.revalidate, 0, 'Module export revalidate must be 0');
+});
+
+test('MKT-8 (T18): In-Process Dynamic Re-derivation — Unregistered -> Live -> Unregistered Without Rebuild', async () => {
+  const { db } = await import('@/db/repository');
+  const { default: CompliancePage } = await import('@/app/compliance/page');
+
+  const baselineAccounts = db.getAllAccounts();
+  assert.equal(baselineAccounts.length, 2, 'Must have exactly 2 accounts at baseline');
+
+  // Helper to extract all text content from React component render tree
+  function extractNodeText(node: any): string {
+    if (!node) return '';
+    if (typeof node === 'string' || typeof node === 'number') return String(node);
+    if (Array.isArray(node)) return node.map(extractNodeText).join(' ');
+    if (node.props && node.props.children) {
+      return extractNodeText(node.props.children);
+    }
+    return '';
+  }
+
+  // 1. Initial State: Unregistered copy rendered
+  const initialElement = CompliancePage();
+  const initialText = extractNodeText(initialElement);
+  assert.ok(
+    initialText.includes('10DLC Registration Support in Onboarding'),
+    'Initial render must contain unregistered badge'
+  );
+  assert.ok(
+    !initialText.includes('Carrier Verified Telecom Architecture'),
+    'Initial render must NOT contain live carrier badge'
+  );
+
+  // 2. Flip underlying database record to verified live state
+  const originalComp = { ...db.getCompliance('acc-coolbreeze-hvac')! };
+  assert.ok(originalComp, 'Target account compliance record must exist');
+
+  try {
+    db.updateCompliance('acc-coolbreeze-hvac', {
+      status: 'sms_live',
+      carrier_source: 'carrier_api',
+      brand_sid: 'BN0123456789abcdef0123456789abcdef',
+      campaign_sid: 'CM0123456789abcdef0123456789abcdef',
+      last_updated_by: 'carrier_webhook',
+    });
+
+    // 3. Second Render in same process without rebuild: Live copy rendered
+    const liveElement = CompliancePage();
+    const liveText = extractNodeText(liveElement);
+    assert.ok(
+      liveText.includes('Carrier Verified Telecom Architecture'),
+      'Rendered copy must dynamically flip to live badge without rebuild'
+    );
+    assert.ok(
+      !liveText.includes('10DLC Registration Support in Onboarding'),
+      'Rendered copy must not contain unregistered badge when live'
+    );
+  } finally {
+    // 4. Flip back to original state
+    db.updateCompliance('acc-coolbreeze-hvac', {
+      status: originalComp.status,
+      carrier_source: originalComp.carrier_source,
+      brand_sid: originalComp.brand_sid,
+      campaign_sid: originalComp.campaign_sid,
+      last_updated_by: originalComp.last_updated_by,
+    });
+  }
+
+  // 5. Third Render in same process: Unregistered copy restored
+  const restoredElement = CompliancePage();
+  const restoredText = extractNodeText(restoredElement);
+  assert.ok(
+    restoredText.includes('10DLC Registration Support in Onboarding'),
+    'Rendered copy must dynamically return to unregistered badge'
+  );
+  assert.ok(
+    !restoredText.includes('Carrier Verified Telecom Architecture'),
+    'Rendered copy must no longer contain live badge'
+  );
+
+  // Hygiene invariance check
+  assert.equal(db.getAllAccounts().length, 2, 'Account count invariant 2 -> 2 preserved');
+});
+
+test('MKT-9 (T18): Launch Gate and System Carrier Live Status Use Identical Predicate and Never Disagree', async () => {
+  const { db } = await import('@/db/repository');
+  const { evaluateLaunchGates } = await import('@/lib/launch-gate');
+  const { getSystemCarrierLiveStatus } = await import('@/lib/marketing-claims-server');
+
+  // Baseline
+  const baselineLive = getSystemCarrierLiveStatus();
+  const baselineGate = evaluateLaunchGates().gates.find((g) => g.id === 'a2p_10dlc_carrier_verified');
+  assert.equal(baselineLive, false);
+  assert.equal(baselineGate?.status, 'failed');
+
+  // With verified record
+  const originalComp = { ...db.getCompliance('acc-coolbreeze-hvac')! };
+  try {
+    db.updateCompliance('acc-coolbreeze-hvac', {
+      status: 'sms_live',
+      carrier_source: 'carrier_api',
+      brand_sid: 'BN0123456789abcdef0123456789abcdef',
+      campaign_sid: 'CM0123456789abcdef0123456789abcdef',
+      last_updated_by: 'carrier_webhook',
+    });
+
+    const activeLive = getSystemCarrierLiveStatus();
+    const activeGate = evaluateLaunchGates().gates.find((g) => g.id === 'a2p_10dlc_carrier_verified');
+    assert.equal(activeLive, true, 'getSystemCarrierLiveStatus must return true');
+    assert.equal(activeGate?.status, 'passed', 'Gate must pass when carrier verified');
+  } finally {
+    db.updateCompliance('acc-coolbreeze-hvac', {
+      status: originalComp.status,
+      carrier_source: originalComp.carrier_source,
+      brand_sid: originalComp.brand_sid,
+      campaign_sid: originalComp.campaign_sid,
+      last_updated_by: originalComp.last_updated_by,
+    });
+  }
+
+  // Restored
+  const restoredLive = getSystemCarrierLiveStatus();
+  const restoredGate = evaluateLaunchGates().gates.find((g) => g.id === 'a2p_10dlc_carrier_verified');
+  assert.equal(restoredLive, false);
+  assert.equal(restoredGate?.status, 'failed');
+});
+
