@@ -747,6 +747,35 @@ class DatabaseRepository {
     return message;
   }
 
+  public updateConversation(
+    accountId: string,
+    conversationId: string,
+    updates: Partial<Conversation>
+  ): Conversation | undefined {
+    const conv = this.state.conversations.find((c) => c.id === conversationId && c.account_id === accountId);
+    if (!conv) return undefined;
+    Object.assign(conv, updates, { updated_at: new Date().toISOString() });
+    this.saveToFile();
+    return conv;
+  }
+
+  public deleteMessage(messageId: string): boolean {
+    const idx = this.state.messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) return false;
+    this.state.messages.splice(idx, 1);
+    this.saveToFile();
+    return true;
+  }
+
+  public deleteConversation(accountId: string, conversationId: string): boolean {
+    const idx = this.state.conversations.findIndex((c) => c.id === conversationId && c.account_id === accountId);
+    if (idx === -1) return false;
+    this.state.conversations.splice(idx, 1);
+    this.state.messages = this.state.messages.filter((m) => m.conversation_id !== conversationId);
+    this.saveToFile();
+    return true;
+  }
+
 
   // --------------------------------------------------------------------------
   // Intake Sessions
@@ -971,6 +1000,19 @@ class DatabaseRepository {
     });
 
     this.saveToFile();
+  }
+
+  public deleteSuppression(accountId: string, phoneNumber: string): boolean {
+    const clean = phoneNumber.replace(/\D/g, '').slice(-10);
+    const initialLen = this.state.suppressionList.length;
+    this.state.suppressionList = this.state.suppressionList.filter(
+      (s) => !(s.account_id === accountId && s.phone_number.replace(/\D/g, '').endsWith(clean))
+    );
+    const removed = this.state.suppressionList.length < initialLen;
+    if (removed) {
+      this.saveToFile();
+    }
+    return removed;
   }
 
   // --------------------------------------------------------------------------

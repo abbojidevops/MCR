@@ -20,6 +20,7 @@ import {
   DollarSign,
   Tag,
   ShieldAlert,
+  Loader2,
 } from 'lucide-react';
 import { Conversation, Message, CannedReply, JobCard } from '@/types';
 
@@ -32,6 +33,16 @@ export default function InboxPage() {
   const [newMessageText, setNewMessageText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [mobileDetailView, setMobileDetailView] = useState(false);
+  const [isSuppressed, setIsSuppressed] = useState(false);
+  const [quietHours, setQuietHours] = useState<{
+    isWithinHours: boolean;
+    recipientLocalHour: number;
+    recipientTimezone: string;
+    nextAllowedSendTime?: string;
+    reason?: string;
+  } | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [emergencyOverride, setEmergencyOverride] = useState(false);
 
   // Section 12: Standard Trade Quick Replies
   const standardQuickReplies = [
@@ -57,6 +68,7 @@ export default function InboxPage() {
         setConversations(convData.conversations);
         if (!selectedConvId && convData.conversations.length > 0) {
           setSelectedConvId(convData.conversations[0].id);
+          setIsSuppressed(Boolean(convData.conversations[0].isSuppressed));
         }
       }
       if (jobsData.jobs) setJobs(jobsData.jobs);
@@ -73,6 +85,12 @@ export default function InboxPage() {
       if (data.messages) {
         setMessages(data.messages);
       }
+      if (data.isSuppressed !== undefined) {
+        setIsSuppressed(Boolean(data.isSuppressed));
+      }
+      if (data.quietHours !== undefined) {
+        setQuietHours(data.quietHours);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -88,11 +106,28 @@ export default function InboxPage() {
     }
   }, [selectedConvId]);
 
+  const handleSelectConv = (convId: string) => {
+    setSelectedConvId(convId);
+    setMobileDetailView(true);
+    setSendError(null);
+    setEmergencyOverride(false);
+    const target = conversations.find((c) => c.id === convId);
+    if (target) {
+      setIsSuppressed(Boolean((target as any).isSuppressed));
+    }
+  };
+
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || newMessageText;
-    if (!text.trim() || !selectedConvId) return;
+    if (!text.trim() || !selectedConvId || isSending) return;
+
+    if (isSuppressed) {
+      setSendError('Cannot send SMS: Customer has opted out (STOP suppression active).');
+      return;
+    }
 
     setIsSending(true);
+    setSendError(null);
     try {
       const res = await fetch('/api/conversations', {
         method: 'POST',
@@ -100,16 +135,26 @@ export default function InboxPage() {
         body: JSON.stringify({
           conversationId: selectedConvId,
           bodyText: text,
+          emergencyOverride,
         }),
       });
       const data = await res.json();
-      if (data.success) {
-        setNewMessageText('');
-        fetchMessages(selectedConvId);
-        fetchData();
+
+      if (!res.ok || !data.success) {
+        setSendError(data.error || 'Failed to dispatch SMS message');
+        if (data.isSuppressed) {
+          setIsSuppressed(true);
+        }
+        return;
       }
-    } catch (err) {
+
+      setNewMessageText('');
+      setEmergencyOverride(false);
+      fetchMessages(selectedConvId);
+      fetchData();
+    } catch (err: any) {
       console.error(err);
+      setSendError(err.message || 'Network exception while dispatching message');
     } finally {
       setIsSending(false);
     }
@@ -125,17 +170,20 @@ export default function InboxPage() {
       });
 
       const customerName = conv.contact?.full_name?.trim() ? conv.contact.full_name : 'Unknown Caller';
+      const convIsSuppressed = Boolean((conv as any).isSuppressed);
 
       return {
         ...conv,
         customerName,
         job: matchedJob,
         isEmergency: matchedJob?.is_emergency ?? false,
+        isSuppressed: convIsSuppressed,
       };
     });
   }, [conversations, jobs]);
 
   const activeConv = enrichedConversations.find((c) => c.id === selectedConvId);
+  const currentSuppressed = Boolean(activeConv?.isSuppressed || isSuppressed);
 
   return (
     <div className="flex h-[calc(100vh-8.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -161,10 +209,7 @@ export default function InboxPage() {
             return (
               <div
                 key={conv.id}
-                onClick={() => {
-                  setSelectedConvId(conv.id);
-                  setMobileDetailView(true);
-                }}
+                onClick={() => handleSelectConv(conv.id)}
                 className={`cursor-pointer p-4 transition-colors ${
                   isSelected ? 'bg-blue-50/70 border-l-4 border-blue-600' : 'hover:bg-slate-50'
                 }`}
@@ -180,6 +225,11 @@ export default function InboxPage() {
                           <Flame className="h-2.5 w-2.5" /> URGENT
                         </span>
                       )}
+                      {conv.isSuppressed && (
+                        <span className="flex items-center gap-0.5 rounded bg-rose-100 px-1.5 py-0.5 text-[9px] font-extrabold text-rose-800 border border-rose-200">
+                          OPTED OUT
+                        </span>
+                      )}
                     </div>
                     <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                       {conv.contact?.phone_number}
@@ -188,7 +238,9 @@ export default function InboxPage() {
 
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="text-[10px] text-slate-400">
-                      {new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {conv.last_message_at
+                        ? new Date(conv.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : ''}
                     </span>
                     {((conv as any).message_count || (conv as any).messageCount || 0) > 0 && (
                       <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600">
@@ -256,6 +308,11 @@ export default function InboxPage() {
                     {activeConv.isEmergency && (
                       <span className="flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-[9px] font-extrabold text-white uppercase">
                         <Flame className="h-3 w-3" /> Emergency
+                      </span>
+                    )}
+                    {currentSuppressed && (
+                      <span className="flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[9px] font-extrabold text-white uppercase">
+                        <ShieldAlert className="h-3 w-3" /> Opted Out (STOP)
                       </span>
                     )}
                     {activeConv.job && (
@@ -370,6 +427,52 @@ export default function InboxPage() {
               </div>
             </div>
 
+            {/* ---------------- TCPA SUPPRESSION & QUIET HOURS BANNERS ---------------- */}
+            {currentSuppressed && (
+              <div className="bg-rose-50 border-b border-rose-200 px-4 py-2.5 flex items-center gap-2.5 text-xs text-rose-900">
+                <ShieldAlert className="h-4 w-4 text-rose-600 shrink-0" />
+                <div>
+                  <span className="font-bold">TCPA Opt-Out Active:</span> Customer texted STOP and revoked SMS consent. Outbound replies to this number are blocked to ensure federal compliance.
+                </div>
+              </div>
+            )}
+
+            {quietHours && !quietHours.isWithinHours && !currentSuppressed && (
+              <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>
+                    <span className="font-bold">Quiet Hours Active:</span> Local time is {quietHours.recipientLocalHour}:00 in {quietHours.recipientTimezone} (TCPA window: 8 AM - 9 PM).
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-[11px] text-amber-900 bg-amber-100/90 hover:bg-amber-200 px-2.5 py-1 rounded-md border border-amber-300 transition">
+                  <input
+                    type="checkbox"
+                    checked={emergencyOverride}
+                    onChange={(e) => setEmergencyOverride(e.target.checked)}
+                    className="rounded text-amber-600 h-3.5 w-3.5"
+                  />
+                  Emergency Override
+                </label>
+              </div>
+            )}
+
+            {sendError && (
+              <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between text-xs text-red-800 animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                  <span className="font-semibold">{sendError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSendError(null)}
+                  className="text-red-500 hover:text-red-700 font-bold px-2 py-0.5 rounded text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
               {messages.map((msg) => {
@@ -418,8 +521,9 @@ export default function InboxPage() {
                   <button
                     key={idx}
                     type="button"
+                    disabled={currentSuppressed || isSending}
                     onClick={() => handleSendMessage(qr)}
-                    className="whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 transition"
+                    className="whitespace-nowrap rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
                     {qr}
                   </button>
@@ -435,8 +539,9 @@ export default function InboxPage() {
                     <button
                       key={cr.id}
                       type="button"
+                      disabled={currentSuppressed || isSending}
                       onClick={() => handleSendMessage(cr.body)}
-                      className="whitespace-nowrap rounded-lg border border-indigo-100 bg-indigo-50/50 px-2 py-0.5 text-[11px] font-medium text-indigo-800 hover:bg-indigo-100"
+                      className="whitespace-nowrap rounded-lg border border-indigo-100 bg-indigo-50/50 px-2 py-0.5 text-[11px] font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {cr.title} ({cr.shortcut})
                     </button>
@@ -456,17 +561,30 @@ export default function InboxPage() {
               >
                 <input
                   type="text"
+                  disabled={currentSuppressed || isSending}
                   value={newMessageText}
                   onChange={(e) => setNewMessageText(e.target.value)}
-                  placeholder="Type an SMS reply to customer..."
-                  className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder={
+                    currentSuppressed
+                      ? 'Messaging disabled: Customer sent STOP (TCPA suppressed)'
+                      : 'Type an SMS reply to customer...'
+                  }
+                  className="flex-1 rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !newMessageText.trim()}
-                  className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-700 disabled:opacity-40 transition"
+                  disabled={isSending || !newMessageText.trim() || currentSuppressed}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
                 >
-                  <Send className="h-3.5 w-3.5" /> Send
+                  {isSending ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3.5 w-3.5" /> Send SMS
+                    </>
+                  )}
                 </button>
               </form>
             </div>
