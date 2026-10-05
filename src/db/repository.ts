@@ -1094,6 +1094,13 @@ class DatabaseRepository {
     this.saveToFile();
   }
 
+  public getAuditLogs(accountId?: string): { id: string; accountId: string; action: string; timestamp: string; details?: any }[] {
+    if (accountId) {
+      return this.state.auditLogs.filter((a) => a.accountId === accountId);
+    }
+    return [...this.state.auditLogs];
+  }
+
   // --------------------------------------------------------------------------
   // Persistence Health
   // --------------------------------------------------------------------------

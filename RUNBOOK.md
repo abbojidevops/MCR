@@ -71,6 +71,12 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/mcr_db
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
+
+# Carrier Webhook Authentication (A2P 10DLC Vetting Callbacks)
+# MANDATORY: Must be a high-entropy secret (openssl rand -hex 32).
+# If unset, carrier webhook endpoints fail-closed with 503 Service Unavailable.
+# NOTE: The legacy placeholder 'mcr-carrier-webhook-secret-2026' is permanently burned and rejected.
+CARRIER_WEBHOOK_SECRET=your_32_byte_hex_carrier_webhook_secret
 ```
 
 ---
