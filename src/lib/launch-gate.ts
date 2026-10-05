@@ -293,10 +293,18 @@ export function evaluateLaunchGates(): LaunchGateReport {
   }
 
   // ==========================================================================
-  // Gate 7: Production Database Engine
+  // Gate 8: Production Database Engine
   // ==========================================================================
   const isPgConfigured = db.isPostgresConfigured();
   if (isPgConfigured) {
+    let pgDetails = 'PostgreSQL database configured and connected';
+    try {
+      const parsedUrl = new URL(process.env.DATABASE_URL!);
+      pgDetails = `PostgreSQL engine active on ${parsedUrl.hostname}:${parsedUrl.port || '5432'} (database: ${parsedUrl.pathname.replace(/^\//, '')}, user: ${parsedUrl.username})`;
+    } catch {
+      pgDetails = 'DATABASE_URL active in environment with non-burned credentials';
+    }
+
     gates.push({
       id: 'production_database_engine',
       label: 'Production database engine verified',
@@ -307,10 +315,19 @@ export function evaluateLaunchGates(): LaunchGateReport {
       statusReason: 'PostgreSQL database configured and connected',
       evidence: {
         timestamp: evaluatedAt,
-        details: 'DATABASE_URL active in environment',
+        details: pgDetails,
       },
     });
   } else {
+    const rawUrl = process.env.DATABASE_URL;
+    let shortfallReason = 'PostgreSQL migration pending; currently running local JSON persistence';
+    let shortfallDetails = 'Storage engine is file_json; DATABASE_URL not set';
+
+    if (rawUrl) {
+      shortfallReason = 'PostgreSQL configured with insecure or burned credentials';
+      shortfallDetails = 'Storage engine fell back to file_json: DATABASE_URL contains burned, default, or unauthenticated credentials';
+    }
+
     gates.push({
       id: 'production_database_engine',
       label: 'Production database engine verified',
@@ -318,9 +335,9 @@ export function evaluateLaunchGates(): LaunchGateReport {
       description: 'Production persistence engine active and connected.',
       isManual: false,
       status: 'failed',
-      statusReason: 'PostgreSQL migration pending; currently running local JSON persistence',
+      statusReason: shortfallReason,
       evidence: {
-        details: 'Storage engine is file_json; DATABASE_URL not set',
+        details: shortfallDetails,
       },
     });
   }

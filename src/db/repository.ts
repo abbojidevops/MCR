@@ -427,6 +427,35 @@ class DatabaseRepository {
     this.state.subscriptions.push(subscription);
     this.state.usage.push(usage);
 
+    // Dual persistence: PostgreSQL sync if configured
+    if (this.isPostgresConfigured()) {
+      try {
+        const { getPostgresPool } = require('./postgres');
+        const pool = getPostgresPool();
+        if (pool) {
+          pool.query(
+            `INSERT INTO accounts (id, name, slug, status, plan_tier, trial_ends_at, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, plan_tier = EXCLUDED.plan_tier;`,
+            [
+              account.id,
+              account.name,
+              account.slug,
+              account.status,
+              account.plan_tier,
+              account.trial_ends_at,
+              account.created_at,
+              account.updated_at,
+            ]
+          ).catch((err: any) => {
+            console.warn('[Postgres createAccount error]:', err?.message);
+          });
+        }
+      } catch (err: any) {
+        console.warn('[Postgres createAccount pool error]:', err?.message);
+      }
+    }
+
     this.saveToFile();
     return { account, profile, phoneNumber };
   }
@@ -1165,11 +1194,36 @@ class DatabaseRepository {
   // Persistence Health
   // --------------------------------------------------------------------------
   public isPostgresConfigured(): boolean {
-    return Boolean(process.env.DATABASE_URL);
+    try {
+      const { isPostgresConfigured: checkPgConfigured } = require('./postgres');
+      return Boolean(checkPgConfigured());
+    } catch {
+      return Boolean(process.env.DATABASE_URL);
+    }
   }
 
   public getStorageEngine(): 'postgresql' | 'file_json' {
-    return process.env.DATABASE_URL ? 'postgresql' : 'file_json';
+    return this.isPostgresConfigured() ? 'postgresql' : 'file_json';
+  }
+
+  public async deleteAccountFromPostgres(accountId: string): Promise<boolean> {
+    const cleanId = accountId.trim();
+    if (!cleanId || cleanId.includes('*') || cleanId.includes('%')) {
+      return false;
+    }
+    if (this.isPostgresConfigured()) {
+      try {
+        const { getPostgresPool } = require('./postgres');
+        const pool = getPostgresPool();
+        if (pool) {
+          const res = await pool.query('DELETE FROM accounts WHERE id = $1', [cleanId]);
+          return (res?.rowCount ?? 0) > 0;
+        }
+      } catch (err: any) {
+        console.warn('[Postgres deleteAccountFromPostgres error]:', err?.message);
+      }
+    }
+    return false;
   }
 
   public getProcessedWebhooks(): Record<string, { processedAt: string; provider: string; eventType: string }> {

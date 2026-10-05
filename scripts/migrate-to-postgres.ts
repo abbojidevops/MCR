@@ -37,11 +37,13 @@ async function main() {
     process.exit(1);
   }
   const dbData = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-  console.log(`   ✓ Found ${dbData.accounts?.length || 0} accounts, ${dbData.jobs?.length || 0} jobs, ${dbData.callRecords?.length || 0} call records.\n`);
+  console.log(
+    `   ✓ Found ${dbData.accounts?.length || 0} accounts, ${dbData.jobs?.length || 0} jobs, ${dbData.callRecords?.length || 0} call records.\n`
+  );
 
   const pool = getPostgresPool()!;
 
-  console.log('4. Migrating Core Entities to PostgreSQL ...');
+  console.log('4. Migrating Entities to PostgreSQL ...');
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -57,7 +59,16 @@ async function main() {
              monthly_price_cents = EXCLUDED.monthly_price_cents,
              included_calls = EXCLUDED.included_calls,
              included_sms = EXCLUDED.included_sms;`,
-          [p.id, p.name, p.monthly_price_cents, p.included_calls, p.included_sms, p.included_numbers || 1, p.max_users || 2, JSON.stringify(p.features || [])]
+          [
+            p.id,
+            p.name,
+            p.monthly_price_cents,
+            p.included_calls,
+            p.included_sms,
+            p.included_numbers || 1,
+            p.max_users || 2,
+            JSON.stringify(p.features || []),
+          ]
         );
       }
       console.log(`   ✓ Migrated ${dbData.plans.length} subscription plans.`);
@@ -73,13 +84,47 @@ async function main() {
              name = EXCLUDED.name,
              status = EXCLUDED.status,
              plan_tier = EXCLUDED.plan_tier;`,
-          [acc.id, acc.name, acc.slug, acc.status, acc.plan_tier, acc.trial_ends_at || new Date().toISOString(), acc.created_at || new Date().toISOString(), acc.updated_at || new Date().toISOString()]
+          [
+            acc.id,
+            acc.name,
+            acc.slug,
+            acc.status,
+            acc.plan_tier,
+            acc.trial_ends_at || new Date().toISOString(),
+            acc.created_at || new Date().toISOString(),
+            acc.updated_at || new Date().toISOString(),
+          ]
         );
       }
       console.log(`   ✓ Migrated ${dbData.accounts.length} tenant accounts.`);
     }
 
-    // 4.3 Business Profiles
+    // 4.3 User Credentials
+    if (dbData.userCredentials?.length) {
+      for (const cred of dbData.userCredentials) {
+        await client.query(
+          `INSERT INTO user_credentials (id, user_id, account_id, email, password_hash, algorithm, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (id) DO UPDATE SET
+             email = EXCLUDED.email,
+             password_hash = EXCLUDED.password_hash,
+             algorithm = EXCLUDED.algorithm;`,
+          [
+            cred.id,
+            cred.user_id,
+            cred.account_id,
+            cred.email.toLowerCase(),
+            cred.password_hash,
+            cred.algorithm || 'scrypt',
+            cred.created_at || new Date().toISOString(),
+            cred.updated_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.userCredentials.length} user credentials.`);
+    }
+
+    // 4.4 Business Profiles
     if (dbData.profiles?.length) {
       for (const prof of dbData.profiles) {
         await client.query(
@@ -89,13 +134,21 @@ async function main() {
              business_name = EXCLUDED.business_name,
              trade = EXCLUDED.trade,
              emergency_phone = EXCLUDED.emergency_phone;`,
-          [prof.id || prof.account_id, prof.account_id, prof.business_name, prof.trade || 'plumbing', prof.emergency_phone, prof.notification_phone, prof.timezone || 'America/Chicago']
+          [
+            prof.id || prof.account_id,
+            prof.account_id,
+            prof.business_name,
+            prof.trade || 'plumbing',
+            prof.emergency_phone,
+            prof.notification_phone,
+            prof.timezone || 'America/Chicago',
+          ]
         );
       }
       console.log(`   ✓ Migrated ${dbData.profiles.length} business profiles.`);
     }
 
-    // 4.4 Phone Numbers
+    // 4.5 Phone Numbers
     if (dbData.phoneNumbers?.length) {
       for (const num of dbData.phoneNumbers) {
         await client.query(
@@ -103,13 +156,20 @@ async function main() {
            VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (phone_number) DO UPDATE SET
              status = EXCLUDED.status;`,
-          [num.id, num.account_id, num.phone_number, num.formatted_number || num.phone_number, num.twilio_sid, num.status || 'active']
+          [
+            num.id,
+            num.account_id,
+            num.phone_number,
+            num.formatted_number || num.phone_number,
+            num.twilio_sid,
+            num.status || 'active',
+          ]
         );
       }
       console.log(`   ✓ Migrated ${dbData.phoneNumbers.length} phone numbers.`);
     }
 
-    // 4.5 Contacts
+    // 4.6 Contacts
     if (dbData.contacts?.length) {
       for (const c of dbData.contacts) {
         await client.query(
@@ -124,7 +184,81 @@ async function main() {
       console.log(`   ✓ Migrated ${dbData.contacts.length} customer contacts.`);
     }
 
-    // 4.6 Jobs
+    // 4.7 Call Records
+    if (dbData.callRecords?.length) {
+      for (const cr of dbData.callRecords) {
+        await client.query(
+          `INSERT INTO call_records (id, account_id, twilio_call_sid, from_number, to_number, call_status, missed_reason, forwarded_status, text_back_status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+           ON CONFLICT (twilio_call_sid) DO UPDATE SET
+             text_back_status = EXCLUDED.text_back_status;`,
+          [
+            cr.id,
+            cr.account_id,
+            cr.twilio_call_sid,
+            cr.from_number,
+            cr.to_number,
+            cr.call_status,
+            cr.missed_reason || 'no-answer',
+            cr.forwarded_status || 'direct',
+            cr.text_back_status || 'sent',
+            cr.created_at || new Date().toISOString(),
+            cr.updated_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.callRecords.length} call records.`);
+    }
+
+    // 4.8 Conversations
+    if (dbData.conversations?.length) {
+      for (const conv of dbData.conversations) {
+        await client.query(
+          `INSERT INTO conversations (id, account_id, contact_id, status, last_message_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET
+             status = EXCLUDED.status,
+             last_message_at = EXCLUDED.last_message_at;`,
+          [
+            conv.id,
+            conv.account_id,
+            conv.contact_id,
+            conv.status || 'active',
+            conv.last_message_at || new Date().toISOString(),
+            conv.created_at || new Date().toISOString(),
+            conv.updated_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.conversations.length} conversations.`);
+    }
+
+    // 4.9 Messages
+    if (dbData.messages?.length) {
+      for (const msg of dbData.messages) {
+        await client.query(
+          `INSERT INTO messages (id, account_id, conversation_id, direction, from_number, to_number, body, twilio_message_sid, status, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (id) DO UPDATE SET
+             body = EXCLUDED.body;`,
+          [
+            msg.id,
+            msg.account_id,
+            msg.conversation_id,
+            msg.direction,
+            msg.from_number,
+            msg.to_number,
+            msg.body,
+            msg.twilio_message_sid || `msg_sid_${msg.id}`,
+            msg.status || 'delivered',
+            msg.created_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.messages.length} messages.`);
+    }
+
+    // 4.10 Jobs
     if (dbData.jobs?.length) {
       for (const j of dbData.jobs) {
         await client.query(
@@ -155,7 +289,7 @@ async function main() {
       console.log(`   ✓ Migrated ${dbData.jobs.length} jobs.`);
     }
 
-    // 4.7 Subscriptions
+    // 4.11 Subscriptions
     if (dbData.subscriptions?.length) {
       for (const s of dbData.subscriptions) {
         await client.query(
@@ -164,10 +298,74 @@ async function main() {
            ON CONFLICT (account_id) DO UPDATE SET
              status = EXCLUDED.status,
              plan_id = EXCLUDED.plan_id;`,
-          [s.id, s.account_id, s.plan_id, s.status, s.stripe_customer_id, s.current_period_end || new Date().toISOString()]
+          [
+            s.id,
+            s.account_id,
+            s.plan_id,
+            s.status,
+            s.stripe_customer_id,
+            s.current_period_end || new Date().toISOString(),
+          ]
         );
       }
       console.log(`   ✓ Migrated ${dbData.subscriptions.length} subscriptions.`);
+    }
+
+    // 4.12 Compliance Registrations
+    if (dbData.compliance?.length) {
+      for (const comp of dbData.compliance) {
+        await client.query(
+          `INSERT INTO compliance_registrations (id, account_id, legal_name, ein, business_type, address, website, contact_name, contact_email, contact_phone, brand_sid, campaign_sid, status, rejection_reason, sample_messages, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+           ON CONFLICT (account_id) DO UPDATE SET
+             status = EXCLUDED.status,
+             brand_sid = EXCLUDED.brand_sid,
+             campaign_sid = EXCLUDED.campaign_sid;`,
+          [
+            comp.id,
+            comp.account_id,
+            comp.legal_name,
+            comp.ein || null,
+            comp.business_type || 'LLC',
+            comp.address || null,
+            comp.website || null,
+            comp.contact_name || null,
+            comp.contact_email || null,
+            comp.contact_phone || null,
+            comp.brand_sid || null,
+            comp.campaign_sid || null,
+            comp.status,
+            comp.rejection_reason || null,
+            JSON.stringify(comp.sample_messages || []),
+            comp.created_at || new Date().toISOString(),
+            comp.updated_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.compliance.length} compliance registrations.`);
+    }
+
+    // 4.13 Consent Logs
+    if (dbData.consentLogs?.length) {
+      for (const cl of dbData.consentLogs) {
+        await client.query(
+          `INSERT INTO consent_logs (id, account_id, phone_number, consent_type, consent_status, source, ip_address, audit_notes, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO NOTHING;`,
+          [
+            cl.id,
+            cl.account_id,
+            cl.phone_number,
+            cl.consent_type,
+            cl.consent_status,
+            cl.source,
+            cl.ip_address || null,
+            cl.audit_notes || null,
+            cl.created_at || new Date().toISOString(),
+          ]
+        );
+      }
+      console.log(`   ✓ Migrated ${dbData.consentLogs.length} consent logs.`);
     }
 
     await client.query('COMMIT');

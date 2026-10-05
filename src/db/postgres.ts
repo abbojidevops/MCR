@@ -29,9 +29,11 @@ export function extractDatabasePassword(dbUrl: string): string | null {
   }
 }
 
+let currentConnectionUrl: string | null = null;
+
 export function getPostgresPool(): Pool | null {
   const dbUrl = process.env.DATABASE_URL;
-  if (!dbUrl) return null;
+  if (!dbUrl || !dbUrl.trim()) return null;
 
   const password = extractDatabasePassword(dbUrl);
   if (!password || isBurnedDatabasePassword(password)) {
@@ -39,6 +41,14 @@ export function getPostgresPool(): Pool | null {
       '[Postgres Security]: Refusing to connect using empty, default, or burned password. Set a rotated secure password in DATABASE_URL.'
     );
     return null;
+  }
+
+  if (pool && currentConnectionUrl !== dbUrl) {
+    try {
+      pool.end();
+    } catch {}
+    pool = null;
+    isConnected = false;
   }
 
   if (!pool) {
@@ -49,6 +59,7 @@ export function getPostgresPool(): Pool | null {
         idleTimeoutMillis: 10000,
         max: 10,
       });
+      currentConnectionUrl = dbUrl;
       pool.on('error', (err) => {
         console.warn('[Postgres Pool Error]:', err.message);
         isConnected = false;
@@ -56,9 +67,23 @@ export function getPostgresPool(): Pool | null {
     } catch (e: any) {
       console.warn('[Postgres Init Error]:', e.message);
       pool = null;
+      currentConnectionUrl = null;
     }
   }
   return pool;
+}
+
+export async function closePostgresPool(): Promise<void> {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch {
+      // ignore
+    }
+    pool = null;
+    currentConnectionUrl = null;
+    isConnected = false;
+  }
 }
 
 export async function checkPostgresConnection(): Promise<boolean> {
@@ -87,7 +112,23 @@ export function isPostgresHealthy(): boolean {
 }
 
 export function isPostgresConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL);
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl || !dbUrl.trim()) return false;
+  try {
+    const parsed = new URL(dbUrl);
+    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+      return false;
+    }
+  } catch {
+    if (!dbUrl.startsWith('postgres://') && !dbUrl.startsWith('postgresql://')) {
+      return false;
+    }
+  }
+  const password = extractDatabasePassword(dbUrl);
+  if (!password || isBurnedDatabasePassword(password)) {
+    return false;
+  }
+  return true;
 }
 
 /**
