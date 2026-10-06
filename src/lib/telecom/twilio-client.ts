@@ -13,6 +13,18 @@ export interface SendSmsResult {
   error?: string;
 }
 
+export interface BridgeCallParams {
+  contractorPhone: string;
+  customerPhone: string;
+  mcrNumber: string;
+}
+
+export interface BridgeCallResult {
+  sid: string;
+  status: 'queued' | 'initiated' | 'ringing' | 'mocked' | 'failed';
+  error?: string;
+}
+
 export interface BrandRegistrationParams {
   legalName: string;
   ein: string;
@@ -134,6 +146,75 @@ export class TwilioClient {
       };
     } catch (err: any) {
       console.error('[Twilio Network Exception]:', err.message);
+      return {
+        sid: '',
+        status: 'failed',
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * Initiate 2-Leg Click-to-Call Voice Bridge via Twilio REST API.
+   * Dials the contractor first, and when answered, executes TwiML bridging to the customer
+   * using the contractor's MCR virtual business number as the caller ID.
+   */
+  public static async createBridgeCall(params: BridgeCallParams): Promise<BridgeCallResult> {
+    const { contractorPhone, customerPhone, mcrNumber } = params;
+
+    if (!this.isLive()) {
+      const mockSid = `CA_MOCK_BRIDGE_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+      console.log(`[Twilio Mock Bridge Call] Contractor: ${contractorPhone} -> Customer: ${customerPhone} (CallerID: ${mcrNumber})`);
+      return {
+        sid: mockSid,
+        status: 'mocked',
+      };
+    }
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+    const authToken = process.env.TWILIO_AUTH_TOKEN!;
+    const endpoint = `${this.getApiBase()}/2010-04-01/Accounts/${accountSid}/Calls.json`;
+
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">Connecting you to homeowner now.</Say>
+  <Dial callerId="${mcrNumber}">
+    <Number>${customerPhone}</Number>
+  </Dial>
+</Response>`;
+
+    const formData = new URLSearchParams();
+    formData.append('To', contractorPhone);
+    formData.append('From', mcrNumber);
+    formData.append('Twiml', twiml);
+
+    try {
+      const authHeader = 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('[Twilio Bridge Call Error]:', data);
+        return {
+          sid: '',
+          status: 'failed',
+          error: data.message || `Twilio HTTP error ${response.status}`,
+        };
+      }
+
+      return {
+        sid: data.sid,
+        status: data.status === 'queued' ? 'queued' : 'initiated',
+      };
+    } catch (err: any) {
+      console.error('[Twilio Bridge Call Network Exception]:', err.message);
       return {
         sid: '',
         status: 'failed',

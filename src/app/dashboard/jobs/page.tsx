@@ -17,6 +17,7 @@ import {
   ArrowRight,
   Eye,
   Download,
+  Loader2,
 } from 'lucide-react';
 import { JobCard, JobStatus } from '@/types';
 
@@ -25,6 +26,9 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [actualValueInput, setActualValueInput] = useState<string>('');
+  const [isBridgingCall, setIsBridgingCall] = useState(false);
+  const [bridgeCallStatus, setBridgeCallStatus] = useState<string | null>(null);
+  const [bridgeCallError, setBridgeCallError] = useState<string | null>(null);
 
   const fetchJobs = async () => {
     try {
@@ -62,6 +66,38 @@ export default function JobsPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleBridgeCall = async (customerPhone: string, jobId: string) => {
+    setIsBridgingCall(true);
+    setBridgeCallStatus('Initiating call bridge...');
+    setBridgeCallError(null);
+    try {
+      const res = await fetch('/api/telecom/bridge-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerPhone, jobId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setBridgeCallError(data.error || 'Failed to initiate bridge call');
+        setBridgeCallStatus(null);
+        return;
+      }
+
+      setBridgeCallStatus(
+        `Calling your phone (${data.contractorPhone})! Answer to be connected to ${data.customerPhone} with business caller ID ${data.mcrNumber}.`
+      );
+      fetchJobs();
+      if (selectedJob && data.jobUpdated) {
+        setSelectedJob({ ...selectedJob, status: 'CONTACTED' });
+      }
+    } catch (err: any) {
+      setBridgeCallError(err.message || 'Network exception while bridging call');
+      setBridgeCallStatus(null);
+    } finally {
+      setIsBridgingCall(false);
     }
   };
 
@@ -410,20 +446,70 @@ export default function JobsPage() {
               </div>
             </div>
 
+            {/* Bridge Call Status Banners */}
+            {bridgeCallStatus && (
+              <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
+                  <span>{bridgeCallStatus}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBridgeCallStatus(null)}
+                  className="text-emerald-700 font-bold hover:underline shrink-0 ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            {bridgeCallError && (
+              <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-900 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                  <span>{bridgeCallError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBridgeCallError(null)}
+                  className="text-red-700 font-bold hover:underline shrink-0 ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Quick Actions */}
-            <div className="mt-6 flex flex-wrap items-center justify-between border-t border-slate-100 pt-4">
-              <div className="flex gap-2">
+            <div className="mt-6 flex flex-wrap items-center justify-between border-t border-slate-100 pt-4 gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isBridgingCall || !selectedJob.contact?.phone_number}
+                  onClick={() => handleBridgeCall(selectedJob.contact!.phone_number, selectedJob.id)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50 transition"
+                  title="Dials your phone first, then connects to customer using your MCR business caller ID"
+                >
+                  {isBridgingCall ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calling...
+                    </>
+                  ) : (
+                    <>
+                      <Phone className="h-3.5 w-3.5" /> Bridge Call (Private)
+                    </>
+                  )}
+                </button>
                 <a
                   href={`tel:${selectedJob.contact?.phone_number}`}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  title="Direct cellular call from this device"
                 >
-                  <Phone className="h-3.5 w-3.5" /> Call Customer
+                  Direct Dial
                 </a>
                 <Link
                   href="/dashboard/inbox"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
                 >
-                  <MessageSquare className="h-3.5 w-3.5" /> Open SMS Thread
+                  <MessageSquare className="h-3.5 w-3.5" /> SMS Thread
                 </Link>
               </div>
 

@@ -43,6 +43,9 @@ export default function InboxPage() {
   } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [emergencyOverride, setEmergencyOverride] = useState(false);
+  const [isBridgingCall, setIsBridgingCall] = useState(false);
+  const [bridgeCallStatus, setBridgeCallStatus] = useState<string | null>(null);
+  const [bridgeCallError, setBridgeCallError] = useState<string | null>(null);
 
   // Section 12: Standard Trade Quick Replies
   const standardQuickReplies = [
@@ -157,6 +160,39 @@ export default function InboxPage() {
       setSendError(err.message || 'Network exception while dispatching message');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleBridgeCall = async (customerPhone: string, jobId?: string) => {
+    setIsBridgingCall(true);
+    setBridgeCallStatus('Initiating call bridge...');
+    setBridgeCallError(null);
+    try {
+      const res = await fetch('/api/telecom/bridge-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerPhone,
+          jobId,
+          conversationId: selectedConvId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setBridgeCallError(data.error || 'Failed to initiate bridge call');
+        setBridgeCallStatus(null);
+        return;
+      }
+
+      setBridgeCallStatus(
+        `Calling your phone (${data.contractorPhone})! Answer to connect to customer (${data.customerPhone}) via MCR caller ID ${data.mcrNumber}.`
+      );
+      fetchData();
+    } catch (err: any) {
+      setBridgeCallError(err.message || 'Network exception while bridging call');
+      setBridgeCallStatus(null);
+    } finally {
+      setIsBridgingCall(false);
     }
   };
 
@@ -329,12 +365,32 @@ export default function InboxPage() {
 
               <div className="flex items-center gap-2">
                 {activeConv.contact?.phone_number && (
-                  <a
-                    href={`tel:${activeConv.contact.phone_number}`}
-                    className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
-                  >
-                    <Phone className="h-3.5 w-3.5" /> Call Customer
-                  </a>
+                  <>
+                    <button
+                      type="button"
+                      disabled={isBridgingCall || currentSuppressed}
+                      onClick={() => handleBridgeCall(activeConv.contact!.phone_number, activeConv.job?.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm disabled:opacity-40 transition"
+                      title="Dials your cell first, then connects to customer showing your MCR business caller ID"
+                    >
+                      {isBridgingCall ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calling...
+                        </>
+                      ) : (
+                        <>
+                          <Phone className="h-3.5 w-3.5" /> Bridge Call
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href={`tel:${activeConv.contact.phone_number}`}
+                      className="hidden md:inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      title="Direct cellular call from this device"
+                    >
+                      Direct Dial
+                    </a>
+                  </>
                 )}
                 {activeConv.job && (
                   <Link
@@ -346,6 +402,38 @@ export default function InboxPage() {
                 )}
               </div>
             </div>
+
+            {bridgeCallStatus && (
+              <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 flex items-center justify-between text-xs text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
+                  <span>{bridgeCallStatus}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBridgeCallStatus(null)}
+                  className="text-emerald-700 font-bold hover:underline shrink-0 ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {bridgeCallError && (
+              <div className="bg-red-50 border-b border-red-200 px-4 py-2 flex items-center justify-between text-xs text-red-900">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+                  <span>{bridgeCallError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBridgeCallError(null)}
+                  className="text-red-700 font-bold hover:underline shrink-0 ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             {/* ---------------- SECTION 5: INBOX LEAD SUMMARY ---------------- */}
             <div className="border-b border-slate-200 bg-slate-50/80 p-3 sm:px-4 text-xs">

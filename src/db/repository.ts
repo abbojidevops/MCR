@@ -636,6 +636,52 @@ class DatabaseRepository {
     return this.state.callRecords.find((c) => c.twilio_call_sid === sid || c.id === sid);
   }
 
+  public createOutboundBridgeCall(params: {
+    accountId: string;
+    twilioCallSid: string;
+    fromNumber: string;
+    toNumber: string;
+    contractorPhone?: string;
+  }): CallRecord {
+    const isSimulated =
+      params.twilioCallSid.startsWith('CA_MOCK_') || params.twilioCallSid.startsWith('CA_SIM_');
+
+    const callRecord: CallRecord = {
+      id: `call-bridge-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      account_id: params.accountId,
+      twilio_call_sid: params.twilioCallSid,
+      from_number: params.fromNumber,
+      to_number: params.toNumber,
+      direction: 'outbound',
+      start_time: new Date().toISOString(),
+      duration: 0,
+      call_status: 'completed',
+      text_back_status: 'suppressed',
+      deduplication_state: 'first_call',
+      is_simulated: isSimulated,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.state.callRecords.unshift(callRecord);
+
+    const usage = this.state.usage.find((u) => u.account_id === params.accountId);
+    if (usage) {
+      usage.calls_count += 1;
+    }
+
+    this.saveToFile();
+    return callRecord;
+  }
+
+  public deleteCallRecord(callId: string): boolean {
+    const idx = this.state.callRecords.findIndex((c) => c.id === callId || c.twilio_call_sid === callId);
+    if (idx === -1) return false;
+    this.state.callRecords.splice(idx, 1);
+    this.saveToFile();
+    return true;
+  }
+
   // --------------------------------------------------------------------------
   // Conversations & Messages
   // --------------------------------------------------------------------------
