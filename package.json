@@ -33,6 +33,7 @@
     "test:reports": "npx tsx --test tests/reports-dispatch.test.ts",
     "test:custom": "npx tsx --test tests/custom-intake-keywords.test.ts",
     "deploy:check": "npx tsx scripts/ci-deploy-check.ts",
+    "staging:preflight": "npx tsx scripts/staging-preflight.ts",
     "demo": "npx tsx scripts/demo-walkthrough.ts",
     "db:reset": "npx tsx scripts/db-reset.ts",
     "db:migrate:postgres": "npx tsx scripts/migrate-to-postgres.ts",

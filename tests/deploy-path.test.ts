@@ -7,6 +7,7 @@ import * as path from 'path';
 import { NextRequest } from 'next/server';
 
 import { validateSchemaSyntax, validateDatabaseCredentials } from '../scripts/db-init.mjs';
+import { runStagingPreflight } from '../scripts/staging-preflight';
 import { middleware } from '@/middleware';
 import { POST as adminLoginHandler } from '@/app/api/admin/login/route';
 import { POST as loginHandler } from '@/app/api/auth/login/route';
@@ -397,4 +398,86 @@ test('T21c-1: WAF Webhook Exemption Documentation Strictly Scoped and Defines Ap
     'CLOUDFLARE_DEPLOYMENT.md must document 503/403 fail-closed guarantees'
   );
 });
+
+test('DEP-7: Render Blueprint Manifest (render.yaml) — Defines Web Service, Postgres 16, and Health Check', () => {
+  const renderPath = path.join(process.cwd(), 'render.yaml');
+  assert.ok(fs.existsSync(renderPath), 'render.yaml must exist in root');
+  const content = fs.readFileSync(renderPath, 'utf-8');
+
+  assert.ok(content.includes('name: mcr-saas-app'), 'render.yaml must declare mcr-saas-app service');
+  assert.ok(content.includes('healthCheckPath: /api/health'), 'render.yaml must route health checks to /api/health');
+  assert.ok(content.includes('runtime: docker'), 'render.yaml must use Docker runtime');
+  assert.ok(content.includes('name: mcr-postgres'), 'render.yaml must configure managed PostgreSQL service');
+  assert.ok(content.includes('postgresMajorVersion: 16'), 'render.yaml must specify PostgreSQL 16');
+});
+
+test('DEP-8: Railway Manifest (railway.json) — Defines Dockerfile Builder and Health Check Path', () => {
+  const railwayPath = path.join(process.cwd(), 'railway.json');
+  assert.ok(fs.existsSync(railwayPath), 'railway.json must exist in root');
+  const json = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
+
+  assert.equal(json.build?.builder, 'DOCKERFILE');
+  assert.equal(json.build?.dockerfilePath, 'Dockerfile');
+  assert.equal(json.deploy?.healthcheckPath, '/api/health');
+  assert.equal(json.deploy?.restartPolicyType, 'ON_FAILURE');
+});
+
+test('DEP-9: Vercel Configuration (vercel.json) — Enforces Enterprise Security Headers and Framework Preset', () => {
+  const vercelPath = path.join(process.cwd(), 'vercel.json');
+  assert.ok(fs.existsSync(vercelPath), 'vercel.json must exist in root');
+  const json = JSON.parse(fs.readFileSync(vercelPath, 'utf-8'));
+
+  assert.equal(json.framework, 'nextjs');
+  assert.ok(Array.isArray(json.headers));
+
+  const globalHeaders = json.headers.find((h: any) => h.source === '/(.*)');
+  assert.ok(globalHeaders, 'Must include global security headers block for /(.*)');
+
+  const headerMap: Record<string, string> = {};
+  for (const h of globalHeaders.headers) {
+    headerMap[h.key] = h.value;
+  }
+
+  assert.equal(headerMap['X-Frame-Options'], 'DENY');
+  assert.equal(headerMap['X-Content-Type-Options'], 'nosniff');
+  assert.ok(headerMap['Strict-Transport-Security'].includes('max-age=31536000'));
+});
+
+test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets and Passes on Valid Topology', () => {
+  // 1. Weak ADMIN_PASSWORD fails
+  const weakAdminResult = runStagingPreflight({
+    ADMIN_PASSWORD: 'short',
+    SESSION_SECRET: 'a'.repeat(32),
+  });
+  assert.equal(weakAdminResult.ok, false);
+  assert.ok(weakAdminResult.errors.some((e) => e.includes('ADMIN_PASSWORD must be at least 12')));
+
+  // 2. Weak SESSION_SECRET fails
+  const weakSessionResult = runStagingPreflight({
+    ADMIN_PASSWORD: 'SuperSecurePass2026!',
+    SESSION_SECRET: 'short',
+  });
+  assert.equal(weakSessionResult.ok, false);
+  assert.ok(weakSessionResult.errors.some((e) => e.includes('SESSION_SECRET must be at least 32')));
+
+  // 3. Burned database password fails
+  const burnedDbResult = runStagingPreflight({
+    ADMIN_PASSWORD: 'SuperSecurePass2026!',
+    SESSION_SECRET: 'a'.repeat(32),
+    DATABASE_URL: 'postgresql://mcr_user:mcr_password@localhost:5432/mcr_db',
+  });
+  assert.equal(burnedDbResult.ok, false);
+  assert.ok(burnedDbResult.errors.some((e) => e.includes('burned or default database password')));
+
+  // 4. Valid staging topology passes
+  const validResult = runStagingPreflight({
+    ADMIN_PASSWORD: 'SuperSecurePass2026!',
+    SESSION_SECRET: 'x'.repeat(40),
+    DATABASE_URL: 'postgresql://mcr_user:StrongStagingPass2026!Db@localhost:5432/mcr_db',
+    TWILIO_MOCK_MODE: 'true',
+  });
+  assert.equal(validResult.ok, true, `Valid topology should pass with 0 errors. Errors: ${validResult.errors.join(', ')}`);
+  assert.ok(validResult.passedChecks.length >= 5);
+});
+
 
