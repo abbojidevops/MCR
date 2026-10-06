@@ -24,6 +24,10 @@ import {
   MoreHorizontal,
   Clock,
   ShieldAlert,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  Circle,
 } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -36,6 +40,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [simulatingCall, setSimulatingCall] = useState(false);
   const [simulationToast, setSimulationToast] = useState<string | null>(null);
   const [complianceStatus, setComplianceStatus] = useState<string>('signed_up');
+  const [setupMilestones, setSetupMilestones] = useState<{
+    completedSteps: number;
+    totalSteps: number;
+    progressPercent: number;
+    nextMilestone: { id: string; label: string; href: string } | null;
+    milestones: Array<{ id: string; label: string; description: string; isComplete: boolean; href: string }>;
+  } | null>(null);
+  const [onboardingBannerCollapsed, setOnboardingBannerCollapsed] = useState(false);
+  const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(false);
 
   React.useEffect(() => {
     fetch('/api/auth/session')
@@ -50,6 +63,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((d) => {
         if (d.complianceStatus) setComplianceStatus(d.complianceStatus);
         else if (d.compliance?.status) setComplianceStatus(d.compliance.status);
+        if (d.milestones) {
+          setSetupMilestones({
+            completedSteps: d.completedSteps,
+            totalSteps: d.totalSteps,
+            progressPercent: d.progressPercent,
+            nextMilestone: d.nextMilestone,
+            milestones: d.milestones,
+          });
+        }
       })
       .catch(() => {
         fetch('/api/compliance')
@@ -371,7 +393,159 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
 
         {/* Page Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+          {/* Contractor Go-Live Onboarding Checklist Banner */}
+          {setupMilestones && !onboardingBannerDismissed && (
+            <div
+              className={`mb-6 rounded-2xl border p-4 sm:p-5 shadow-xs transition ${
+                setupMilestones.progressPercent === 100
+                  ? 'border-emerald-200 bg-emerald-50/80 text-emerald-950'
+                  : 'border-blue-200 bg-gradient-to-br from-blue-50/90 via-slate-50 to-indigo-50/60 text-slate-900'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  {setupMilestones.progressPercent === 100 ? (
+                    <div className="rounded-full bg-emerald-100 p-1 text-emerald-600">
+                      <CheckCircle className="h-4 w-4" />
+                    </div>
+                  ) : (
+                    <div className="rounded-full bg-blue-100 p-1 text-blue-600">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-xs tracking-tight text-slate-900">
+                        {setupMilestones.progressPercent === 100
+                          ? 'MCR Go-Live Setup 100% Complete'
+                          : `Contractor Setup Progress: ${setupMilestones.completedSteps} of ${setupMilestones.totalSteps} Milestones Verified`}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                          setupMilestones.progressPercent === 100
+                            ? 'bg-emerald-200/80 text-emerald-800'
+                            : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {setupMilestones.progressPercent}% Ready
+                      </span>
+                    </div>
+                    {setupMilestones.progressPercent === 100 ? (
+                      <p className="mt-0.5 text-[11px] text-emerald-800">
+                        All 5 core systems are live: profile configured, dedicated recovery line connected, carrier conditional forwarding verified, test simulation complete, and compliance recorded.
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 text-[11px] text-slate-600">
+                        Complete your setup to ensure incoming calls that you decline or miss immediately receive the automated SMS text-back.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                  {setupMilestones.progressPercent < 100 && setupMilestones.nextMilestone && (
+                    <Link
+                      href={setupMilestones.nextMilestone.href}
+                      className="inline-flex items-center gap-1 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
+                    >
+                      <span>Next: {setupMilestones.nextMilestone.label}</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingBannerCollapsed(!onboardingBannerCollapsed)}
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/60 transition"
+                    title={onboardingBannerCollapsed ? 'Expand Checklist' : 'Collapse Checklist'}
+                  >
+                    {onboardingBannerCollapsed ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnboardingBannerDismissed(true)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition"
+                    title="Dismiss Banner"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="mt-3 w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-1.5 transition-all duration-500 ${
+                    setupMilestones.progressPercent === 100 ? 'bg-emerald-500' : 'bg-blue-600'
+                  }`}
+                  style={{ width: `${setupMilestones.progressPercent}%` }}
+                />
+              </div>
+
+              {/* Milestone Details Cards Grid (When expanded) */}
+              {!onboardingBannerCollapsed && (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                  {setupMilestones.milestones.map((m, idx) => (
+                    <div
+                      key={m.id}
+                      className={`flex flex-col justify-between rounded-xl border p-3 text-xs transition ${
+                        m.isComplete
+                          ? 'border-emerald-200 bg-emerald-50/50 text-emerald-950'
+                          : 'border-slate-200 bg-white shadow-2xs hover:border-blue-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Step {idx + 1}
+                          </span>
+                          {m.isComplete ? (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700">
+                              <CheckCircle className="h-3 w-3 text-emerald-600" /> Done
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-slate-400">
+                              <Circle className="h-2.5 w-2.5" /> Pending
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="mt-1 font-bold text-slate-900 leading-snug">{m.label}</h4>
+                        <p className="mt-1 text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                          {m.description}
+                        </p>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-slate-100">
+                        {m.isComplete ? (
+                          <Link
+                            href={m.href}
+                            className="text-[11px] font-medium text-emerald-800 hover:underline"
+                          >
+                            Review Setting &rarr;
+                          </Link>
+                        ) : (
+                          <Link
+                            href={m.href}
+                            className="inline-flex items-center gap-1 font-bold text-blue-600 hover:text-blue-700 text-[11px]"
+                          >
+                            <span>Set Up Now</span>
+                            <ArrowRight className="h-2.5 w-2.5" />
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {children}
+        </main>
       </div>
 
       {/* ---------------- SECTION 20: MOBILE STICKY BOTTOM NAV BAR ---------------- */}

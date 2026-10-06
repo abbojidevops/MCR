@@ -185,3 +185,57 @@ test('D6: Email Service Honesty (No Fabricated 2,450 or 14 Fallbacks)', async ()
     'Email HTML must not default to fabricated 14 missed calls'
   );
 });
+
+test('D7: Setup-Status Route Milestones Breakdown (5 Essential Onboarding Steps)', async () => {
+  const tokenA = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
+  const setupReq = createMockRequest('http://localhost:3001/api/setup-status', { token: tokenA });
+  const setupRes = await setupStatusGet(setupReq);
+  assert.equal(setupRes.status, 200);
+  const data = await setupRes.json();
+
+  assert.equal(data.totalSteps, 5, 'Must define exactly 5 core onboarding milestones');
+  assert.equal(typeof data.completedSteps, 'number');
+  assert.equal(typeof data.progressPercent, 'number');
+  assert.ok(Array.isArray(data.milestones), 'Must return milestones array');
+  assert.equal(data.milestones.length, 5);
+
+  const stepIds = data.milestones.map((m: any) => m.id);
+  assert.deepEqual(stepIds, ['profile', 'phone_number', 'forwarding', 'test_call', 'compliance']);
+
+  // Verify milestone shapes
+  for (const m of data.milestones) {
+    assert.ok(m.id && m.label && m.description && m.href);
+    assert.equal(typeof m.isComplete, 'boolean');
+  }
+});
+
+test('D8: Dynamic Milestone Completion on Forwarding Toggle with State Invariance', async () => {
+  const tokenA = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
+  const profile = db.getBusinessProfile(TENANT_A);
+  assert.ok(profile);
+  const originalForwarding = profile.forwarding_configured;
+
+  try {
+    // 1. Force forwarding_configured = false
+    db.updateBusinessProfile(TENANT_A, { forwarding_configured: false });
+    const reqFalse = createMockRequest('http://localhost:3001/api/setup-status', { token: tokenA });
+    const resFalse = await setupStatusGet(reqFalse);
+    const dataFalse = await resFalse.json();
+    const forwardingMilestoneFalse = dataFalse.milestones.find((m: any) => m.id === 'forwarding');
+    assert.equal(forwardingMilestoneFalse.isComplete, false);
+    const stepsFalse = dataFalse.completedSteps;
+
+    // 2. Force forwarding_configured = true
+    db.updateBusinessProfile(TENANT_A, { forwarding_configured: true });
+    const reqTrue = createMockRequest('http://localhost:3001/api/setup-status', { token: tokenA });
+    const resTrue = await setupStatusGet(reqTrue);
+    const dataTrue = await resTrue.json();
+    const forwardingMilestoneTrue = dataTrue.milestones.find((m: any) => m.id === 'forwarding');
+    assert.equal(forwardingMilestoneTrue.isComplete, true);
+    assert.equal(dataTrue.completedSteps, stepsFalse + 1);
+    assert.ok(dataTrue.progressPercent > dataFalse.progressPercent);
+  } finally {
+    // Restore pristine database state
+    db.updateBusinessProfile(TENANT_A, { forwarding_configured: originalForwarding });
+  }
+});
