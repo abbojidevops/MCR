@@ -16,6 +16,9 @@ import {
   Award,
   Sparkles,
   ClipboardList,
+  Mail,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import { UnifiedMCRMetrics, DateRangePreset, RecoveredJobAttribution } from '@/lib/metrics';
 import { DailySummaryReport, WeeklyRecoveryReport } from '@/lib/reports';
@@ -26,6 +29,38 @@ export default function ReportsPage() {
   const [weekly, setWeekly] = useState<WeeklyRecoveryReport | null>(null);
   const [daily, setDaily] = useState<DailySummaryReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dispatchingSms, setDispatchingSms] = useState(false);
+  const [dispatchingEmail, setDispatchingEmail] = useState(false);
+  const [dispatchToast, setDispatchToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleDispatch = async (type: 'daily_sms' | 'weekly_email') => {
+    if (type === 'daily_sms') setDispatchingSms(true);
+    if (type === 'weekly_email') setDispatchingEmail(true);
+    setDispatchToast(null);
+
+    try {
+      const res = await fetch('/api/reports/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDispatchToast({ type: 'error', message: data.error || 'Failed to dispatch report' });
+      } else {
+        const msg = type === 'daily_sms'
+          ? `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`
+          : `Weekly recovery digest dispatched to ${data.results?.email?.to || 'contractor email'}`;
+        setDispatchToast({ type: 'success', message: msg });
+      }
+    } catch (err: any) {
+      setDispatchToast({ type: 'error', message: err.message || 'Dispatch network error' });
+    } finally {
+      setDispatchingSms(false);
+      setDispatchingEmail(false);
+      setTimeout(() => setDispatchToast(null), 5000);
+    }
+  };
 
   const fetchReports = async (selectedRange: DateRangePreset = range) => {
     try {
@@ -81,31 +116,62 @@ export default function ReportsPage() {
           </p>
         </div>
 
-        {/* Date Filter Selector */}
-        <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1 text-xs shadow-xs">
-          {(
-            [
-              { label: 'Today', value: 'today' },
-              { label: 'Yesterday', value: 'yesterday' },
-              { label: 'This Week', value: 'week' },
-              { label: 'This Month', value: 'month' },
-              { label: 'All Time', value: 'all' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setRange(tab.value)}
-              className={`rounded-lg px-2.5 py-1.5 font-bold transition text-xs ${
-                range === tab.value
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Export CSV Button */}
+          <a
+            href="/api/jobs/export"
+            download
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-500" />
+            Export CSV
+          </a>
+
+          {/* Date Filter Selector */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white p-1 text-xs shadow-xs">
+            {(
+              [
+                { label: 'Today', value: 'today' },
+                { label: 'Yesterday', value: 'yesterday' },
+                { label: 'This Week', value: 'week' },
+                { label: 'This Month', value: 'month' },
+                { label: 'All Time', value: 'all' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setRange(tab.value)}
+                className={`rounded-lg px-2.5 py-1.5 font-bold transition text-xs ${
+                  range === tab.value
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Dispatch Feedback Toast */}
+      {dispatchToast && (
+        <div
+          className={`rounded-xl border p-3.5 text-xs font-medium flex items-center justify-between shadow-xs transition ${
+            dispatchToast.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900'
+          }`}
+        >
+          <span>{dispatchToast.message}</span>
+          <button
+            onClick={() => setDispatchToast(null)}
+            className="text-[11px] font-bold underline ml-2 cursor-pointer opacity-80 hover:opacity-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Selected Period Banner */}
       <div className="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-4 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -290,14 +356,40 @@ export default function ReportsPage() {
       {/* Daily Flash Summary (Section 18) */}
       {daily && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-blue-600" />
               <h3 className="text-sm font-bold text-slate-900">Today&apos;s 6:00 PM Flash Summary Preview</h3>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                Automated Digest
+              </span>
             </div>
-            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-              Automated Dispatch SMS
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => handleDispatch('daily_sms')}
+                disabled={dispatchingSms}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+              >
+                {dispatchingSms ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                {dispatchingSms ? 'Sending SMS...' : 'Send Test Flash SMS'}
+              </button>
+              <button
+                onClick={() => handleDispatch('weekly_email')}
+                disabled={dispatchingEmail}
+                className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+              >
+                {dispatchingEmail ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5" />
+                )}
+                {dispatchingEmail ? 'Sending Email...' : 'Send Test Weekly Email'}
+              </button>
+            </div>
           </div>
 
           <div className="rounded-xl bg-slate-900 p-4 font-mono text-xs text-emerald-400">
