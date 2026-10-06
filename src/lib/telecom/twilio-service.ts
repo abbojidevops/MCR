@@ -465,9 +465,11 @@ export class TwilioService {
     let stepUpdated = intake.current_step;
     let jobCreated = false;
 
-    // Check Emergency Keywords in any message
+    // Check Emergency Keywords in any message (built-in trade keywords + contractor's custom keywords)
     const lowerBody = Body.toLowerCase();
-    const hasEmergencyKeywords = template.emergency_keywords.some((kw) => lowerBody.includes(kw));
+    const customKeywords = (profile?.custom_emergency_keywords || []).map((k) => k.toLowerCase().trim()).filter(Boolean);
+    const allEmergencyKeywords = [...template.emergency_keywords, ...customKeywords];
+    const hasEmergencyKeywords = allEmergencyKeywords.some((kw) => lowerBody.includes(kw));
     if (hasEmergencyKeywords && !intake.is_emergency) {
       intake.is_emergency = true;
       dispatchAlert({
@@ -502,7 +504,8 @@ export class TwilioService {
         intake.current_step = 'ASK_PROBLEM';
         stepUpdated = 'ASK_PROBLEM';
 
-        const problemQuestion = template.questions.find((q) => q.step === 'ASK_PROBLEM')?.text ||
+        const problemQuestion = profile?.custom_intake_question ||
+          template.questions.find((q) => q.step === 'ASK_PROBLEM')?.text ||
           'What specific issue are you experiencing?';
 
         nextReply = intake.is_emergency

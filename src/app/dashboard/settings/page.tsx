@@ -23,6 +23,7 @@ import {
   ArrowRight,
   CreditCard,
   Zap,
+  Loader2,
 } from 'lucide-react';
 import { BusinessProfile, CannedReply, TradeKey } from '@/types';
 
@@ -56,12 +57,30 @@ export default function SettingsPage() {
   const [customTradeQuestion, setCustomTradeQuestion] = useState(
     'What type of plumbing issue are you experiencing today?'
   );
+  const [customEmergencyKeywords, setCustomEmergencyKeywords] = useState<string[]>([]);
+  const [newCustomKeyword, setNewCustomKeyword] = useState('');
+  const [isSavingIntake, setIsSavingIntake] = useState(false);
+  const [isSavingHours, setIsSavingHours] = useState(false);
 
   const fetchSettings = async () => {
     try {
       const res = await fetch('/api/settings');
       const data = await res.json();
-      if (data.profile) setProfile(data.profile);
+      if (data.profile) {
+        setProfile(data.profile);
+        if (data.profile.custom_emergency_keywords) {
+          setCustomEmergencyKeywords(data.profile.custom_emergency_keywords);
+        }
+        if (data.profile.custom_intake_question) {
+          setCustomTradeQuestion(data.profile.custom_intake_question);
+        }
+        if (data.profile.after_hours_message) {
+          setAfterHoursMessage(data.profile.after_hours_message);
+        }
+        if (data.profile.after_hours_enabled !== undefined) {
+          setAfterHoursEnabled(data.profile.after_hours_enabled);
+        }
+      }
       if (data.phoneNumbers) setPhoneNumbers(data.phoneNumbers);
 
       const crRes = await fetch('/api/canned-replies');
@@ -79,6 +98,70 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const handleSaveIntake = async () => {
+    setIsSavingIntake(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: {
+            custom_intake_question: customTradeQuestion,
+            custom_emergency_keywords: customEmergencyKeywords,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToast('Intake qualification sequence and custom keywords saved.');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingIntake(false);
+    }
+  };
+
+  const handleSaveHours = async () => {
+    setIsSavingHours(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: {
+            after_hours_enabled: afterHoursEnabled,
+            after_hours_message: afterHoursMessage,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToast('Operating hours and after-hours text-back saved.');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingHours(false);
+    }
+  };
+
+  const handleAddKeyword = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newCustomKeyword.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!customEmergencyKeywords.includes(trimmed)) {
+      setCustomEmergencyKeywords([...customEmergencyKeywords, trimmed]);
+    }
+    setNewCustomKeyword('');
+  };
+
+  const handleRemoveKeyword = (keywordToRemove: string) => {
+    setCustomEmergencyKeywords(customEmergencyKeywords.filter((k) => k !== keywordToRemove));
+  };
 
   const handleSaveProfile = async () => {
     if (!profile) return;
@@ -485,13 +568,16 @@ export default function SettingsPage() {
 
             <button
               type="button"
-              onClick={() => {
-                setToast('Operating hours and after-hours text-back saved.');
-                setTimeout(() => setToast(null), 3000);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+              onClick={handleSaveHours}
+              disabled={isSavingHours}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
             >
-              <Save className="h-3.5 w-3.5" /> Save Hours Settings
+              {isSavingHours ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {isSavingHours ? 'Saving...' : 'Save Hours Settings'}
             </button>
           </div>
         </div>
@@ -543,6 +629,58 @@ export default function SettingsPage() {
                 <p className="text-[11px] text-slate-500">
                   Automatically flags messages with &quot;burst&quot;, &quot;flooding&quot;, &quot;urgent&quot;, &quot;no heat&quot;, &quot;smoke&quot;, or &quot;leaking&quot; as emergencies and triggers high-priority alerts.
                 </p>
+
+                {/* Custom Emergency Keywords Editor */}
+                <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                  <label className="block font-semibold text-slate-700 text-[11px]">
+                    Custom Business Emergency Keywords
+                  </label>
+                  <p className="text-[10px] text-slate-400">
+                    Add specific words or phrases unique to your business (e.g. &quot;sump pump&quot;, &quot;slab leak&quot;, &quot;sewer backup&quot;, &quot;main line&quot;).
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newCustomKeyword}
+                      onChange={(e) => setNewCustomKeyword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddKeyword();
+                        }
+                      }}
+                      placeholder="e.g. sump pump"
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:ring-1 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddKeyword()}
+                      className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-900 transition cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Keyword
+                    </button>
+                  </div>
+
+                  {customEmergencyKeywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2 pt-1">
+                      {customEmergencyKeywords.map((kw) => (
+                        <span
+                          key={kw}
+                          className="inline-flex items-center gap-1 rounded-full bg-rose-50 border border-rose-200 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700"
+                        >
+                          {kw}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveKeyword(kw)}
+                            className="hover:text-rose-900 ml-0.5 text-xs font-bold cursor-pointer"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Question 3: Address collection */}
@@ -580,13 +718,16 @@ export default function SettingsPage() {
 
             <button
               type="button"
-              onClick={() => {
-                setToast('Intake qualification sequence saved.');
-                setTimeout(() => setToast(null), 3000);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700"
+              onClick={handleSaveIntake}
+              disabled={isSavingIntake}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
             >
-              <Save className="h-3.5 w-3.5" /> Save Intake Questions
+              {isSavingIntake ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {isSavingIntake ? 'Saving...' : 'Save Intake Questions'}
             </button>
           </div>
         </div>

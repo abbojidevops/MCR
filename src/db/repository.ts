@@ -818,6 +818,7 @@ class DatabaseRepository {
     if (idx === -1) return false;
     this.state.conversations.splice(idx, 1);
     this.state.messages = this.state.messages.filter((m) => m.conversation_id !== conversationId);
+    this.state.intakeSessions = this.state.intakeSessions.filter((s) => s.conversation_id !== conversationId);
     this.saveToFile();
     return true;
   }

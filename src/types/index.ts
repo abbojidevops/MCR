@@ -61,6 +61,10 @@ export interface BusinessProfile {
   carrier_name?: string;
   forwarding_configured: boolean;
   average_ticket?: number;
+  custom_emergency_keywords?: string[];
+  custom_intake_question?: string;
+  after_hours_message?: string;
+  after_hours_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
