@@ -37,3 +37,31 @@ export async function requireTenantAuth(
     isDemo: !!session.isDemo,
   };
 }
+
+/**
+ * Enforce platform operator / admin role on API routes.
+ * Returns 403 Forbidden if caller does not possess role: 'admin'.
+ */
+export async function requireAdminAuth(
+  req: NextRequest
+): Promise<AuthenticatedContext | NextResponse> {
+  const session = await getSession(req);
+
+  if (!session || session.role !== 'admin') {
+    return NextResponse.json(
+      {
+        error: 'Forbidden: Admin operator credentials required',
+        status: 403,
+      },
+      { status: 403 }
+    );
+  }
+
+  return {
+    session,
+    accountId: session.accountId,
+    userId: session.userId,
+    role: session.role,
+    isDemo: !!session.isDemo,
+  };
+}
