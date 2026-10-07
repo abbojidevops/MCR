@@ -65,6 +65,9 @@ export interface BusinessProfile {
   custom_intake_question?: string;
   after_hours_message?: string;
   after_hours_enabled?: boolean;
+  crm_webhook_url?: string;
+  crm_webhook_secret?: string;
+  crm_webhook_events?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -229,6 +232,8 @@ export interface JobCard {
   updated_at: string;
   contact?: Contact;
 }
+
+export type Job = JobCard;
 
 export interface CannedReply {
   id: string;

@@ -3,6 +3,7 @@ import { db } from '@/db/repository';
 import { JobStatus } from '@/types';
 import { requireTenantAuth } from '@/lib/authz';
 import { notFoundResponse } from '@/lib/api-errors';
+import { dispatchCrmWebhook } from '@/lib/crm-webhook';
 
 export async function GET(req: NextRequest) {
   try {
@@ -59,6 +60,15 @@ export async function PATCH(req: NextRequest) {
 
     // Add audit log
     db.logAudit(accountId, 'UPDATE_JOB', { jobId, updates });
+
+    // Outgoing CRM Webhook Dispatch
+    if (status === 'BOOKED' || status === 'COMPLETED' || updates.status) {
+      await dispatchCrmWebhook({
+        accountId,
+        event: status === 'BOOKED' ? 'job.booked' : 'job.updated',
+        job: updatedJob,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, job: updatedJob });
   } catch (err: any) {

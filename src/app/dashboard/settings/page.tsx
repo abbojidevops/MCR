@@ -24,6 +24,9 @@ import {
   CreditCard,
   Zap,
   Loader2,
+  Key,
+  Lock,
+  RefreshCw,
 } from 'lucide-react';
 import { BusinessProfile, CannedReply, TradeKey } from '@/types';
 
@@ -39,6 +42,10 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('https://hooks.zapier.com/hooks/catch/sample/mcr');
+  const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
+  const [crmWebhookSecret, setCrmWebhookSecret] = useState('');
+  const [crmWebhookEvents, setCrmWebhookEvents] = useState<string[]>(['job.created', 'job.booked', 'job.updated']);
+  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState<any>(null);
 
@@ -79,6 +86,16 @@ export default function SettingsPage() {
         }
         if (data.profile.after_hours_enabled !== undefined) {
           setAfterHoursEnabled(data.profile.after_hours_enabled);
+        }
+        if (data.profile.crm_webhook_url) {
+          setCrmWebhookUrl(data.profile.crm_webhook_url);
+          setWebhookUrl(data.profile.crm_webhook_url);
+        }
+        if (data.profile.crm_webhook_secret) {
+          setCrmWebhookSecret(data.profile.crm_webhook_secret);
+        }
+        if (data.profile.crm_webhook_events && Array.isArray(data.profile.crm_webhook_events)) {
+          setCrmWebhookEvents(data.profile.crm_webhook_events);
         }
       }
       if (data.phoneNumbers) setPhoneNumbers(data.phoneNumbers);
@@ -221,16 +238,62 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveWebhookSettings = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSavingWebhook(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: {
+            crm_webhook_url: crmWebhookUrl,
+            crm_webhook_secret: crmWebhookSecret,
+            crm_webhook_events: crmWebhookEvents,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToast('CRM Webhook settings and HMAC security configuration saved.');
+        setTimeout(() => setToast(null), 3000);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSavingWebhook(false);
+    }
+  };
+
+  const handleGenerateSecret = () => {
+    const chars = '0123456789abcdef';
+    let rand = '';
+    for (let i = 0; i < 32; i++) {
+      rand += chars[Math.floor(Math.random() * chars.length)];
+    }
+    setCrmWebhookSecret(`mcr_sec_${rand}`);
+  };
+
+  const toggleWebhookEvent = (ev: string) => {
+    if (crmWebhookEvents.includes(ev)) {
+      setCrmWebhookEvents(crmWebhookEvents.filter((e) => e !== ev));
+    } else {
+      setCrmWebhookEvents([...crmWebhookEvents, ev]);
+    }
+  };
+
   const handleTestWebhook = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsTestingWebhook(true);
     setWebhookResult(null);
     try {
+      const targetUrl = crmWebhookUrl.trim() || webhookUrl.trim();
       const res = await fetch('/api/integrations/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webhookUrl,
+          webhookUrl: targetUrl,
+          secret: crmWebhookSecret.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -813,61 +876,220 @@ export default function SettingsPage() {
       {/* ---------------- TAB 5: INTEGRATIONS & WEBHOOKS ---------------- */}
       {activeTab === 'integrations' && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-2">
-                <Webhook className="h-4 w-4 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-900">CRM &amp; Zapier Webhook Forwarding</h2>
+                <Webhook className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900">Third-Party CRM &amp; Webhook Dispatch</h2>
+                  <p className="text-[11px] text-slate-500">
+                    Forward recovered missed-call leads and booked job cards to Jobber, Housecall Pro, ServiceTitan, Zapier, or Make.
+                  </p>
+                </div>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                Live Outbound Push
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                HMAC Signed
               </span>
             </div>
-            <p className="text-xs text-slate-500">
-              Automatically stream recovered leads, addresses, issue descriptions, and estimated job values to ServiceTitan, Housecall Pro, Jobber, or your custom Zapier / Make webhook.
-            </p>
 
-            <form onSubmit={handleTestWebhook} className="space-y-3 text-xs">
+            {/* Webhook Configuration Form */}
+            <form onSubmit={handleSaveWebhookSettings} className="space-y-4 text-xs">
+              {/* Endpoint URL */}
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Target Webhook URL (POST)</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Target Webhook URL (POST)
+                </label>
+                <input
+                  type="url"
+                  value={crmWebhookUrl}
+                  onChange={(e) => {
+                    setCrmWebhookUrl(e.target.value);
+                    setWebhookUrl(e.target.value);
+                  }}
+                  placeholder="https://hooks.zapier.com/hooks/catch/... or https://api.getjobber.com/..."
+                  className="w-full rounded-xl border border-slate-300 p-2.5 font-mono text-xs focus:ring-1 focus:ring-blue-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Must begin with https:// or http://. Dispatched asynchronously with automated retries.
+                </span>
+              </div>
+
+              {/* Signing Secret */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  HMAC-SHA256 Signing Secret (Optional)
+                </label>
                 <div className="flex gap-2">
-                  <input
-                    type="url"
-                    required
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    placeholder="https://hooks.zapier.com/hooks/catch/..."
-                    className="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
-                  />
+                  <div className="relative flex-1">
+                    <Key className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={crmWebhookSecret}
+                      onChange={(e) => setCrmWebhookSecret(e.target.value)}
+                      placeholder="e.g. mcr_sec_9f82a17b8c..."
+                      className="w-full rounded-xl border border-slate-300 pl-8 pr-3 py-2 font-mono text-xs focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
                   <button
-                    type="submit"
-                    disabled={isTestingWebhook}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    type="button"
+                    onClick={handleGenerateSecret}
+                    className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                   >
-                    <Send className="h-3.5 w-3.5" />
-                    {isTestingWebhook ? 'Sending...' : 'Test Webhook'}
+                    <RefreshCw className="h-3.5 w-3.5 text-slate-500" /> Generate Secret
                   </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  When specified, each outbound POST includes a computed cryptographic signature in the <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-700">X-MCR-Signature: sha256=...</code> header.
+                </span>
+              </div>
+
+              {/* Event Subscriptions */}
+              <div>
+                <label className="block text-slate-700 font-semibold mb-2">
+                  Subscribed Trigger Events
+                </label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div
+                    onClick={() => toggleWebhookEvent('job.created')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition ${
+                      crmWebhookEvents.includes('job.created')
+                        ? 'bg-blue-50/60 border-blue-200 text-blue-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={crmWebhookEvents.includes('job.created')}
+                      onChange={() => {}}
+                      className="mt-0.5 h-3.5 w-3.5 rounded text-blue-600 pointer-events-none"
+                    />
+                    <div>
+                      <div className="font-bold text-[11px]">job.created</div>
+                      <div className="text-[10px] text-slate-500">Intake session qualified lead</div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => toggleWebhookEvent('job.booked')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition ${
+                      crmWebhookEvents.includes('job.booked')
+                        ? 'bg-blue-50/60 border-blue-200 text-blue-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={crmWebhookEvents.includes('job.booked')}
+                      onChange={() => {}}
+                      className="mt-0.5 h-3.5 w-3.5 rounded text-blue-600 pointer-events-none"
+                    />
+                    <div>
+                      <div className="font-bold text-[11px]">job.booked</div>
+                      <div className="text-[10px] text-slate-500">Contractor books service call</div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => toggleWebhookEvent('job.updated')}
+                    className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition ${
+                      crmWebhookEvents.includes('job.updated')
+                        ? 'bg-blue-50/60 border-blue-200 text-blue-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={crmWebhookEvents.includes('job.updated')}
+                      onChange={() => {}}
+                      className="mt-0.5 h-3.5 w-3.5 rounded text-blue-600 pointer-events-none"
+                    />
+                    <div>
+                      <div className="font-bold text-[11px]">job.updated</div>
+                      <div className="text-[10px] text-slate-500">Ticket notes or price modified</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={isSavingWebhook}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {isSavingWebhook ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  {isSavingWebhook ? 'Saving...' : 'Save Webhook Settings'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTestWebhook}
+                  disabled={isTestingWebhook || (!crmWebhookUrl && !webhookUrl)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {isTestingWebhook ? 'Sending Test...' : 'Send Test Webhook'}
+                </button>
+              </div>
+
+              {/* Test Result Pane */}
               {webhookResult && (
                 <div
-                  className={`mt-3 rounded-xl border p-3.5 font-mono text-[11px] ${
+                  className={`mt-4 rounded-xl border p-4 font-mono text-[11px] ${
                     webhookResult.success
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                      : 'bg-red-50 border-red-200 text-red-900'
+                      ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                      : 'bg-red-50/80 border-red-200 text-red-900'
                   }`}
                 >
-                  <div className="flex items-center justify-between font-bold mb-1">
-                    <span>Status: {webhookResult.statusCode || (webhookResult.success ? '200 OK' : 'Failed')}</span>
-                    <span>{webhookResult.success ? '✓ Payload Dispatched' : 'Error'}</span>
+                  <div className="flex items-center justify-between font-bold mb-1.5">
+                    <span className="flex items-center gap-1.5">
+                      <span className={`h-2 w-2 rounded-full ${webhookResult.success ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                      Status: {webhookResult.statusCode || webhookResult.status || (webhookResult.success ? '200 OK' : 'Failed')}
+                    </span>
+                    <span>{webhookResult.success ? '✓ Payload Successfully Dispatched' : 'Dispatch Failed'}</span>
                   </div>
-                  <pre className="overflow-x-auto text-[10px] max-h-36 bg-white/80 p-2.5 rounded border border-slate-200 mt-1">
-                    {JSON.stringify(webhookResult.dispatchedPayload || webhookResult, null, 2)}
+                  {webhookResult.signature && (
+                    <div className="text-[10px] text-slate-600 mb-1">
+                      Header: <code className="bg-white/80 px-1 py-0.5 rounded border border-slate-200">X-MCR-Signature: {webhookResult.signature}</code>
+                    </div>
+                  )}
+                  <pre className="overflow-x-auto text-[10px] max-h-40 bg-white/90 p-3 rounded-lg border border-slate-200 mt-2">
+                    {JSON.stringify(webhookResult.sentPayload || webhookResult.dispatchedPayload || webhookResult, null, 2)}
                   </pre>
                 </div>
               )}
             </form>
+
+            {/* CRM Field Mapping & Compatibility Guide */}
+            <div className="border-t border-slate-100 pt-5">
+              <h3 className="text-xs font-bold text-slate-800 mb-2">Supported Field Service &amp; CRM Integrations</h3>
+              <div className="grid gap-3 sm:grid-cols-3 text-[11px]">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="font-bold text-slate-800">Jobber</div>
+                  <p className="text-slate-500 text-[10px] mt-0.5">
+                    Paste your Zapier / Make Webhook catcher URL to automatically generate client requests and scheduled jobs in Jobber.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="font-bold text-slate-800">Housecall Pro</div>
+                  <p className="text-slate-500 text-[10px] mt-0.5">
+                    Stream new leads, service addresses, and customer contact info directly into Housecall Pro customer records.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="font-bold text-slate-800">ServiceTitan / Zapier</div>
+                  <p className="text-slate-500 text-[10px] mt-0.5">
+                    Verify payload integrity using HMAC-SHA256 headers before creating booking requests in ServiceTitan.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

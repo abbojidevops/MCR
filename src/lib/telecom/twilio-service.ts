@@ -8,6 +8,7 @@ import { TradeKey } from '@/types';
 import { checkSubscriptionEntitlement } from '@/lib/billing/entitlement';
 import { TwilioClient } from './twilio-client';
 import { dispatchAlert } from '@/lib/alert-dispatcher';
+import { dispatchCrmWebhook } from '@/lib/crm-webhook';
 
 export interface TwilioVoiceWebhookParams {
   CallSid: string;
@@ -583,6 +584,14 @@ export class TwilioService {
         });
 
         jobCreated = true;
+
+        // Outgoing CRM Webhook Dispatch (Jobber / Housecall Pro / Zapier)
+        dispatchCrmWebhook({
+          accountId,
+          event: 'job.created',
+          job: newJob,
+          customerPhone: From,
+        }).catch(() => {});
 
         // Owner Notification
         db.addNotification({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { db } from '@/db/repository';
 import { requireTenantAuth } from '@/lib/authz';
 
@@ -7,7 +8,17 @@ export async function GET(req: NextRequest) {
     const auth = await requireTenantAuth(req);
     if (auth instanceof NextResponse) return auth;
     const { accountId } = auth;
-    return NextResponse.json({ success: true, accountId, status: 'ready' });
+
+    const profile = db.getBusinessProfile(accountId);
+
+    return NextResponse.json({
+      success: true,
+      accountId,
+      crmWebhookUrl: profile?.crm_webhook_url || null,
+      crmWebhookSecret: profile?.crm_webhook_secret || null,
+      crmWebhookEvents: profile?.crm_webhook_events || ['job.created', 'job.booked', 'job.updated'],
+      status: 'ready',
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
@@ -20,7 +31,7 @@ export async function POST(req: NextRequest) {
     const { accountId } = auth;
 
     const body = await req.json();
-    const { webhookUrl } = body;
+    const { webhookUrl, secret, saveConfig } = body;
 
     if (!webhookUrl) {
       return NextResponse.json({ error: 'webhookUrl is required' }, { status: 400 });
@@ -42,7 +53,7 @@ export async function POST(req: NextRequest) {
       estimated_value: 650,
       actual_value: 650,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
 
     const payload = {
@@ -51,10 +62,26 @@ export async function POST(req: NextRequest) {
       account: {
         id: accountId,
         businessName: profile?.business_name || 'Apex Plumbing & Rooter',
-        trade: profile?.trade || 'plumbing'
+        trade: profile?.trade || 'plumbing',
       },
-      job: sampleJob
+      job: sampleJob,
     };
+
+    const stringPayload = JSON.stringify(payload);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-MCR-Event': 'job.recovered',
+      'User-Agent': 'MCR-Webhook-Delivery/1.0',
+    };
+
+    const effectiveSecret = secret || profile?.crm_webhook_secret;
+    let signature: string | undefined;
+    if (effectiveSecret) {
+      const hmac = crypto.createHmac('sha256', effectiveSecret);
+      hmac.update(stringPayload, 'utf8');
+      signature = `sha256=${hmac.digest('hex')}`;
+      headers['X-MCR-Signature'] = signature;
+    }
 
     let responseStatus = 200;
     let responseBody = 'Webhook delivered successfully';
@@ -65,13 +92,9 @@ export async function POST(req: NextRequest) {
         const timeout = setTimeout(() => controller.abort(), 3000);
         const res = await fetch(webhookUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-MCR-Event': 'job.recovered',
-            'User-Agent': 'MCR-Webhook-Delivery/1.0'
-          },
-          body: JSON.stringify(payload),
-          signal: controller.signal
+          headers,
+          body: stringPayload,
+          signal: controller.signal,
         });
         clearTimeout(timeout);
         responseStatus = res.status;
@@ -82,16 +105,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Save config if requested
+    if (saveConfig) {
+      db.updateBusinessProfile(accountId, {
+        crm_webhook_url: webhookUrl,
+        crm_webhook_secret: secret,
+      });
+    }
+
     db.logAudit(accountId, 'TEST_WEBHOOK_DELIVERY', {
       webhookUrl,
-      status: responseStatus
+      status: responseStatus,
     });
 
     return NextResponse.json({
       success: responseStatus >= 200 && responseStatus < 300,
       status: responseStatus,
+      statusCode: responseStatus,
       response: responseBody,
-      sentPayload: payload
+      sentPayload: payload,
+      signature,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
