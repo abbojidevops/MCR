@@ -463,7 +463,7 @@ export default function InboxPage() {
                       type="button"
                       disabled={isBridgingCall || currentSuppressed}
                       onClick={() => handleBridgeCall(activeConv.contact!.phone_number, activeConv.job?.id)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm disabled:opacity-40 transition"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 shadow-sm disabled:opacity-40 transition"
                       title="Dials your cell first, then connects to customer showing your MCR business caller ID"
                     >
                       {isBridgingCall ? (

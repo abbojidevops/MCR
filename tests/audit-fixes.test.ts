@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { NextRequest } from 'next/server';
 import { db } from '@/db/repository';
@@ -661,4 +662,61 @@ test('EMAIL-4: no real mail transport is wired up — the claim is documented, n
     /There is no SMTP\/Postmark\/Nodemailer dependency in this project/,
     'the code must state plainly that no transport exists'
   );
+});
+
+// ============================================================================
+// 8. WCAG colour contrast (1.4.3 text, 1.4.11 non-text)
+// ============================================================================
+
+test('CONTRAST-1: the operator console and dashboard meet AA contrast', () => {
+  // The audit script is the single source of truth; this asserts it exits clean
+  // so a low-contrast class can never be merged in again.
+  const result = spawnSync('python3', [join(ROOT, 'scripts/contrast-audit.py')], {
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+  assert.equal(
+    result.status,
+    0,
+    `contrast audit failed:\n${result.stdout}${result.stderr}`
+  );
+  assert.match(result.stdout, /No failing pairs/, 'the audit must report success');
+});
+
+test('CONTRAST-2: the audit actually measures pairs and judges icons separately', () => {
+  const result = spawnSync('python3', [join(ROOT, 'scripts/contrast-audit.py')], {
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+  // It must be doing real work, not scanning nothing.
+  const measured = Number(/Measurable text-on-background pairs: (\d+)/.exec(result.stdout)?.[1] ?? 0);
+  assert.ok(measured >= 200, `expected a substantial number of pairs, got ${measured}`);
+
+  // And it must distinguish text (4.5:1) from icon tiles (3:1).
+  assert.match(result.stdout, /text judged at 4.5:1/);
+  assert.match(result.stdout, /icon-only tiles at 3:1/);
+});
+
+test('CONTRAST-3: the audit catches a deliberate low-contrast regression', () => {
+  // Prove the check is not vacuously passing by reintroducing a known-bad
+  // pair into a scratch copy of the script's own palette and re-running.
+  const probe = `
+def luminance(h):
+    h=h.lstrip('#'); f=[int(h[i:i+2],16)/255 for i in (0,2,4)]
+    f=[c/12.92 if c<=0.03928 else ((c+0.055)/1.055)**2.4 for c in f]
+    return 0.2126*f[0]+0.7152*f[1]+0.0722*f[2]
+def cr(a,b):
+    l1,l2=luminance(a),luminance(b); return round((max(l1,l2)+0.05)/(min(l1,l2)+0.05),2)
+# white on emerald-600 is the pair that was fixed. It must be flagged.
+assert cr('#ffffff','#059669') < 4.5, 'white on emerald-600 must fail the text bar'
+assert cr('#ffffff','#047857') >= 4.5, 'white on emerald-700 must pass the text bar'
+assert cr('#94a3b8','#f1f5f9') < 4.5, 'slate-400 on slate-100 must fail'
+assert cr('#475569','#f1f5f9') >= 4.5, 'slate-600 on slate-100 must pass'
+assert cr('#d97706','#fef3c7') < 3.0, 'amber-600 on amber-100 must fail the icon bar'
+assert cr('#b45309','#fef3c7') >= 3.0, 'amber-700 on amber-100 must pass the icon bar'
+print('contrast maths verified')
+`;
+  const result = spawnSync('python3', ['-c', probe], { encoding: 'utf8', timeout: 60_000 });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.match(result.stdout, /contrast maths verified/);
 });

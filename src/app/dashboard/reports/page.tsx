@@ -430,7 +430,7 @@ export default function ReportsPage() {
               <button
                 onClick={() => handleDispatch('daily_sms')}
                 disabled={dispatchingSms}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 disabled:opacity-50 transition cursor-pointer"
               >
                 {dispatchingSms ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

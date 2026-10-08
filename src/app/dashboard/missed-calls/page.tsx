@@ -366,7 +366,7 @@ export default function MissedCallsPage() {
                           Responded
                         </span>
                       ) : (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">
                           No Response
                         </span>
                       )}
@@ -420,7 +420,7 @@ export default function MissedCallsPage() {
                       <div className="flex items-center justify-end gap-1.5">
                         <a
                           href={`tel:${call.from_number}`}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-sm"
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-800 shadow-sm"
                           aria-label={`Call ${call.from_number}`}
                           title="Call Customer"
                         >

@@ -611,7 +611,7 @@ export default function JobsPage() {
                     handleStatusChange(selectedJob.id, selectedJob.status, val);
                   }
                 }}
-                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 text-xs shadow-sm transition"
+                className="rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3 py-1.5 text-xs shadow-sm transition"
               >
                 Save Revenue
               </button>
@@ -736,7 +736,7 @@ export default function JobsPage() {
                 type="button"
                 disabled={isBridgingCall || !selectedJob.contact?.phone_number}
                 onClick={() => handleBridgeCall(selectedJob.contact!.phone_number, selectedJob.id)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50 transition"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-800 disabled:opacity-50 transition"
                 title="Dials your phone first, then connects to customer using your MCR business caller ID"
               >
                 {isBridgingCall ? (

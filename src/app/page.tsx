@@ -406,7 +406,7 @@ export default function LandingPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-700 text-sm font-bold text-white">
                 4
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Job Card &amp; Owner Alert</h3>

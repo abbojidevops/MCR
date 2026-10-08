@@ -189,7 +189,7 @@ export default function DashboardOverviewPage() {
           </div>
           <Link
             href="/dashboard/settings"
-            className="shrink-0 rounded-lg bg-amber-600 px-3 py-1 font-bold text-white hover:bg-amber-700"
+            className="shrink-0 rounded-lg bg-amber-700 px-3 py-1 font-bold text-white hover:bg-amber-800"
           >
             Upgrade Plan
           </Link>
@@ -508,7 +508,7 @@ export default function DashboardOverviewPage() {
             </span>
             <h2 className="text-base font-extrabold text-slate-900">NEEDS YOUR ATTENTION</h2>
           </div>
-          <span className="text-xs font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
+          <span className="text-xs font-bold text-red-700 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200">
             {data.needsAttention.length} Leads Requiring Human Action
           </span>
         </div>
@@ -783,7 +783,7 @@ export default function DashboardOverviewPage() {
               type="submit"
               form="record-revenue-form"
               disabled={savingValue}
-              className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 font-bold text-white shadow-sm disabled:opacity-50"
+              className="flex-1 rounded-xl bg-emerald-700 hover:bg-emerald-800 py-2.5 font-bold text-white shadow-sm disabled:opacity-50"
             >
               {savingValue ? 'Saving...' : 'Confirm Revenue'}
             </button>

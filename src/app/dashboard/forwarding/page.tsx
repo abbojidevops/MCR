@@ -209,7 +209,7 @@ export default function ForwardingWizardPage() {
                 <CheckCircle className="h-5 w-5" />
               </div>
             ) : (
-              <div className="mt-0.5 rounded-full bg-amber-100 p-1.5 text-amber-600">
+              <div className="mt-0.5 rounded-full bg-amber-100 p-1.5 text-amber-700">
                 <AlertTriangle className="h-5 w-5" />
               </div>
             )}
@@ -272,7 +272,7 @@ export default function ForwardingWizardPage() {
                 type="button"
                 disabled={updatingStatus}
                 onClick={() => handleToggleForwarding(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-800 disabled:opacity-50"
               >
                 {updatingStatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                 I Have Dialed the Code — Mark as Active
@@ -419,7 +419,7 @@ export default function ForwardingWizardPage() {
               </p>
             </div>
           </div>
-          <span className="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+          <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
             Runbook v1.0
           </span>
         </div>
