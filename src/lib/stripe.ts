@@ -13,13 +13,18 @@ export interface StripeCheckoutResult {
   customerId?: string;
 }
 
+/** Default replay window: Stripe recommends rejecting events older than 5 minutes. */
+export const STRIPE_SIGNATURE_TOLERANCE_SECONDS = 300;
+
 /**
- * Verify Stripe webhook signature using constant-time comparison
+ * Verify Stripe webhook signature using constant-time comparison, and reject
+ * replayed events whose timestamp falls outside the tolerance window.
  */
 export function verifyStripeSignature(
   rawBody: string,
   signatureHeader: string | null,
-  webhookSecret: string | undefined
+  webhookSecret: string | undefined,
+  toleranceSeconds: number = STRIPE_SIGNATURE_TOLERANCE_SECONDS
 ): boolean {
   if (!webhookSecret || !signatureHeader) return false;
 
@@ -33,6 +38,13 @@ export function verifyStripeSignature(
     const timestamp = parts['t'];
     const expectedSig = parts['v1'];
     if (!timestamp || !expectedSig) return false;
+
+    // Replay protection: a valid signature for a stale timestamp must not be
+    // accepted indefinitely.
+    const timestampSeconds = Number(timestamp);
+    if (!Number.isFinite(timestampSeconds)) return false;
+    const ageSeconds = Math.abs(Date.now() / 1000 - timestampSeconds);
+    if (ageSeconds > toleranceSeconds) return false;
 
     const computedSig = crypto
       .createHmac('sha256', webhookSecret)

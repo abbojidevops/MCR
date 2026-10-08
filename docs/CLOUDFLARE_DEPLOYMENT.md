@@ -125,6 +125,8 @@ In your Cloudflare Zero Trust Dashboard:
 > - If auth tokens/secrets are unset: MCR immediately fails closed with **HTTP 503 Service Unavailable**.
 > - If signatures are unsigned, forged, or replayed: MCR immediately refuses with **HTTP 403 Forbidden** (or **HTTP 409 Conflict**) and writes nothing to the database.
 > - With the WAF exemption active, an unauthenticated attacker sending raw requests to `/api/webhooks/*` is still completely blocked by the application's cryptographic verification.
+> - **Stripe** (`/api/webhooks/stripe`): signature verification runs whenever `STRIPE_WEBHOOK_SECRET` is configured or live Stripe is enabled via `NEXT_PUBLIC_STRIPE_LIVE=true`; missing signatures return **400**, forged/replayed signatures return **403** (5-minute replay tolerance), and live Stripe without a webhook secret returns **503**. Without any live Stripe credentials the endpoint returns **503** and never mutates subscription state.
+> - **Twilio** (`/api/webhooks/twilio/*`): unsigned or forged requests return **403**, and an unconfigured `TWILIO_AUTH_TOKEN` returns **503**.
 
 ---
 

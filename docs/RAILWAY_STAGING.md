@@ -177,7 +177,27 @@ expected for staging.
 
 ---
 
-## 7. Troubleshooting
+## 7. Live Processing Is Off on Staging (By Design)
+
+Staging runs with `TWILIO_MOCK_MODE=true` and **no** Stripe credentials. Both webhook
+families fail closed, so no real carrier or billing event can be processed until the
+credentials below are added deliberately:
+
+| Endpoint | Without live credentials |
+| :--- | :--- |
+| `POST /api/webhooks/stripe` | **503** — processing disabled; forged/unsigned payloads cannot mutate subscription state |
+| `POST /api/webhooks/twilio/voice` / `.../sms` | **503** — no `TWILIO_AUTH_TOKEN` configured |
+| `POST /api/compliance` (carrier callbacks) | **503** — no `CARRIER_WEBHOOK_SECRET` configured |
+
+To enable live processing later: set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+`TWILIO_PHONE_NUMBER` and `TWILIO_MOCK_MODE=false` for telephony; set
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `NEXT_PUBLIC_STRIPE_LIVE=true` for
+billing. Signature verification switches itself on with those values — there is no
+separate toggle to remember.
+
+---
+
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 | :--- | :--- | :--- |
@@ -193,7 +213,7 @@ expected for staging.
 
 ---
 
-## 8. References
+## 9. References
 
 * [`railway.json`](../railway.json) — Railway config-as-code for this repository
 * [`scripts/staging-preflight.ts`](../scripts/staging-preflight.ts) — topology & secret pre-flight
