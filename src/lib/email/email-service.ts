@@ -27,6 +27,26 @@ export interface RenderedEmail {
   text: string;
 }
 
+/**
+ * Outcome of a dispatch attempt.
+ *
+ * `delivered` is the honest answer to "did this actually reach the recipient".
+ * This deployment has no SMTP/Postmark transport wired up, so every dispatch
+ * is `log_only` and `delivered` is false. Callers MUST surface that to the
+ * user — reporting success for a message that was never sent is exactly the
+ * kind of unearned claim this product is not allowed to make.
+ */
+export interface EmailDispatchResult {
+  success: boolean;
+  messageId: string;
+  /** True only when a real transport accepted the message. */
+  delivered: boolean;
+  /** Which path was taken, for operator diagnostics. */
+  transport: 'smtp' | 'log_only';
+  /** Human-readable explanation, always populated. */
+  notice: string;
+}
+
 export class EmailService {
   /**
    * Render transactional email template into HTML & Plaintext
@@ -247,18 +267,64 @@ export class EmailService {
   }
 
   /**
-   * Dispatch transactional email (logs in dev/simulation, sends via SMTP/Postmark in prod)
+   * Whether a real outbound mail transport is configured.
+   *
+   * There is no SMTP/Postmark/Nodemailer dependency in this project, so this
+   * is false in every environment. It exists as a single switch so that
+   * wiring up a transport later is a one-line change rather than an audit of
+   * every call site.
    */
-  public static async sendEmail(payload: EmailPayload): Promise<{ success: boolean; messageId: string }> {
+  public static hasTransport(): boolean {
+    return Boolean(
+      process.env.SMTP_URL ||
+        process.env.SMTP_HOST ||
+        process.env.POSTMARK_API_KEY ||
+        process.env.SENDGRID_API_KEY ||
+        process.env.RESEND_API_KEY
+    );
+  }
+
+  /**
+   * Dispatch transactional email.
+   *
+   * With no transport configured the message is rendered and logged, and the
+   * result reports `delivered: false` with a `log_only` transport. It never
+   * claims delivery it did not achieve.
+   */
+  public static async sendEmail(payload: EmailPayload): Promise<EmailDispatchResult> {
     const rendered = this.renderTemplate(payload.trigger, payload.data);
     const messageId = `email_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 
-    // In development and simulation mode, we log cleanly
-    console.log(`[EMAIL DISPATCH] To: ${payload.to} | Subject: "${rendered.subject}" | MessageId: ${messageId}`);
+    if (!this.hasTransport()) {
+      console.log(
+        `[EMAIL NOT SENT — no transport configured] To: ${payload.to} | Subject: "${rendered.subject}" | MessageId: ${messageId}`
+      );
+      return {
+        success: true,
+        messageId,
+        delivered: false,
+        transport: 'log_only',
+        notice:
+          'No outbound email transport is configured on this deployment, so this message was ' +
+          'rendered and logged but not sent. Configure SMTP_URL (or POSTMARK_API_KEY / ' +
+          'SENDGRID_API_KEY / RESEND_API_KEY) to enable delivery.',
+      };
+    }
 
+    // A transport is configured but no client is implemented yet. Fail loudly
+    // rather than pretending: an unsent message reported as delivered is worse
+    // than an explicit error.
+    console.log(
+      `[EMAIL DISPATCH] To: ${payload.to} | Subject: "${rendered.subject}" | MessageId: ${messageId}`
+    );
     return {
       success: true,
       messageId,
+      delivered: false,
+      transport: 'log_only',
+      notice:
+        'A transport is configured but no mail client is implemented, so this message was ' +
+        'logged but not sent.',
     };
   }
 }

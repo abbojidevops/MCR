@@ -28,7 +28,15 @@ export async function POST(req: NextRequest) {
 
     const results: {
       sms?: { sid: string; to: string; body: string };
-      email?: { messageId: string; to: string; subject: string };
+      email?: {
+        messageId: string;
+        to: string;
+        subject: string;
+        /** True only when a real mail transport accepted the message. */
+        delivered: boolean;
+        transport: 'smtp' | 'log_only';
+        notice: string;
+      };
     } = {};
 
     // 1. Daily SMS Digest Dispatch
@@ -79,6 +87,12 @@ export async function POST(req: NextRequest) {
         messageId: emailResult.messageId,
         to: recipientEmail,
         subject: `Weekly Report: ${profile.business_name}`,
+        // Honest delivery status. `delivered: false` means the message was
+        // rendered and logged but never left the server, because no mail
+        // transport is configured.
+        delivered: emailResult.delivered,
+        transport: emailResult.transport,
+        notice: emailResult.notice,
       };
     }
 

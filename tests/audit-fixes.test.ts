@@ -596,3 +596,69 @@ test('MODAL-4: dialogs are keyboard-dismissible and announce their close button'
   assert.match(source, /aria-label=\{`Close \$\{title\}`\}/, 'the close button must be labelled');
   assert.match(source, /aria-describedby=\{description \? descriptionId : undefined\}/);
 });
+
+// ============================================================================
+// 7. Email dispatch must not claim delivery it did not achieve
+// ============================================================================
+
+test('EMAIL-1: sendEmail reports delivery honestly instead of always returning success', () => {
+  const source = read('src/lib/email/email-service.ts');
+
+  // The result type must carry an explicit delivery verdict.
+  assert.match(source, /export interface EmailDispatchResult/, 'a dispatch result type must exist');
+  assert.match(source, /delivered: boolean/, 'the result must say whether it was delivered');
+  assert.match(source, /transport: 'smtp' \| 'log_only'/, 'the transport actually taken must be reported');
+  assert.match(source, /notice: string/, 'a human-readable explanation must accompany the result');
+
+  // With no transport configured the log line must not read as a dispatch.
+  assert.match(source, /EMAIL NOT SENT/, 'an unsent message must be logged as not sent');
+  assert.ok(
+    !source.includes('[EMAIL DISPATCH] To:') || source.includes('hasTransport'),
+    'the code must branch on whether a transport exists'
+  );
+
+  // There must be no unconditional "success: true" with a fabricated messageId.
+  const body = source.slice(source.indexOf('public static async sendEmail'));
+  assert.match(body, /if \(!this\.hasTransport\(\)\)/, 'the no-transport path must be explicit');
+  assert.match(body, /delivered: false/, 'the no-transport path must report delivered: false');
+});
+
+test('EMAIL-2: the dispatch route surfaces the real delivery status', () => {
+  const source = read('src/app/api/reports/dispatch/route.ts');
+  assert.match(source, /delivered: emailResult\.delivered/, 'the route must pass through the verdict');
+  assert.match(source, /transport: emailResult\.transport/);
+  assert.match(source, /notice: emailResult\.notice/);
+});
+
+test('EMAIL-3: the reports UI never shows a green success for an undelivered email', () => {
+  const source = read('src/app/dashboard/reports/page.tsx');
+
+  // The old unconditional green message is gone.
+  assert.ok(
+    !source.includes("Weekly recovery digest dispatched to"),
+    'the UI must not claim an email was dispatched when nothing was sent'
+  );
+
+  // Delivery is now branched on, and the not-delivered case is a warning.
+  assert.match(source, /email\?\.delivered/, 'the UI must check whether it was delivered');
+  assert.match(source, /type: 'warning'/, 'the undelivered case must not be styled as success');
+  assert.match(
+    source,
+    /this deployment has no outbound email/,
+    'the warning must say plainly why nothing arrived'
+  );
+});
+
+test('EMAIL-4: no real mail transport is wired up — the claim is documented, not faked', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  const transports = ['nodemailer', 'postmark', '@sendgrid/mail', 'resend', 'aws-sdk', 'ses'];
+  for (const t of transports) {
+    assert.ok(!(t in deps), `${t} must not be listed as a dependency unless a transport is actually implemented`);
+  }
+  assert.match(
+    read('src/lib/email/email-service.ts'),
+    /There is no SMTP\/Postmark\/Nodemailer dependency in this project/,
+    'the code must state plainly that no transport exists'
+  );
+});

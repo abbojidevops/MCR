@@ -29,8 +29,8 @@ const FOCUSABLE_SELECTOR = [
 
 function buildDialog() {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true });
-  const { window } = dom;
-  const { document } = window;
+  const window = dom.window as unknown as Window & typeof globalThis;
+  const document = window.document;
 
   const opener = document.createElement('button');
   opener.id = 'opener';
@@ -60,12 +60,12 @@ function buildDialog() {
 }
 
 /** Mirrors the Tab-cycling logic in src/components/modal.tsx. */
-function pressTab(window: any, panel: any, shift = false) {
-  const focusable = Array.from(panel.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
-    (el: any) => el.offsetParent !== null || el === window.document.activeElement
-  );
-  const active = window.document.activeElement;
-  const idx = focusable.indexOf(active);
+function pressTab(doc: Document, panel: HTMLElement, shift = false): HTMLElement {
+  const focusable = Array.from(
+    panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+  ).filter((el) => el.offsetParent !== null || el === doc.activeElement);
+  const active = doc.activeElement as HTMLElement | null;
+  const idx = active ? focusable.indexOf(active) : -1;
   const next = shift
     ? (idx - 1 + focusable.length) % focusable.length
     : (idx + 1) % focusable.length;
@@ -75,7 +75,7 @@ function pressTab(window: any, panel: any, shift = false) {
 
 test('MODAL-5: focus moves into the dialog when it opens', () => {
   const { document, panel } = buildDialog();
-  const first = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+  const first = panel.querySelector(FOCUSABLE_SELECTOR) as HTMLElement | null;
   assert.ok(first, 'the dialog must contain a focusable control');
   first!.focus();
   assert.ok(
@@ -86,12 +86,12 @@ test('MODAL-5: focus moves into the dialog when it opens', () => {
 
 test('MODAL-6: Tab cycles through the dialog and never escapes to the page', () => {
   const { window, panel, opener } = buildDialog();
-  panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)!.focus();
+  (panel.querySelector(FOCUSABLE_SELECTOR) as HTMLElement).focus();
 
   const visited: string[] = [];
   // More presses than there are controls, so any leak would show up.
   for (let i = 0; i < 8; i++) {
-    const el = pressTab(window, panel, false);
+    const el = pressTab(window.document, panel, false);
     visited.push(el.id || el.getAttribute('aria-label') || '');
   }
 
@@ -109,11 +109,11 @@ test('MODAL-6: Tab cycles through the dialog and never escapes to the page', () 
 
 test('MODAL-7: Shift+Tab cycles backwards and never escapes to the page', () => {
   const { window, panel, opener } = buildDialog();
-  panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)!.focus();
+  (panel.querySelector(FOCUSABLE_SELECTOR) as HTMLElement).focus();
 
   const visited: string[] = [];
   for (let i = 0; i < 8; i++) {
-    const el = pressTab(window, panel, true);
+    const el = pressTab(window.document, panel, true);
     visited.push(el.id || el.getAttribute('aria-label') || '');
   }
 
@@ -126,10 +126,10 @@ test('MODAL-7: Shift+Tab cycles backwards and never escapes to the page', () => 
 
 test('MODAL-8: focus returns to the control that opened the dialog', () => {
   const { document, opener, panel } = buildDialog();
-  const restoreTarget = document.activeElement;
+  const restoreTarget = document.activeElement as HTMLElement | null;
   assert.equal(restoreTarget?.id, 'opener', 'precondition: the opener holds focus');
 
-  panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)!.focus();
+  (panel.querySelector(FOCUSABLE_SELECTOR) as HTMLElement).focus();
   assert.notEqual(document.activeElement?.id, 'opener', 'focus moved into the dialog');
 
   // Modal's cleanup restores focus on unmount.
@@ -146,7 +146,7 @@ test('MODAL-9: the dialog exposes an accessible name and modal semantics', () =>
   assert.equal(panel.getAttribute('role'), 'dialog');
   assert.equal(panel.getAttribute('aria-modal'), 'true');
 
-  const labelledBy = panel.getAttribute('aria-labelledby');
+  const labelledBy = panel.getAttribute('aria-labelledby') as string;
   assert.ok(labelledBy, 'aria-labelledby must be present');
   assert.equal(panel.querySelector(`#${labelledBy}`)?.textContent, 'Record Completed Job Revenue');
   assert.equal(panel.getAttribute('tabindex'), '-1', 'the panel must be programmatically focusable');

@@ -33,7 +33,10 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [dispatchingSms, setDispatchingSms] = useState(false);
   const [dispatchingEmail, setDispatchingEmail] = useState(false);
-  const [dispatchToast, setDispatchToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [dispatchToast, setDispatchToast] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
 
   const handleDispatch = async (type: 'daily_sms' | 'weekly_email') => {
     if (type === 'daily_sms') setDispatchingSms(true);
@@ -49,11 +52,30 @@ export default function ReportsPage() {
       const data = await res.json();
       if (!res.ok) {
         setDispatchToast({ type: 'error', message: data.error || 'Failed to dispatch report' });
+      } else if (type === 'daily_sms') {
+        setDispatchToast({
+          type: 'success',
+          message: `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`,
+        });
       } else {
-        const msg = type === 'daily_sms'
-          ? `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`
-          : `Weekly recovery digest dispatched to ${data.results?.email?.to || 'contractor email'}`;
-        setDispatchToast({ type: 'success', message: msg });
+        // Email has no real transport on this deployment. Saying "dispatched"
+        // here would tell the customer an email is on its way when nothing
+        // was ever sent — so state exactly what happened.
+        const email = data.results?.email;
+        if (email?.delivered) {
+          setDispatchToast({
+            type: 'success',
+            message: `Weekly recovery digest sent to ${email.to}.`,
+          });
+        } else {
+          setDispatchToast({
+            type: 'warning',
+            message:
+              'Weekly digest prepared, but not sent: this deployment has no outbound email ' +
+              'service configured, so nothing was delivered to your inbox. The SMS digest ' +
+              'and on-screen reports are unaffected.',
+          });
+        }
       }
     } catch (err: any) {
       setDispatchToast({ type: 'error', message: err.message || 'Dispatch network error' });
@@ -198,7 +220,9 @@ export default function ReportsPage() {
           className={`rounded-xl border p-3.5 text-xs font-medium flex items-center justify-between shadow-xs transition ${
             dispatchToast.type === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-              : 'border-rose-200 bg-rose-50 text-rose-900'
+              : dispatchToast.type === 'warning'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-rose-200 bg-rose-50 text-rose-900'
           }`}
         >
           <span>{dispatchToast.message}</span>
