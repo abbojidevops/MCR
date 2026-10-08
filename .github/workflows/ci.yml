@@ -10,6 +10,24 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
 
+    # The PostgreSQL integration tests connect to 127.0.0.1:5433 using
+    # the isolated credentials below. GitHub Actions service containers
+    # expose container port 5432 on that host port.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mcr_user
+          POSTGRES_PASSWORD: 'McrSecurePostgresPass2026!DbEngine'
+          POSTGRES_DB: mcr_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U mcr_user -d mcr_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
