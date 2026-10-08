@@ -137,8 +137,9 @@ ADMIN_PASSWORD='...' SESSION_SECRET='...' \
 DATABASE_URL='postgresql://user:pass@host:5432/mcr_db' \
 NEXT_PUBLIC_APP_URL='https://<your-service>.up.railway.app' \
 npm run staging:preflight
-# 4. After the deploy goes live, smoke-test the running staging service:
-npm run staging:smoke -- https://<your-service>.up.railway.app
+# 4. After the deploy goes live, smoke-test the running staging service.
+#    --wait polls /api/health until the fresh container is serving (default 120s):
+npm run staging:smoke -- https://<your-service>.up.railway.app --wait
 ```
 
 Full procedure, variable reference, rollback and troubleshooting: [Railway Staging Deployment Guide](docs/RAILWAY_STAGING.md).

@@ -145,11 +145,17 @@ expected for staging.
    * `✓ PostgreSQL schema initialized successfully.`
 3. Confirm the deployment went live: Railway reports the service as **Active** after
    `/api/health` returns `200`.
-4. Run the post-deploy smoke verifier against the staging URL:
+4. Run the post-deploy smoke verifier against the staging URL. Add `--wait` when you run
+   it straight after a deploy: it polls `/api/health` (up to 120s by default, or
+   `--wait=SECONDS`) until the container is serving, then runs every check, so a
+   still-booting service is not reported as a broken one.
 
    ```bash
-   npm run staging:smoke -- https://<your-staging-domain>
+   npm run staging:smoke -- https://<your-staging-domain> --wait
    ```
+
+   Without `--wait` the verifier fails fast on a single attempt (useful for monitoring an
+   already-running service); `STAGING_SMOKE_WAIT_SECONDS=<n>` sets the window without a flag.
 
    It proves, against the live staging service:
 

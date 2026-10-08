@@ -14,6 +14,8 @@
  *
  * Usage:
  *   npm run staging:smoke -- https://mcr-staging.up.railway.app
+ *   npm run staging:smoke -- https://mcr-staging.up.railway.app --wait        # poll up to 120s for readiness
+ *   npm run staging:smoke -- https://mcr-staging.up.railway.app --wait=300    # custom window
  *   STAGING_BASE_URL=https://mcr-staging.up.railway.app npm run staging:smoke
  */
 import { fileURLToPath } from 'url';
@@ -25,9 +27,33 @@ export interface SmokeCheckResult {
   errors: string[];
 }
 
-type FetchLike = (input: string, init?: any) => Promise<Response>;
+export interface SmokeCheckOptions {
+  /**
+   * Seconds to poll /api/health for readiness before running the checks.
+   * 0/undefined keeps the previous behaviour (single attempt, fail fast).
+   * Useful right after a deploy, when the container may still be starting.
+   */
+  waitSeconds?: number;
+  /** Delay between readiness polls (default 5000ms). */
+  pollIntervalMs?: number;
+  /** Injectable sleep so the polling logic is unit testable without real delays. */
+  sleepImpl?: (ms: number) => Promise<void>;
+  /** Optional progress sink (defaults to stdout when running from the CLI). */
+  onProgress?: (message: string) => void;
+}
+
+export interface StagingReadinessResult {
+  ready: boolean;
+  attempts: number;
+  lastStatus?: number;
+  lastError?: string;
+}
+
+export type FetchLike = (input: string, init?: any) => Promise<Response>;
 
 const REQUEST_TIMEOUT_MS = 10000;
+const DEFAULT_WAIT_SECONDS = 120;
+const DEFAULT_POLL_INTERVAL_MS = 5000;
 
 function normalizeBaseUrl(rawUrl: string): { url?: string; error?: string } {
   const trimmed = (rawUrl || '').trim();
@@ -45,12 +71,64 @@ async function safeFetch(fetchImpl: FetchLike, url: string, init: any = {}) {
 }
 
 /**
+ * Polls /api/health until the deployed service answers 200 (the same signal the
+ * Railway healthcheck uses), or the window expires. Distinguishes "still waking
+ * up" from "never came up" so a fresh deploy can be verified without guesswork.
+ */
+export async function waitForStagingReadiness(
+  baseUrl: string,
+  options: SmokeCheckOptions = {},
+  fetchImpl: FetchLike = fetch as unknown as FetchLike
+): Promise<StagingReadinessResult> {
+  const normalized = normalizeBaseUrl(baseUrl);
+  if (normalized.error || !normalized.url) {
+    return { ready: false, attempts: 0, lastError: normalized.error };
+  }
+
+  const totalSeconds = options.waitSeconds ?? DEFAULT_WAIT_SECONDS;
+  const intervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+  const sleep = options.sleepImpl ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const deadline = Date.now() + Math.max(0, totalSeconds) * 1000;
+
+  let attempts = 0;
+  let lastStatus: number | undefined;
+  let lastError: string | undefined;
+
+  for (;;) {
+    attempts++;
+    try {
+      const res = await safeFetch(fetchImpl, `${normalized.url}/api/health`, { method: 'GET' });
+      lastStatus = res.status;
+      lastError = undefined;
+      if (res.status === 200) {
+        return { ready: true, attempts, lastStatus };
+      }
+    } catch (err: any) {
+      lastStatus = undefined;
+      lastError = err?.message || String(err);
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) break;
+    options.onProgress?.(
+      `  … waiting for ${normalized.url}/api/health (attempt ${attempts}: ${
+        lastStatus ? `HTTP ${lastStatus}` : lastError
+      }), ${Math.ceil(remainingMs / 1000)}s remaining`
+    );
+    await sleep(Math.min(intervalMs, remainingMs));
+  }
+
+  return { ready: false, attempts, lastStatus, lastError };
+}
+
+/**
  * Executes the staging smoke suite against a deployed base URL.
  * `fetchImpl` is injectable so the checks can be unit tested without a live server.
  */
 export async function runStagingSmokeCheck(
   baseUrl: string,
-  fetchImpl: FetchLike = fetch as unknown as FetchLike
+  fetchImpl: FetchLike = fetch as unknown as FetchLike,
+  options: SmokeCheckOptions = {}
 ): Promise<SmokeCheckResult> {
   const passedChecks: string[] = [];
   const warnings: string[] = [];
@@ -64,6 +142,27 @@ export async function runStagingSmokeCheck(
 
   if (/^http:\/\//i.test(base) && !/localhost|127\.0\.0\.1/i.test(base)) {
     warnings.push('Staging URL uses plain http:// — staging deployments must be served over https://');
+  }
+
+  // 0. Optional readiness gate: after a fresh deploy the container may still be
+  // starting, which would otherwise surface as four confusing failures.
+  const waitSeconds = options.waitSeconds ?? 0;
+  if (waitSeconds > 0) {
+    const readiness = await waitForStagingReadiness(base, options, fetchImpl);
+    if (!readiness.ready) {
+      errors.push(
+        `Staging service did not become healthy within ${waitSeconds}s of polling /api/health ` +
+          `(attempts: ${readiness.attempts}, last: ${
+            readiness.lastStatus ? `HTTP ${readiness.lastStatus}` : readiness.lastError
+          })`
+      );
+      return { ok: false, passedChecks, warnings, errors };
+    }
+    passedChecks.push(
+      `Staging service became healthy after ${readiness.attempts} readiness ${
+        readiness.attempts === 1 ? 'attempt' : 'attempts'
+      }`
+    );
   }
 
   // 1. Public health endpoint: reachable, minimal payload, no posture leakage
@@ -150,14 +249,40 @@ export async function runStagingSmokeCheck(
   return { ok: errors.length === 0, passedChecks, warnings, errors };
 }
 
+/** Parses `--wait` / `--wait=<seconds>` / STAGING_SMOKE_WAIT_SECONDS. */
+export function resolveWaitSeconds(argv: string[], env: Record<string, string | undefined> = process.env): number {
+  const waitFlag = argv.find((a) => a === '--wait' || a.startsWith('--wait='));
+
+  if (waitFlag) {
+    const inline = waitFlag.includes('=') ? waitFlag.split('=')[1] : '';
+    if (!inline) return DEFAULT_WAIT_SECONDS;
+    const parsed = Number(inline);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_WAIT_SECONDS;
+  }
+
+  const envValue = env.STAGING_SMOKE_WAIT_SECONDS;
+  if (envValue !== undefined && envValue !== '') {
+    const parsed = Number(envValue);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+
+  return 0;
+}
+
 // Direct CLI Execution
 if (process.argv[1] && process.argv[1].endsWith('staging-smoke.ts')) {
-  const target = process.argv[2] || process.env.STAGING_BASE_URL || '';
+  const args = process.argv.slice(2);
+  const target = args.find((a) => !a.startsWith('--')) || process.env.STAGING_BASE_URL || '';
+  const waitSeconds = resolveWaitSeconds(args);
 
   console.log('\n🔎 [MCR] Running Staging Post-Deploy Smoke Verifier...\n');
-  console.log(`  Target: ${target || '(none provided)'}\n`);
+  console.log(`  Target: ${target || '(none provided)'}`);
+  console.log(`  Readiness wait: ${waitSeconds > 0 ? `${waitSeconds}s` : 'disabled (single attempt)'}\n`);
 
-  runStagingSmokeCheck(target).then((result) => {
+  runStagingSmokeCheck(target, fetch as unknown as FetchLike, {
+    waitSeconds,
+    onProgress: (message) => console.log(message),
+  }).then((result) => {
     result.passedChecks.forEach((c) => console.log(`  ✅ [PASS] ${c}`));
     result.warnings.forEach((w) => console.log(`  ⚠️ [WARN] ${w}`));
     result.errors.forEach((e) => console.log(`  ❌ [FAIL] ${e}`));

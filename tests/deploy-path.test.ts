@@ -9,7 +9,8 @@ import { NextRequest } from 'next/server';
 
 import { validateSchemaSyntax, validateDatabaseCredentials } from '../scripts/db-init.mjs';
 import { runStagingPreflight } from '../scripts/staging-preflight';
-import { runStagingSmokeCheck } from '../scripts/staging-smoke';
+import { runStagingSmokeCheck, resolveWaitSeconds } from '../scripts/staging-smoke';
+import type { FetchLike } from '../scripts/staging-smoke';
 import { middleware } from '@/middleware';
 import { POST as adminLoginHandler } from '@/app/api/admin/login/route';
 import { POST as loginHandler } from '@/app/api/auth/login/route';
@@ -838,4 +839,103 @@ test('RAIL-10: PostgreSQL Helpers Are Statically Imported (Bundler-Safe Persiste
     /import\s*\{[\s\S]*?isPostgresConfigured as isPostgresConfiguredFromPg[\s\S]*?\}\s*from\s*['"]\.\/postgres['"]/,
     'src/db/repository.ts must statically import isPostgresConfigured so storage-engine reporting matches the write path'
   );
+});
+
+test('RAIL-11: Staging Smoke Waits for a Freshly Deployed Service to Become Healthy', async () => {
+  // A deploy is often still booting when verification runs; the readiness gate
+  // must retry instead of reporting four misleading failures.
+  const healthProbes: string[] = [];
+  let sleptMs = 0;
+
+  const bootingThenHealthy: FetchLike = async (url: string) => {
+    if (url.endsWith('/api/health')) {
+      if (healthProbes.length < 2) {
+        healthProbes.push('unreachable');
+        throw new Error('connect ECONNREFUSED 127.0.0.1:3000');
+      }
+      healthProbes.push('200');
+      return jsonResponse(
+        { status: 'healthy', timestamp: new Date().toISOString(), version: '1.0.0' },
+        200,
+        SMOKE_SECURITY_HEADERS
+      );
+    }
+    if (url.endsWith('/dashboard')) {
+      return new Response(null, { status: 307, headers: { location: '/login' } });
+    }
+    if (url.endsWith('/api/admin/fleet')) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
+    }
+    return new Response('Not Found', { status: 404 });
+  };
+
+  const result = await runStagingSmokeCheck('https://mcr-staging.up.railway.app', bootingThenHealthy, {
+    waitSeconds: 60,
+    pollIntervalMs: 1000,
+    sleepImpl: async (ms: number) => {
+      sleptMs += ms;
+    },
+  });
+
+  assert.equal(result.ok, true, `Deploy that becomes healthy must pass: ${result.errors.join(' | ')}`);
+  // The first two probes fail (still booting), the third succeeds during the
+  // readiness gate; the two additional 200s are the health-payload and
+  // security-header checks that run afterwards.
+  assert.deepEqual(
+    healthProbes,
+    ['unreachable', 'unreachable', '200', '200', '200'],
+    'Readiness gate must retry until /api/health answers 200, then run the checks'
+  );
+  assert.equal(sleptMs, 2000, 'Readiness gate must wait between attempts');
+  assert.ok(
+    result.passedChecks.some((c) => c.includes('became healthy after 3 readiness attempts')),
+    'Passing checks must report the readiness wait'
+  );
+});
+
+test('RAIL-12: Staging Smoke Reports a Clear Timeout When the Service Never Comes Up', async () => {
+  let healthAttempts = 0;
+
+  const neverHealthy: FetchLike = async (url: string) => {
+    if (url.endsWith('/api/health')) {
+      healthAttempts++;
+      return new Response('Bad Gateway', { status: 502 });
+    }
+    return new Response('Not Found', { status: 404 });
+  };
+
+  const result = await runStagingSmokeCheck('https://mcr-staging.up.railway.app', neverHealthy, {
+    waitSeconds: 1,
+    pollIntervalMs: 250,
+    sleepImpl: async () => {},
+  });
+
+  assert.equal(result.ok, false, 'A service that never becomes healthy must fail verification');
+  assert.equal(result.errors.length, 1, 'A readiness timeout must report one clear error, not four downstream ones');
+  assert.match(result.errors[0], /did not become healthy within 1s/);
+  assert.match(result.errors[0], /HTTP 502/);
+  assert.ok(healthAttempts > 1, 'Readiness gate must keep polling inside the window');
+
+  // Without --wait the verifier keeps its fast, single-attempt behaviour.
+  healthAttempts = 0;
+  const noWait = await runStagingSmokeCheck('https://staging.example.com', neverHealthy);
+  assert.equal(noWait.ok, false);
+  // Two probes = the health-payload check and the security-header check. Without
+  // --wait there must be no readiness polling on top of those.
+  assert.equal(healthAttempts, 2, 'Without --wait the verifier must not poll for readiness');
+  assert.equal(
+    noWait.passedChecks.some((c) => c.includes('became healthy')),
+    false,
+    'Without --wait no readiness check must be reported'
+  );
+});
+
+test('RAIL-13: Staging Smoke CLI Parses the Readiness Wait Flag and Environment Variable', () => {
+  assert.equal(resolveWaitSeconds([], {}), 0, 'Default behaviour must not wait');
+  assert.equal(resolveWaitSeconds(['--wait'], {}), 120, '--wait must default to a 120s window');
+  assert.equal(resolveWaitSeconds(['--wait=300'], {}), 300, '--wait=SECONDS must be honoured');
+  assert.equal(resolveWaitSeconds(['--wait=0'], {}), 0, '--wait=0 must disable waiting explicitly');
+  assert.equal(resolveWaitSeconds([], { STAGING_SMOKE_WAIT_SECONDS: '45' }), 45, 'Env var must be honoured');
+  assert.equal(resolveWaitSeconds(['--wait=90'], { STAGING_SMOKE_WAIT_SECONDS: '45' }), 90, 'Flag must win over env var');
+  assert.equal(resolveWaitSeconds(['--wait=garbage'], {}), 120, 'Malformed flag values must fall back to the default');
 });
