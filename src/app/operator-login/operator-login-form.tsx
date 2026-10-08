@@ -4,11 +4,16 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ShieldAlert, Lock, ArrowRight, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { safeNextPath } from '@/lib/safe-redirect';
+import { COMPANY_INFO } from '@/lib/constants';
 
 export default function OperatorLoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get('next') || '/admin';
+  // ?next= comes from the URL and is therefore untrusted: only same-origin
+  // paths inside this app are honoured, otherwise we would be running an open
+  // redirect out of the operator console.
+  const nextPath = safeNextPath(searchParams.get('next'), '/admin');
 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -162,13 +167,28 @@ export default function OperatorLoginForm() {
           </form>
 
           <div className="mt-6 border-t border-slate-800 pt-4 text-center text-xs">
-            <Link href="/login" className="inline-flex items-center gap-1.5 font-semibold text-slate-400 hover:text-white">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 font-semibold text-slate-400 hover:text-white"
+            >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
               Back to tenant sign-in
             </Link>
           </div>
         </div>
       </div>
+
+      <footer className="mt-auto border-t border-slate-800 px-4 py-5 text-center text-[11px] text-slate-500">
+        <p>
+          Restricted console · {COMPANY_INFO.name}
+        </p>
+        <p className="mt-1">
+          Tenant support {COMPANY_INFO.supportHours} ·{' '}
+          <a href={`mailto:${COMPANY_INFO.email}`} className="font-semibold hover:text-slate-300">
+            {COMPANY_INFO.email}
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }

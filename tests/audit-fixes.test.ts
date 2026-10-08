@@ -399,3 +399,134 @@ test('HON-10: the risk register counts are derived, not hardcoded', () => {
   assert.ok(source.includes('counts.total'), 'totals must be computed from the register');
   assert.ok(source.includes('counts.highImpact'), 'high/critical counts must be computed');
 });
+
+// ============================================================================
+// 5. Access flow: signup -> sign-in -> dashboard, no dead ends
+// ============================================================================
+
+test('ACC-1: safeNextPath rejects off-app and protocol-relative targets', () => {
+  const { safeNextPath } = require('@/lib/safe-redirect');
+
+  for (const hostile of [
+    'https://evil.example/phish',
+    '//evil.example',
+    'http://evil.example',
+    'javascript:alert(1)',
+    '\\/\\/evil.example',
+    '/\\evil.example',
+    'mailto:someone@evil.example',
+    '',
+    '   ',
+    null,
+    undefined,
+    42,
+  ]) {
+    assert.equal(
+      safeNextPath(hostile, '/dashboard'),
+      '/dashboard',
+      `unsafe target ${JSON.stringify(hostile)} must fall back`
+    );
+  }
+});
+
+test('ACC-2: safeNextPath accepts in-app destinations and never re-enters the auth flow', () => {
+  const { safeNextPath } = require('@/lib/safe-redirect');
+
+  assert.equal(safeNextPath('/dashboard/jobs', '/dashboard'), '/dashboard/jobs');
+  assert.equal(safeNextPath('/dashboard/settings', '/dashboard'), '/dashboard/settings');
+  assert.equal(safeNextPath('/admin/risks', '/admin'), '/admin/risks');
+
+  // A just-completed sign-in must not bounce straight back to a sign-in screen.
+  assert.equal(safeNextPath('/login', '/dashboard'), '/dashboard');
+  assert.equal(safeNextPath('/operator-login', '/admin'), '/admin');
+  assert.equal(safeNextPath('/admin/login', '/admin'), '/admin');
+
+  // Surfaces outside the authenticated app are not meaningful destinations.
+  assert.equal(safeNextPath('/', '/dashboard'), '/dashboard');
+  assert.equal(safeNextPath('/privacy', '/dashboard'), '/dashboard');
+});
+
+test('ACC-3: the tenant sign-in form honours ?next=', () => {
+  const source = read('src/app/login/login-form.tsx');
+  assert.match(source, /safeNextPath\(searchParams\.get\('next'\)/, 'must resolve ?next= safely');
+  assert.match(source, /router\.push\(destination\)/, 'must navigate to the resolved destination');
+});
+
+test('ACC-4: the operator sign-in form honours ?next= without an open redirect', () => {
+  const source = read('src/app/operator-login/operator-login-form.tsx');
+  assert.match(source, /safeNextPath\(searchParams\.get\('next'\)/);
+  assert.ok(
+    !/searchParams\.get\('next'\)\s*\|\|\s*'\/admin'/.test(source),
+    'the raw ?next= value must not be pushed into the router unvalidated'
+  );
+});
+
+test('ACC-5: signup is reachable from sign-in and is guarded when already signed in', () => {
+  const login = read('src/app/login/login-form.tsx');
+  assert.match(login, /href="\/onboarding"/, 'sign-in must link to account creation');
+
+  const signup = read('src/app/onboarding/page.tsx');
+  assert.match(signup, /verifySessionToken/, 'the signup route must check for an existing session');
+  assert.match(signup, /redirect\(/, 'a signed-in tenant must be redirected away from signup');
+});
+
+test('ACC-6: the signup wizard persists a draft so a refresh does not lose progress', () => {
+  const source = read('src/app/onboarding/onboarding-wizard.tsx');
+  assert.match(source, /ONBOARDING_STORAGE_KEY/);
+  assert.match(source, /localStorage\.setItem/, 'progress must be saved');
+  assert.match(source, /localStorage\.getItem/, 'progress must be restored');
+  // The draft payload passed to setItem must not carry the password.
+  const setItemCall = source.match(/localStorage\.setItem\(([\s\S]*?)\);/);
+  assert.ok(setItemCall, 'the wizard must write its draft with localStorage.setItem');
+  assert.ok(
+    !/\bpassword\b/.test(setItemCall![1]),
+    'the draft written to browser storage must never include the password'
+  );
+  assert.match(source, /Save &amp; finish later|Save & finish later/, 'must offer an explicit exit');
+});
+
+test('ACC-7: a failed signup is reported, never silently treated as success', () => {
+  const source = read('src/app/onboarding/onboarding-wizard.tsx');
+  assert.match(source, /setSubmitError\(/, 'failures must surface to the user');
+  assert.ok(
+    !/alert\(/.test(source),
+    'window.alert is not an acceptable error surface'
+  );
+  // The old catch block navigated to the dashboard on a network error, leaving
+  // the customer signed out with no account and no explanation.
+  assert.ok(
+    !/catch \(err\)\s*\{[\s\S]*?router\.push\('\/dashboard'\)/.test(source),
+    'a network error must not navigate as if signup succeeded'
+  );
+});
+
+test('ACC-8: every unauthenticated surface shares one branded shell', () => {
+  assert.ok(existsSync(join(ROOT, 'src/components/auth/auth-shell.tsx')), 'AuthShell must exist');
+  const login = read('src/app/login/login-form.tsx');
+  assert.match(login, /from '@\/components\/auth\/auth-shell'/);
+  const operator = read('src/app/operator-login/operator-login-form.tsx');
+  assert.match(operator, /COMPANY_INFO/, 'operator sign-in must show the same company identity');
+});
+
+test('ACC-9: a branded not-found page replaces the Next.js default', () => {
+  const source = read('src/app/not-found.tsx');
+  assert.match(source, /404/);
+  assert.match(source, /href="\/dashboard"/, 'must offer a route back into the app');
+  assert.match(source, /COMPANY_INFO\.email/, 'must offer a support contact');
+});
+
+test('ACC-10: the dashboard badge and alert panel reflect real session state', () => {
+  const source = read('src/app/dashboard/layout.tsx');
+  assert.match(source, /isDemoAccount/, 'the demo badge must follow the real session flag');
+  assert.ok(
+    !/DEMO ACCOUNT<\/span>\s*<\/div>\s*$/m.test(source.split('{isDemoAccount &&')[0] || ''),
+    'the demo badge must be conditional'
+  );
+  // The notification panel used to show two hardcoded alerts as if they were real.
+  assert.ok(
+    !source.includes('Water Heater Rupture'),
+    'hardcoded emergency alerts must be gone'
+  );
+  assert.match(source, /fetch\('\/api\/jobs'\)/, 'alerts must come from real job data');
+  assert.match(source, /No emergency alerts/, 'must have an honest empty state');
+});

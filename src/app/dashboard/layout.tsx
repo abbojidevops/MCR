@@ -54,6 +54,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [onboardingBannerCollapsed, setOnboardingBannerCollapsed] = useState(false);
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  // True only when the signed-in session is actually flagged as a demo account.
+  // The badge used to be hardcoded, so every real customer saw "DEMO ACCOUNT".
+  const [isDemoAccount, setIsDemoAccount] = useState(false);
+  // Real emergency leads for this tenant, used by the notification panel.
+  const [alerts, setAlerts] = useState<Array<{ id: string; title: string; detail: string }>>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
 
   const isActiveRoute = useCallback(
     (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(`${href}/`)),
@@ -75,12 +81,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     fetch('/api/auth/session')
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (!d) return;
         if (d.accountId) setSelectedAccount(d.accountId);
         if (d.businessName) setBusinessName(d.businessName);
+        if (typeof d.isDemo === 'boolean') setIsDemoAccount(d.isDemo);
       })
       .catch(console.error);
+
+    // Emergency leads are the only thing worth interrupting an owner for.
+    // The panel used to show two hardcoded alerts that were never real.
+    fetch('/api/jobs')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const jobs: any[] = Array.isArray(d?.jobs) ? d.jobs : [];
+        const urgent = jobs
+          .filter((j) => j.is_emergency || j.priority === 'high' || j.priority === 'urgent')
+          .slice(0, 5)
+          .map((j) => ({
+            id: j.id,
+            title: j.title || j.issue || 'Emergency lead',
+            detail: j.customer_name || j.customer_phone || 'Customer details on the job card',
+          }));
+        setAlerts(urgent);
+        setUnreadCount(urgent.length);
+      })
+      .catch(() => setAlerts([]))
+      .finally(() => setAlertsLoading(false));
 
     fetch('/api/setup-status')
       .then((r) => r.json())
@@ -353,11 +381,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Section 14: Demo Mode Badge */}
-            <div className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-              <span>DEMO ACCOUNT</span>
-            </div>
+            {/* Demo badge — only when the signed-in session really is a demo account */}
+            {isDemoAccount && (
+              <div className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 shadow-xs">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>DEMO ACCOUNT</span>
+              </div>
+            )}
 
             {/* Quick action button */}
             <button
@@ -377,7 +407,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
                 aria-expanded={notificationsOpen}
                 aria-haspopup="true"
-                aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+                aria-label={`Notifications${
+                  alerts.length > 0 ? `, ${alerts.length} emergency` : ', no emergency alerts'
+                }`}
                 className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <Bell className="h-5 w-5" />
@@ -392,23 +424,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl z-50">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-2">
                     <span className="text-xs font-bold text-slate-900">Urgent Alerts</span>
-                    <button
-                      type="button"
-                      onClick={() => setUnreadCount(0)}
-                      className="text-[11px] font-medium text-blue-600 hover:underline"
-                    >
-                      Mark all read
-                    </button>
+                    {alerts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setUnreadCount(0)}
+                        className="text-[11px] font-medium text-blue-600 hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                    <div className="rounded-lg bg-red-50 p-2.5 text-xs border border-red-100">
-                      <div className="font-semibold text-red-800">🚨 Water Heater Rupture</div>
-                      <div className="text-slate-600 mt-0.5">Emergency customer at 123 Main St. Action required.</div>
-                    </div>
-                    <div className="rounded-lg bg-blue-50 p-2.5 text-xs border border-blue-100">
-                      <div className="font-semibold text-blue-800">📞 Missed Call Recovered</div>
-                      <div className="text-slate-600 mt-0.5">Customer responded &amp; qualified via SMS.</div>
-                    </div>
+                    {alertsLoading && (
+                      <p className="px-2 py-3 text-[11px] text-slate-400">Loading alerts…</p>
+                    )}
+
+                    {!alertsLoading && alerts.length === 0 && (
+                      <div className="px-2 py-4 text-center">
+                        <p className="text-xs font-semibold text-slate-600">No emergency alerts</p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Leads flagged as emergencies appear here. Everything else is on the Jobs
+                          board.
+                        </p>
+                      </div>
+                    )}
+
+                    {alerts.map((alert) => (
+                      <Link
+                        key={alert.id}
+                        href="/dashboard/jobs"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="block rounded-lg bg-red-50 p-2.5 text-xs border border-red-100 hover:bg-red-100"
+                      >
+                        <div className="font-semibold text-red-800">🚨 {alert.title}</div>
+                        <div className="text-slate-600 mt-0.5">{alert.detail}</div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               )}
