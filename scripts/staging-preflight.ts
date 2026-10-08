@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import { validateSchemaSyntax, validateDatabaseCredentials } from './db-init.mjs';
+import { validateAdminPassword, validateSessionSecret } from '../src/lib/security/secret-strength';
 
 export interface PreflightResult {
   ok: boolean;
@@ -24,28 +25,22 @@ export function runStagingPreflight(envOverride?: Record<string, string>): Prefl
   const rootDir = process.cwd();
 
   // 1. Environment Variable & Secret Strength Checks
+  // Policy lives in src/lib/security/secret-strength.ts so every gate agrees.
   const adminPassword = env.ADMIN_PASSWORD;
-  if (!adminPassword || adminPassword.trim().length === 0) {
-    errors.push('ADMIN_PASSWORD must be configured in environment');
-  } else if (adminPassword.length < 12) {
-    errors.push('ADMIN_PASSWORD must be at least 12 characters long');
-  } else if (
-    !/[A-Z]/.test(adminPassword) ||
-    !/[a-z]/.test(adminPassword) ||
-    !/[0-9]/.test(adminPassword)
-  ) {
-    errors.push('ADMIN_PASSWORD must contain uppercase, lowercase, and numeric characters');
-  } else {
+  const adminValidation = validateAdminPassword(adminPassword);
+  if (adminValidation.ok) {
     passedChecks.push('ADMIN_PASSWORD satisfies enterprise length and complexity requirements');
+  } else {
+    adminValidation.errors.forEach((e) => errors.push(e));
   }
 
-  const sessionSecret = env.SESSION_SECRET;
-  if (!sessionSecret || sessionSecret.trim().length === 0) {
-    errors.push('SESSION_SECRET must be configured in environment');
-  } else if (sessionSecret.length < 32) {
-    errors.push('SESSION_SECRET must be at least 32 characters long for cryptographically secure cookies');
-  } else {
-    passedChecks.push('SESSION_SECRET satisfies length requirements (>= 32 chars)');
+  const sessionValidation = validateSessionSecret(env.SESSION_SECRET);
+  if (sessionValidation.ok) {
+    passedChecks.push(
+      `SESSION_SECRET satisfies length and entropy requirements (~${Math.round(sessionValidation.bits)} bits / ${sessionValidation.chars} chars)`
+    );
+  } else if (sessionValidation.error) {
+    errors.push(sessionValidation.error);
   }
 
   // 2. Database Configuration & Credential Hygiene

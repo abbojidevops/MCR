@@ -132,12 +132,16 @@ Railway builds this repository through `railway.json` + the root `Dockerfile`, a
 #      SESSION_SECRET=<openssl rand -hex 32>      (>=32 chars)
 #      NEXT_PUBLIC_APP_URL=https://<your-service>.up.railway.app
 #      TWILIO_MOCK_MODE=true                      (staging)
-# 3. Verify the topology locally BEFORE pushing:
+# 3. Verify every staging requirement (secrets, secrets entropy, PostgreSQL 16,
+#    schema presence, volume writability) and print the dashboard-only steps:
+npm run staging:requirements
+
+# 4. Verify the topology locally BEFORE pushing:
 ADMIN_PASSWORD='...' SESSION_SECRET='...' \
 DATABASE_URL='postgresql://user:pass@host:5432/mcr_db' \
 NEXT_PUBLIC_APP_URL='https://<your-service>.up.railway.app' \
 npm run staging:preflight
-# 4. After the deploy goes live, smoke-test the running staging service.
+# 5. After the deploy goes live, smoke-test the running staging service.
 #    --wait polls /api/health until the fresh container is serving (default 120s):
 npm run staging:smoke -- https://<your-service>.up.railway.app --wait
 ```

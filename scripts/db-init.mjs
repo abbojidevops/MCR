@@ -73,6 +73,69 @@ export function validateSchemaSyntax(sqlContent) {
 }
 
 /**
+ * Resolves the directory the repository persists its file-backed store to.
+ * In the container this is /app/data, which is where the staging volume must be
+ * mounted.
+ */
+export function resolveDataDirectory(options = {}) {
+  return options.dataDir || process.env.MCR_DATA_DIR || path.join(rootDir, 'data');
+}
+
+/**
+ * Verifies the data directory exists and is writable by the current process.
+ *
+ * Staging requires a persistent volume mounted at /app/data that is writable by
+ * UID 1001 (the non-root `nextjs` user the image runs as). A Railway volume is
+ * mounted over the image's directory, so its ownership comes from the volume and
+ * not from the image's `chown` — an unwritable mount would silently degrade the
+ * app to in-memory state. This probe makes that failure loud and actionable.
+ *
+ * Returns a structured result instead of throwing so callers can decide whether a
+ * failure is fatal. `MCR_REQUIRE_PERSISTENT_DATA=true` promotes it to fatal.
+ */
+export function validateDataDirectory(options = {}) {
+  const dir = resolveDataDirectory(options);
+  const enforce = options.enforce === true || process.env.MCR_REQUIRE_PERSISTENT_DATA === 'true';
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null;
+  const result = { dir, uid, exists: false, writable: false, enforced: enforce, warning: null };
+
+  if (process.env.MCR_SKIP_DATA_DIR_CHECK === 'true') {
+    result.warning = `Data directory check skipped (MCR_SKIP_DATA_DIR_CHECK=true) for ${dir}`;
+    return result;
+  }
+
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    result.exists = true;
+  } catch (err) {
+    result.warning = `Data directory ${dir} could not be created: ${err.message}`;
+    if (enforce) throw new Error(`${result.warning}. ${dataDirRemediation(dir, uid)}`);
+    return result;
+  }
+
+  const probePath = path.join(dir, `.mcr-write-probe-${process.pid}`);
+  try {
+    fs.writeFileSync(probePath, 'ok', 'utf-8');
+    fs.unlinkSync(probePath);
+    result.writable = true;
+  } catch (err) {
+    result.warning = `Data directory ${dir} is NOT writable by uid ${uid}: ${err.message}`;
+    if (enforce) throw new Error(`${result.warning}. ${dataDirRemediation(dir, uid)}`);
+  }
+
+  return result;
+}
+
+function dataDirRemediation(dir, uid) {
+  return (
+    `Persistent storage is required for staging. Attach a volume mounted at ${dir} and ensure it is ` +
+    `writable by UID 1001 (the non-root runtime user), or set MCR_SKIP_DATA_DIR_CHECK=true to run with ` +
+    `ephemeral state deliberately. Note that a volume mount supplies its own ownership, so the image's ` +
+    `chown does not apply to it.`
+  );
+}
+
+/**
  * List of known insecure or publicly burned database passwords.
  * The legacy password 'mcr_password' is permanently burned and rejected.
  */
@@ -142,6 +205,18 @@ export function validateDatabaseCredentials(options = {}) {
 export async function runDatabaseInit(options = {}) {
   // 1. Validate credentials and reject burned/default passwords loudly
   validateDatabaseCredentials(options);
+
+  // 2. Verify the local file-backed store has a writable home. On Railway this is
+  // the mounted volume at /app/data; a misconfigured mount would otherwise
+  // silently degrade the deployment to in-memory state.
+  const dataDirStatus = validateDataDirectory(options);
+  if (dataDirStatus.writable) {
+    console.log(
+      `[db-init]   ✓ Data directory ${dataDirStatus.dir} is writable (uid ${dataDirStatus.uid}).`
+    );
+  } else if (dataDirStatus.warning) {
+    console.warn(`[db-init]   ⚠️  ${dataDirStatus.warning}`);
+  }
 
   const schemaPath = options.schemaPath || path.join(rootDir, 'src', 'db', 'schema.sql');
   console.log(`[db-init] Checking schema file at: ${schemaPath}`);

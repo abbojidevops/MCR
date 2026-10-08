@@ -53,7 +53,8 @@ jobs:
       - name: Staging Pre-flight Verification
         env:
           ADMIN_PASSWORD: 'CiPreflightAdmin2026!'
-          SESSION_SECRET: 'ci-preflight-session-secret-32-chars-min'
+          # Throwaway CI-only fixture: 64 hex chars == 32 random bytes.
+          SESSION_SECRET: 'f4c1a9d83b27e65094af1d2c8b7e035af61c2938d405eb7a19c2f8d6470ba3e5'
           DATABASE_URL: 'postgresql://mcr_user:McrSecurePostgresPass2026!DbEngine@127.0.0.1:5433/mcr_db'
           NEXT_PUBLIC_APP_URL: 'https://mcr-staging.up.railway.app'
           TWILIO_MOCK_MODE: 'true'

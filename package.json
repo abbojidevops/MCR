@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "npx tsx --test --test-concurrency=1 tests/mcr.test.ts tests/auth.test.ts tests/isolation.test.ts tests/simulator-gate.test.ts tests/test-provenance.test.ts tests/compliance-gate.test.ts tests/telephony-signatures.test.ts tests/health-honesty.test.ts tests/dashboard-readability.test.ts tests/metrics-honesty.test.ts tests/billing.test.ts tests/claims-honesty.test.ts tests/test-hygiene.test.ts tests/deploy-path.test.ts tests/launch-gate.test.ts tests/security-penetration.test.ts tests/carrier-forwarding.test.ts tests/alert-dispatcher.test.ts tests/trade-templates.test.ts tests/postgres-engine.test.ts tests/inbox-manual-sms.test.ts tests/bridge-call.test.ts tests/reports-dispatch.test.ts tests/custom-intake-keywords.test.ts tests/crm-webhook.test.ts tests/admin-concierge.test.ts",
+    "test": "npx tsx --test --test-concurrency=1 tests/mcr.test.ts tests/auth.test.ts tests/isolation.test.ts tests/simulator-gate.test.ts tests/test-provenance.test.ts tests/compliance-gate.test.ts tests/telephony-signatures.test.ts tests/health-honesty.test.ts tests/dashboard-readability.test.ts tests/metrics-honesty.test.ts tests/billing.test.ts tests/claims-honesty.test.ts tests/test-hygiene.test.ts tests/deploy-path.test.ts tests/launch-gate.test.ts tests/security-penetration.test.ts tests/carrier-forwarding.test.ts tests/alert-dispatcher.test.ts tests/trade-templates.test.ts tests/postgres-engine.test.ts tests/inbox-manual-sms.test.ts tests/bridge-call.test.ts tests/reports-dispatch.test.ts tests/custom-intake-keywords.test.ts tests/crm-webhook.test.ts tests/admin-concierge.test.ts tests/staging-requirements.test.ts",
     "test:auth": "npx tsx --test tests/auth.test.ts",
     "test:isolation": "npx tsx --test tests/isolation.test.ts",
     "test:simulator": "npx tsx --test tests/simulator-gate.test.ts",
@@ -37,11 +37,13 @@
     "deploy:check": "npx tsx scripts/ci-deploy-check.ts",
     "staging:preflight": "npx tsx scripts/staging-preflight.ts",
     "staging:smoke": "npx tsx scripts/staging-smoke.ts",
+    "staging:requirements": "npx tsx scripts/staging-requirements.ts",
     "demo": "npx tsx scripts/demo-walkthrough.ts",
     "db:reset": "npx tsx scripts/db-reset.ts",
     "db:migrate:postgres": "npx tsx scripts/migrate-to-postgres.ts",
     "probe:red": "npx tsx scripts/probe-red.ts",
-    "probe:green": "npx tsx scripts/probe-green.ts"
+    "probe:green": "npx tsx scripts/probe-green.ts",
+    "test:staging": "npx tsx --test tests/deploy-path.test.ts tests/staging-requirements.test.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",
