@@ -157,6 +157,12 @@ expected for staging.
    Without `--wait` the verifier fails fast on a single attempt (useful for monitoring an
    already-running service); `STAGING_SMOKE_WAIT_SECONDS=<n>` sets the window without a flag.
 
+   If you would rather not run it from a local checkout, use the
+   **Staging Smoke Verification** workflow (*Actions → Staging Smoke Verification → Run workflow*)
+   and pass the staging URL. It runs the same command on a GitHub-hosted runner, records the
+   result in the repository, needs no secrets, and never enables live processing. The workflow is
+   manual-only by design, so it cannot run on push or on a schedule.
+
    It proves, against the live staging service:
 
    * `/api/health` returns the minimal `{status, timestamp, version}` payload (no posture leakage)

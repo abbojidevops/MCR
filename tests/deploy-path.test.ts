@@ -939,3 +939,42 @@ test('RAIL-13: Staging Smoke CLI Parses the Readiness Wait Flag and Environment 
   assert.equal(resolveWaitSeconds(['--wait=90'], { STAGING_SMOKE_WAIT_SECONDS: '45' }), 90, 'Flag must win over env var');
   assert.equal(resolveWaitSeconds(['--wait=garbage'], {}), 120, 'Malformed flag values must fall back to the default');
 });
+
+test('RAIL-14: On-Demand Staging Smoke Workflow Is Manual, Read-Only, and Stays Non-Live', () => {
+  const workflowPath = path.join(process.cwd(), '.github', 'workflows', 'staging-smoke.yml');
+  assert.ok(fs.existsSync(workflowPath), 'The staging smoke workflow must exist');
+  // Comments explain intent (e.g. "needs no secrets"); only executable YAML counts.
+  const workflow = fs
+    .readFileSync(workflowPath, 'utf-8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
+
+  // Manual trigger only: this workflow must never run on push/PR (it needs a
+  // deployed URL and would fail spuriously or hit a live service unasked).
+  assert.match(workflow, /on:\s*\n\s*workflow_dispatch:/, 'Workflow must be workflow_dispatch only');
+  assert.equal(
+    /^\s{2}(push|pull_request|schedule):/m.test(workflow),
+    false,
+    'Workflow must not be triggered automatically by push, PR or schedule'
+  );
+
+  // It verifies the deployment; it must not deploy or enable live processing.
+  assert.match(workflow, /npm run staging:smoke/, 'Workflow must run the staging smoke verifier');
+  assert.ok(workflow.includes('--wait='), 'Workflow must wait for readiness after a deploy');
+  for (const forbidden of ['railway up', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'TWILIO_AUTH_TOKEN']) {
+    assert.equal(
+      workflow.includes(forbidden),
+      false,
+      `Workflow must not reference "${forbidden}": verification must stay read-only and non-live`
+    );
+  }
+
+  // Least privilege and no secret material.
+  assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/, 'Workflow must request read-only contents permission');
+  assert.equal(
+    workflow.includes('secrets.'),
+    false,
+    'Workflow must not consume repository secrets'
+  );
+});
