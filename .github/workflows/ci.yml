@@ -41,8 +41,28 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Type-check (tsc --noEmit)
+        run: npm run lint
+
       - name: Run Test Suite
         run: npm test
 
+      # Validates the Railway staging topology (Dockerfile builder, db-init pre-deploy
+      # schema migration, npm start, /api/health healthcheck) and secret strength.
+      # Values below are throwaway CI-only fixtures, never real credentials.
+      - name: Staging Pre-flight Verification
+        env:
+          ADMIN_PASSWORD: 'CiPreflightAdmin2026!'
+          SESSION_SECRET: 'ci-preflight-session-secret-32-chars-min'
+          DATABASE_URL: 'postgresql://mcr_user:McrSecurePostgresPass2026!DbEngine@127.0.0.1:5433/mcr_db'
+          NEXT_PUBLIC_APP_URL: 'https://mcr-staging.up.railway.app'
+          TWILIO_MOCK_MODE: 'true'
+        run: npm run staging:preflight
+
       - name: Build Next.js Production App
         run: npm run build
+
+      # Full deployment gate: hygiene invariance, green security probes, and the
+      # assertion that probe:red still fails on the fixed build.
+      - name: Deployment, Hygiene & Security Probe Gate
+        run: npm run deploy:check
