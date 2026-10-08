@@ -16,6 +16,8 @@ import {
   ClipboardList,
   Flame,
   Search,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { CallRecord, JobCard, Conversation } from '@/types';
 
@@ -27,6 +29,7 @@ export default function MissedCallsPage() {
   const [jobs, setJobs] = useState<JobCard[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters from Section 11
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
@@ -36,11 +39,16 @@ export default function MissedCallsPage() {
   const fetchCallsData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const [callsRes, jobsRes, convsRes] = await Promise.all([
         fetch('/api/calls'),
         fetch('/api/jobs'),
         fetch('/api/conversations'),
       ]);
+
+      if (!callsRes.ok || !jobsRes.ok || !convsRes.ok) {
+        throw new Error('Unable to load call, job, or conversation data.');
+      }
 
       const callsData = await callsRes.json();
       const jobsData = await jobsRes.json();
@@ -49,8 +57,9 @@ export default function MissedCallsPage() {
       if (callsData.calls) setCalls(callsData.calls);
       if (jobsData.jobs) setJobs(jobsData.jobs);
       if (convsData.conversations) setConversations(convsData.conversations);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err?.message || 'Unable to load the missed call log.');
     } finally {
       setLoading(false);
     }
@@ -119,6 +128,31 @@ export default function MissedCallsPage() {
     });
   }, [enrichedCalls, timeFilter, statusFilter, searchQuery]);
 
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Missed Calls Log</h1>
+        </div>
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Missed call data could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{error}</p>
+          <button
+            type="button"
+            onClick={fetchCallsData}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -129,7 +163,23 @@ export default function MissedCallsPage() {
             Real-time telemetry and customer response attribution for every missed phone call.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={fetchCallsData}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
+
+      {loading && calls.length === 0 && (
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-24 animate-pulse rounded-2xl bg-slate-200" />
+          <div className="h-64 animate-pulse rounded-2xl bg-slate-200" />
+        </div>
+      )}
 
       {/* Section 11: Filters & Search Bar */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
@@ -146,6 +196,8 @@ export default function MissedCallsPage() {
             ].map((t) => (
               <button
                 key={t.id}
+                type="button"
+                aria-pressed={timeFilter === t.id}
                 onClick={() => setTimeFilter(t.id as TimeFilter)}
                 className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                   timeFilter === t.id
@@ -162,7 +214,9 @@ export default function MissedCallsPage() {
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
             <input
-              type="text"
+              type="search"
+              id="missed-calls-search"
+              aria-label="Search missed calls by phone number, issue, or customer name"
               placeholder="Search phone or issue..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -184,6 +238,8 @@ export default function MissedCallsPage() {
           ].map((s) => (
             <button
               key={s.id}
+              type="button"
+              aria-pressed={statusFilter === s.id}
               onClick={() => setStatusFilter(s.id as StatusFilter)}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${
                 statusFilter === s.id
@@ -201,22 +257,29 @@ export default function MissedCallsPage() {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
+            <caption className="sr-only">
+              Missed calls with text-back delivery, customer response, lead status and recovered revenue
+            </caption>
             <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Caller</th>
-                <th className="px-4 py-3">Time</th>
-                <th className="px-4 py-3">Text-Back</th>
-                <th className="px-4 py-3">Response</th>
-                <th className="px-4 py-3">Lead Status</th>
-                <th className="px-4 py-3">Revenue</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th scope="col" className="px-4 py-3">Caller</th>
+                <th scope="col" className="px-4 py-3">Time</th>
+                <th scope="col" className="px-4 py-3">Text-Back</th>
+                <th scope="col" className="px-4 py-3">Response</th>
+                <th scope="col" className="px-4 py-3">Lead Status</th>
+                <th scope="col" className="px-4 py-3">Revenue</th>
+                <th scope="col" className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredCalls.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
-                    No missed calls found matching your filter criteria.
+                    {loading
+                      ? 'Loading missed calls...'
+                      : calls.length === 0
+                        ? 'No missed calls have been received yet. Once your carrier forwarding is live, every unanswered call appears here.'
+                        : 'No missed calls found matching your filter criteria.'}
                   </td>
                 </tr>
               ) : (
@@ -267,7 +330,7 @@ export default function MissedCallsPage() {
                           <span className="inline-flex items-center gap-1 font-semibold text-amber-600">
                             <Clock className="h-3 w-3" /> Deduplicated
                           </span>
-                          <div className="text-[10px] text-slate-400">Called within last 4 hrs</div>
+                          <div className="text-[10px] text-slate-400">Called within last 2 hrs</div>
                         </div>
                       )}
                       {call.text_back_status === 'suppressed' && (
@@ -358,6 +421,7 @@ export default function MissedCallsPage() {
                         <a
                           href={`tel:${call.from_number}`}
                           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 shadow-sm"
+                          aria-label={`Call ${call.from_number}`}
                           title="Call Customer"
                         >
                           <Phone className="h-3 w-3" /> Call
@@ -365,6 +429,7 @@ export default function MissedCallsPage() {
                         <Link
                           href="/dashboard/inbox"
                           className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                          aria-label={`Open SMS thread for ${call.from_number}`}
                           title="Open SMS Thread"
                         >
                           <MessageSquare className="h-3 w-3 text-blue-600" />
@@ -373,6 +438,7 @@ export default function MissedCallsPage() {
                           <Link
                             href="/dashboard/jobs"
                             className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                            aria-label={`View job card for ${call.job?.contact?.full_name || call.from_number}`}
                             title="View Job Card"
                           >
                             <ClipboardList className="h-3 w-3 text-amber-600" />

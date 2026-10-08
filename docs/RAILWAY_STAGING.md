@@ -85,9 +85,32 @@ Key properties:
 | `CLOUDFLARE_TUNNEL_SECRET` | When staging is fronted by a Cloudflare Zero-Trust tunnel |
 | `ALERT_WEBHOOK_URL` / `ADMIN_NOTIFICATION_EMAIL` | Owner/operator alerting |
 | `NEXT_PUBLIC_STRIPE_LIVE` / `NEXT_PUBLIC_TWILIO_LIVE` / `NEXT_PUBLIC_POSTGRES_LIVE` | Launch-gate live-state overrides used by `/admin/launch-gate` |
+| `MCR_DEMO_MODE` (or the legacy `DEMO_MODE`) | Set to `true` **only** on a demo/staging box. Controls whether the `/login` screen may display the demonstration credentials. See the section below. |
 
 **Do not set** `PORT` manually (Railway injects it) and **do not** set `NODE_ENV`
 (the image already runs `NODE_ENV=production`).
+
+---
+
+### Demo credential disclosure (`MCR_DEMO_MODE`)
+
+The `/login` screen used to print the demonstration operator credentials
+(`demo@apexplumbing.com` / `ApexDemo2026!Secure`) on every deployment, including
+production. That is now gated.
+
+| Deployment state | Demo box on `/login` |
+| :--- | :--- |
+| `NODE_ENV=production`, no demo flag | **Hidden** — treated as real production |
+| `MCR_DEMO_MODE=true` (or `DEMO_MODE=true`) | Shown |
+| `MCR_ENVIRONMENT` / `APP_ENV` / `RAILWAY_ENVIRONMENT` / `VERCEL_ENV` = `staging` / `demo` / `dev` / `preview` / `test` | Shown |
+| `NODE_ENV` not `production` (local `npm run dev`) | Shown |
+
+`GET /api/auth/demo-credentials` returns `{ exposed: false, reason }` when the
+credentials are withheld, and never returns credential material in that case.
+
+**If you deploy staging without `MCR_DEMO_MODE=true`, the demo box will disappear
+from the login screen.** That is intentional. Either set the flag, or sign in with
+the real seeded account credentials.
 
 ---
 

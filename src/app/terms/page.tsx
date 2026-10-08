@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, FileText, PhoneCall, CheckCircle } from 'lucide-react';
+import { COMPANY_INFO } from '@/lib/constants';
 
 export const metadata = {
   title: 'Terms of Service — MCR (Missed Call Recovery)',
@@ -47,7 +48,7 @@ export default function TermsPage() {
               <li><strong>Cost:</strong> Message and data rates may apply depending on your cellular provider plan.</li>
               <li><strong>Frequency:</strong> Message frequency varies depending on your missed calls and conversation responses.</li>
               <li><strong>Opt-Out:</strong> Text <span className="font-bold">STOP</span>, <span className="font-bold">CANCEL</span>, or <span className="font-bold">UNSUBSCRIBE</span> at any time to permanently opt out. You will receive one final confirmation message.</li>
-              <li><strong>Help:</strong> Text <span className="font-bold">HELP</span> or contact our support team at <span className="font-bold">support@mcr-recovery.com</span>.</li>
+              <li><strong>Help:</strong> Text <span className="font-bold">HELP</span> or contact our support team at <span className="font-bold">{COMPANY_INFO.email}</span>.</li>
               <li><strong>Supported Carriers:</strong> AT&amp;T, Verizon Wireless, T-Mobile, Sprint, Boost Mobile, Cricket, MetroPCS, Virgin Mobile, and other major US carriers. Carriers are not liable for delayed or undelivered messages.</li>
             </ul>
           </div>

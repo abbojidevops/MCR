@@ -766,7 +766,7 @@ export default function LandingPage() {
 
               {/* Part 3.6: Business tier CTA changed from Start trial to Schedule Rollout */}
               <a
-                href="mailto:support@mcr-recovery.com?subject=Business%20Rollout%20Consultation"
+                href={`mailto:${COMPANY_INFO.email}?subject=Business%20Rollout%20Consultation`}
                 className="mt-8 block w-full rounded-xl bg-slate-900 py-3 text-center text-xs font-bold text-white hover:bg-slate-800 transition"
               >
                 Schedule Rollout (Talk to Us)

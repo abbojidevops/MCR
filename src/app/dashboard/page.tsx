@@ -38,6 +38,7 @@ export default function DashboardOverviewPage() {
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const [enteredActualValue, setEnteredActualValue] = useState<string>('');
   const [savingValue, setSavingValue] = useState(false);
+  const [valueModalError, setValueModalError] = useState<string | null>(null);
 
   const fetchDashboardStats = async (selectedRange: DateRangePreset = range) => {
     try {
@@ -60,6 +61,16 @@ export default function DashboardOverviewPage() {
     fetchDashboardStats(range);
   }, [range]);
 
+  // Allow keyboard users to dismiss the Record Completed Revenue dialog.
+  useEffect(() => {
+    if (!valueModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setValueModalOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [valueModalOpen]);
+
   const handleSaveActualValue = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedJobId || !enteredActualValue) return;
@@ -75,14 +86,21 @@ export default function DashboardOverviewPage() {
           status: 'COMPLETED',
         }),
       });
-      const resData = await res.json();
-      if (resData.success) {
-        setValueModalOpen(false);
-        setEnteredActualValue('');
-        fetchDashboardStats(range);
+      const resData = await res.json().catch(() => null);
+      if (!res.ok || !resData?.success) {
+        setValueModalError(
+          resData?.error ||
+            `Could not record the completed revenue (HTTP ${res.status}). Nothing was saved.`
+        );
+        return;
       }
-    } catch (err) {
+      setValueModalError(null);
+      setValueModalOpen(false);
+      setEnteredActualValue('');
+      fetchDashboardStats(range);
+    } catch (err: any) {
       console.error(err);
+      setValueModalError(err?.message || 'Network error — nothing was saved.');
     } finally {
       setSavingValue(false);
     }
@@ -254,7 +272,10 @@ export default function DashboardOverviewPage() {
             </div>
 
             <button
-              onClick={() => setValueModalOpen(true)}
+              onClick={() => {
+                setValueModalError(null);
+                setValueModalOpen(true);
+              }}
               className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 transition"
             >
               <PlusCircle className="h-3.5 w-3.5" />
@@ -394,7 +415,10 @@ export default function DashboardOverviewPage() {
               </div>
             </div>
             <button
-              onClick={() => setValueModalOpen(true)}
+              onClick={() => {
+                setValueModalError(null);
+                setValueModalOpen(true);
+              }}
               className="self-start sm:self-center shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 text-xs font-bold text-slate-950 shadow-md transition"
             >
               + Record Job Revenue
@@ -719,7 +743,7 @@ export default function DashboardOverviewPage() {
             </p>
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
-                <span className="text-slate-600">Deduplicated (called within last 4 hours)</span>
+                <span className="text-slate-600">Deduplicated (called within last 2 hours)</span>
                 <span className="font-bold text-slate-900">{data.textBackGapAnalysis?.suppressedDedupe || 0}</span>
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50">
@@ -741,14 +765,30 @@ export default function DashboardOverviewPage() {
 
       {/* Record Completed Revenue Modal */}
       {valueModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={() => setValueModalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="record-revenue-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
-                <h3 className="font-bold text-slate-900">Record Completed Job Revenue</h3>
+                <DollarSign className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+                <h3 id="record-revenue-title" className="font-bold text-slate-900">
+                  Record Completed Job Revenue
+                </h3>
               </div>
-              <button onClick={() => setValueModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                type="button"
+                onClick={() => setValueModalOpen(false)}
+                aria-label="Close record revenue dialog"
+                className="text-slate-400 hover:text-slate-600"
+              >
                 ✕
               </button>
             </div>
@@ -757,10 +797,22 @@ export default function DashboardOverviewPage() {
               When a job is marked completed, enter the confirmed invoice amount so it enters your confirmed actual revenue metrics.
             </p>
 
+            {valueModalError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] font-semibold text-rose-800"
+              >
+                {valueModalError}
+              </div>
+            )}
+
             <form onSubmit={handleSaveActualValue} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-600 font-bold mb-1">Select Recovered Job</label>
+                <label htmlFor="record-revenue-job" className="block text-slate-600 font-bold mb-1">
+                  Select Recovered Job
+                </label>
                 <select
+                  id="record-revenue-job"
                   value={selectedJobId}
                   onChange={(e) => setSelectedJobId(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -774,8 +826,11 @@ export default function DashboardOverviewPage() {
               </div>
 
               <div>
-                <label className="block text-slate-600 font-bold mb-1">Confirmed Completed Amount ($)</label>
+                <label htmlFor="record-revenue-amount" className="block text-slate-600 font-bold mb-1">
+                  Confirmed Completed Amount ($)
+                </label>
                 <input
+                  id="record-revenue-amount"
                   type="number"
                   min="0"
                   step="10"

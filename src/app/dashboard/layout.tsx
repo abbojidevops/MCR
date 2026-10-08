@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   PhoneCall,
   LayoutDashboard,
@@ -28,12 +28,16 @@ import {
   ChevronUp,
   ArrowRight,
   Circle,
+  LogOut,
 } from 'lucide-react';
+import { COMPANY_INFO } from '@/lib/constants';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState('acc-apex-plumbing');
+  const [businessName, setBusinessName] = useState<string | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(2);
@@ -49,12 +53,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   } | null>(null);
   const [onboardingBannerCollapsed, setOnboardingBannerCollapsed] = useState(false);
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  React.useEffect(() => {
+  const isActiveRoute = useCallback(
+    (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(`${href}/`)),
+    [pathname]
+  );
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Logout request failed', err);
+    } finally {
+      // Always land on the login screen, even if the revoke call failed.
+      router.replace('/login');
+      router.refresh();
+    }
+  };
+
+  useEffect(() => {
     fetch('/api/auth/session')
       .then((r) => r.json())
       .then((d) => {
         if (d.accountId) setSelectedAccount(d.accountId);
+        if (d.businessName) setBusinessName(d.businessName);
       })
       .catch(console.error);
 
@@ -109,6 +133,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Calls', href: '/dashboard/missed-calls', icon: History },
   ];
 
+  // Close overlays on Escape for keyboard users.
+  useEffect(() => {
+    if (!helpModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHelpModalOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [helpModalOpen]);
+
   const handleQuickSimulation = async () => {
     setSimulatingCall(true);
     setSimulationToast('Simulating inbound missed call from (217) 555-8833...');
@@ -153,33 +187,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Active Authenticated Business Profile */}
         <div className="border-b border-slate-200 p-3">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
             Active Business
-          </label>
+          </span>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800">
-            {selectedAccount === 'acc-coolbreeze-hvac' ? 'CoolBreeze Heating & Air' : 'Apex Plumbing & Rooter'}
+            {businessName ||
+              (selectedAccount === 'acc-coolbreeze-hvac'
+                ? 'CoolBreeze Heating & Air'
+                : 'Apex Plumbing & Rooter')}
           </div>
         </div>
 
         {/* Primary Navigation */}
-        <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
+        <nav aria-label="Main menu" className="flex-1 space-y-1 p-3 overflow-y-auto">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
             Main Menu
           </div>
           {primaryNavItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = isActiveRoute(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
                 {item.label}
               </Link>
             );
@@ -189,19 +227,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Tools &amp; Telecom
           </div>
           {secondaryNavItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = isActiveRoute(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
                 {item.label}
               </Link>
             );
@@ -209,11 +248,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Help Item */}
           <button
+            type="button"
             onClick={() => setHelpModalOpen(true)}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
           >
-            <HelpCircle className="h-4 w-4 text-slate-400" />
+            <HelpCircle className="h-4 w-4 text-slate-400" aria-hidden="true" />
             Help &amp; Support
+          </button>
+
+          {/* Sign out */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-700 transition-colors disabled:opacity-50"
+          >
+            <LogOut className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            {loggingOut ? 'Signing out...' : 'Sign Out'}
           </button>
         </nav>
 
@@ -270,6 +321,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             type="button"
             disabled={simulatingCall}
             onClick={handleQuickSimulation}
+            aria-label="Run a simulated missed call"
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-semibold text-white shadow hover:bg-slate-800 disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5 text-emerald-400" />
@@ -286,6 +338,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-expanded={mobileMenuOpen}
+              aria-label="Toggle navigation menu"
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -310,6 +364,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               type="button"
               disabled={simulatingCall}
               onClick={handleQuickSimulation}
+              aria-label="Run a simulated missed call"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm"
             >
               <Play className="h-3 w-3 text-emerald-500" /> Test Call
@@ -320,6 +375,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 type="button"
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
+                aria-expanded={notificationsOpen}
+                aria-haspopup="true"
+                aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
                 className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <Bell className="h-5 w-5" />
@@ -364,23 +422,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">Navigation</div>
             <nav className="grid grid-cols-2 gap-2">
               {[...primaryNavItems, ...secondaryNavItems].map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = isActiveRoute(item.href);
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`flex items-center gap-2 rounded-lg p-2.5 text-xs font-semibold ${
                       isActive ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" aria-hidden="true" />
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              {loggingOut ? 'Signing out...' : 'Sign Out'}
+            </button>
           </div>
         )}
 
@@ -457,6 +525,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     type="button"
                     onClick={() => setOnboardingBannerCollapsed(!onboardingBannerCollapsed)}
                     className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/60 transition"
+                    aria-label={onboardingBannerCollapsed ? 'Expand checklist' : 'Collapse checklist'}
+                    aria-expanded={!onboardingBannerCollapsed}
                     title={onboardingBannerCollapsed ? 'Expand Checklist' : 'Collapse Checklist'}
                   >
                     {onboardingBannerCollapsed ? (
@@ -469,6 +539,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     type="button"
                     onClick={() => setOnboardingBannerDismissed(true)}
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition"
+                    aria-label="Dismiss setup checklist"
                     title="Dismiss Banner"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -551,28 +622,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ---------------- SECTION 20: MOBILE STICKY BOTTOM NAV BAR ---------------- */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
         {mobileBottomItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = isActiveRoute(item.href);
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition ${
                 isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              <Icon className={`h-5 w-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+              <Icon className={`h-5 w-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
               <span>{item.label}</span>
             </Link>
           );
         })}
         <button
+          type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-expanded={mobileMenuOpen}
+          aria-label="More navigation options"
           className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition ${
             mobileMenuOpen ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <MoreHorizontal className="h-5 w-5 text-slate-400" />
+          <MoreHorizontal className="h-5 w-5 text-slate-400" aria-hidden="true" />
           <span>More</span>
         </button>
       </nav>
@@ -580,14 +655,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Help Modal */}
       {helpModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mcr-help-modal-title"
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <HelpCircle className="h-5 w-5 text-blue-600" />
-                <h3 className="font-bold text-slate-900">MCR Support &amp; Knowledge Base</h3>
+                <h3 id="mcr-help-modal-title" className="font-bold text-slate-900">
+                  MCR Support &amp; Knowledge Base
+                </h3>
               </div>
-              <button onClick={() => setHelpModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
-                <X className="h-4 w-4" />
+              <button
+                type="button"
+                onClick={() => setHelpModalOpen(false)}
+                aria-label="Close help dialog"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
             <div className="space-y-3 text-xs text-slate-600">
@@ -596,15 +683,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 Visit our carrier guide in <Link href="/dashboard/forwarding" onClick={() => setHelpModalOpen(false)} className="text-blue-600 underline">Carrier Forwarding</Link> or dial your carrier activation code.
               </p>
               <p>
-                <strong>Emergency Inquiries:</strong><br />
-                Call our 24/7 Concierge Hotline: <strong className="text-slate-900">+1 (800) 555-MCR1</strong>
+                <strong>Support Hours:</strong><br />
+                {COMPANY_INFO.supportHours}
               </p>
               <p>
                 <strong>Email Support:</strong><br />
-                <span className="font-mono text-slate-800">support@mcr-recovery.com</span>
+                <span className="font-mono text-slate-800">{COMPANY_INFO.email}</span>
               </p>
             </div>
             <button
+              type="button"
               onClick={() => setHelpModalOpen(false)}
               className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
             >

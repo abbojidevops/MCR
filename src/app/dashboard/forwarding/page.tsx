@@ -36,6 +36,7 @@ export default function ForwardingWizardPage() {
   const [mcrAssignedNumber, setMcrAssignedNumber] = useState<string>('');
   const [forwardingConfigured, setForwardingConfigured] = useState<boolean>(false);
   const [updatingStatus, setUpdatingStatus] = useState<boolean>(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   // Runbook accordion state
   const [expandedSection, setExpandedSection] = useState<string | null>('issueA');
@@ -84,10 +85,23 @@ export default function ForwardingWizardPage() {
 
   const guide = getCarrierGuide(selectedCarrier, mcrAssignedNumber || '[Pending Carrier Provisioning]');
 
-  const handleCopy = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const handleCopy = async (code: string) => {
+    setCopyError(null);
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard access is unavailable in this browser.');
+      }
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch (err: any) {
+      console.error(err);
+      setCopyError(
+        'Could not copy automatically. Select the code manually and dial it from your phone keypad.'
+      );
+    }
   };
 
   const handleToggleForwarding = async (status: boolean) => {
@@ -100,15 +114,19 @@ export default function ForwardingWizardPage() {
           updates: { forwarding_configured: status },
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setForwardingConfigured(status);
-        if (status) {
-          setChecklist((prev) => ({ ...prev, testCallVerified: true }));
-        }
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setStatusError(data?.error || 'Could not save the forwarding status. Please try again.');
+        return;
       }
-    } catch (err) {
+      setStatusError(null);
+      setForwardingConfigured(status);
+      if (status) {
+        setChecklist((prev) => ({ ...prev, testCallVerified: true }));
+      }
+    } catch (err: any) {
       console.error('Failed to update forwarding status:', err);
+      setStatusError(err?.message || 'Network error while saving the forwarding status.');
     } finally {
       setUpdatingStatus(false);
     }
@@ -127,16 +145,21 @@ export default function ForwardingWizardPage() {
           callerName: 'Carrier Test Call',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setTestResult('✓ Verification Call Succeeded! The conditional routing intercepted cleanly and triggered the text-back.');
-        // Automatically persist verified status
-        await handleToggleForwarding(true);
-      } else {
-        setTestResult(data.error || 'Test call could not be completed.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setTestResult(data?.error || 'The simulated test call could not be completed.');
+        return;
       }
-    } catch (err) {
-      setTestResult('Simulation error. Check connection.');
+      setTestResult(
+        'Simulated test call recorded and the automated text-back ran end-to-end. ' +
+          'This exercises MCR handling only — it does not prove your carrier star code is active. ' +
+          'Dial the code from your handset, then call your own number and let it ring out to confirm real rollover.'
+      );
+      // Record the operator's attestation; this is self-reported, not carrier-verified.
+      await handleToggleForwarding(true);
+    } catch (err: any) {
+      console.error(err);
+      setTestResult(err?.message || 'Simulation error. Check your connection.');
     } finally {
       setTestingCall(false);
     }
@@ -171,7 +194,7 @@ export default function ForwardingWizardPage() {
         </p>
       </div>
 
-      {/* Live Verification Status Card */}
+      {/* Forwarding Status Card (self-reported by the operator) */}
       <div
         className={`rounded-2xl border p-5 transition shadow-sm ${
           forwardingConfigured
@@ -194,7 +217,7 @@ export default function ForwardingWizardPage() {
               <div className="flex items-center gap-2">
                 <span className="font-bold text-sm">
                   {forwardingConfigured
-                    ? 'Conditional Forwarding Active & Verified'
+                    ? 'Conditional Forwarding Marked Active'
                     : 'Conditional Forwarding Pending Activation'}
                 </span>
                 <span
@@ -204,18 +227,36 @@ export default function ForwardingWizardPage() {
                       : 'bg-amber-200/80 text-amber-800'
                   }`}
                 >
-                  {forwardingConfigured ? 'Live' : 'Unverified'}
+                  {forwardingConfigured ? 'Self-Reported' : 'Unverified'}
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-600 leading-relaxed">
                 {forwardingConfigured
-                  ? 'Your carrier line is actively configured. Unanswered, busy, or declined calls automatically roll over to your dedicated MCR number for instant SMS recovery.'
-                  : 'Your carrier star code has not yet been marked as dialed. Dial the code below from your phone keypad, then run a test call or click the button to verify.'}
+                  ? 'You have reported that the carrier star code is dialed. MCR cannot confirm this from the network — verify by calling your own number and letting it ring out. Unanswered, busy, or declined calls then roll over to your dedicated MCR number.'
+                  : 'Your carrier star code has not yet been marked as dialed. Dial the code below from your phone keypad, then call your own number and let it ring out to confirm rollover.'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+            {statusError && (
+              <div
+                role="alert"
+                className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"
+              >
+                {statusError}
+              </div>
+            )}
+
+            {copyError && (
+              <div
+                role="alert"
+                className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-900"
+              >
+                {copyError}
+              </div>
+            )}
+
             {forwardingConfigured ? (
               <button
                 type="button"
@@ -255,10 +296,17 @@ export default function ForwardingWizardPage() {
 
       {/* Carrier Selection Grid */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+        <span
+          id="carrier-select-label"
+          className="block text-xs font-bold uppercase tracking-wider text-slate-700"
+        >
           Select Your Phone Carrier
-        </label>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </span>
+        <div
+          role="group"
+          aria-labelledby="carrier-select-label"
+          className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4"
+        >
           {Object.keys(CARRIER_GUIDES).map((cKey) => {
             const c = CARRIER_GUIDES[cKey];
             const isSelected = selectedCarrier === cKey;
@@ -266,6 +314,7 @@ export default function ForwardingWizardPage() {
               <button
                 key={cKey}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => setSelectedCarrier(cKey)}
                 className={`rounded-xl border p-3 text-left transition ${
                   isSelected
