@@ -807,3 +807,35 @@ test('RAIL-9: Staging Smoke Verifier Fails Loudly on Posture Leaks, Missing Head
   assert.equal(badTarget.ok, false);
   assert.ok(badTarget.errors.some((e) => e.includes('must be absolute')));
 });
+
+test('RAIL-10: PostgreSQL Helpers Are Statically Imported (Bundler-Safe Persistence Path)', () => {
+  // The production build emits src/db/postgres.ts as an async webpack module.
+  // Reaching it via `require('./postgres')` returns a namespace whose named
+  // exports are not yet materialized, so getPostgresPool() throws and every
+  // dual-persistence write silently no-ops while the API reports success.
+  // A live staging rehearsal caught exactly that: onboarding returned 200 and the
+  // accounts table stayed empty. Static imports keep the exports bundler-linked.
+  const repositoryPath = path.join(process.cwd(), 'src', 'db', 'repository.ts');
+  const raw = fs.readFileSync(repositoryPath, 'utf-8');
+
+  // Strip comments so the explanatory note above the import is not matched.
+  const source = raw
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  assert.equal(
+    /require\(\s*['"]\.\/postgres['"]\s*\)/.test(source),
+    false,
+    'src/db/repository.ts must not require("./postgres") dynamically: the production bundle cannot resolve its named exports'
+  );
+  assert.match(
+    source,
+    /import\s*\{[\s\S]*?getPostgresPool[\s\S]*?\}\s*from\s*['"]\.\/postgres['"]/,
+    'src/db/repository.ts must statically import getPostgresPool from ./postgres'
+  );
+  assert.match(
+    source,
+    /import\s*\{[\s\S]*?isPostgresConfigured as isPostgresConfiguredFromPg[\s\S]*?\}\s*from\s*['"]\.\/postgres['"]/,
+    'src/db/repository.ts must statically import isPostgresConfigured so storage-engine reporting matches the write path'
+  );
+});

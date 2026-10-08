@@ -231,3 +231,69 @@ test('PG-4: Launch Gate Evaluation Dynamics (production_database_engine)', async
     await closePostgresPool();
   }
 });
+
+test('PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL', async () => {
+  // Regression guard for the production-build defect where src/db/repository.ts
+  // reached the pool through a dynamic `require('./postgres')`. In the bundled
+  // app that namespace has no materialized named exports, so getPostgresPool()
+  // threw, the surrounding try/catch logged a warning, and EVERY account write
+  // silently skipped PostgreSQL while the API still returned success.
+  const originalUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = LIVE_POSTGRES_URL;
+
+  try {
+    await closePostgresPool();
+    const pool = getPostgresPool();
+    assert.ok(pool, 'Pool must be available for the dual-persistence path');
+    assert.equal(db.isPostgresConfigured(), true);
+    assert.equal(db.getStorageEngine(), 'postgresql');
+
+    const account = db.createAccount(
+      'Dual Persistence Verification',
+      'plumbing',
+      '+12175559977',
+      'Dual Persistence Owner',
+      'Verizon Wireless'
+    );
+    const accountId = account.account.id;
+
+    try {
+      // The repository write is asynchronous; poll briefly for the row.
+      let rowCount = 0;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const result = await pool.query('SELECT id FROM accounts WHERE id = $1', [accountId]);
+        rowCount = result.rowCount || 0;
+        if (rowCount === 1) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      assert.equal(
+        rowCount,
+        1,
+        'db.createAccount() must persist the account into PostgreSQL, not only the file store'
+      );
+
+      const status = db.getPostgresPersistenceStatus();
+      assert.equal(status.configured, true, 'Persistence status must report PostgreSQL configured');
+      assert.equal(status.poolAvailable, true, 'Persistence status must report the pool available');
+      assert.equal(
+        status.lastPersistError,
+        null,
+        `Dual-persistence must not record write failures (saw: ${JSON.stringify(status.lastPersistError)})`
+      );
+    } finally {
+      db.deleteAccount(accountId);
+      await pool.query('DELETE FROM accounts WHERE id = $1', [accountId]).catch(() => {});
+    }
+
+    const afterDelete = await pool.query('SELECT id FROM accounts WHERE id = $1', [accountId]);
+    assert.equal(afterDelete.rowCount, 0, 'db.deleteAccount() must remove the PostgreSQL row');
+  } finally {
+    if (originalUrl) {
+      process.env.DATABASE_URL = originalUrl;
+    } else {
+      delete process.env.DATABASE_URL;
+    }
+    await closePostgresPool();
+  }
+});
