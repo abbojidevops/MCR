@@ -23,7 +23,12 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# PORT is a default only: managed platforms (Railway, Render, Heroku) inject their
+# own PORT at runtime, which takes precedence over this value.
 ENV PORT=3000
+# Bind the Next.js server to all interfaces so platform edge proxies and container
+# health probes can reach it. Never bind to 127.0.0.1 inside a container.
+ENV HOSTNAME=0.0.0.0
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
@@ -45,7 +50,9 @@ USER nextjs
 
 EXPOSE 3000
 
+# Probe the runtime PORT (not a hardcoded 3000) so the healthcheck stays accurate
+# when a platform injects a different port.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider "http://127.0.0.1:${PORT}/api/health" || exit 1
 
 CMD ["npm", "start"]

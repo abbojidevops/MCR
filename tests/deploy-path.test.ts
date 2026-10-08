@@ -3,11 +3,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { NextRequest } from 'next/server';
 
 import { validateSchemaSyntax, validateDatabaseCredentials } from '../scripts/db-init.mjs';
 import { runStagingPreflight } from '../scripts/staging-preflight';
+import { runStagingSmokeCheck } from '../scripts/staging-smoke';
 import { middleware } from '@/middleware';
 import { POST as adminLoginHandler } from '@/app/api/admin/login/route';
 import { POST as loginHandler } from '@/app/api/auth/login/route';
@@ -481,3 +483,327 @@ test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets 
 });
 
 
+/**
+ * RAIL-1..RAIL-5 — Railway Staging Deployment Readiness
+ *
+ * Railway staging boots the repository Dockerfile as a container. The schema is
+ * NOT applied by the platform, so the deploy config itself must run
+ * scripts/db-init.mjs before the production server starts. These tests pin that
+ * contract and prove the staging pre-flight fails loudly when it is broken.
+ */
+const RAILWAY_STAGING_ENV = {
+  ADMIN_PASSWORD: 'SuperSecurePass2026!',
+  SESSION_SECRET: 'x'.repeat(40),
+  DATABASE_URL: 'postgresql://mcr_user:StrongStagingPass2026!Db@localhost:5432/mcr_db',
+  NEXT_PUBLIC_APP_URL: 'https://mcr-staging.up.railway.app',
+  TWILIO_MOCK_MODE: 'true',
+};
+
+/**
+ * Builds a throwaway project root containing only the manifests the staging
+ * pre-flight inspects, so negative cases can be exercised without ever mutating
+ * the real repository files.
+ */
+function withTempProjectRoot(mutate: (dir: string) => void): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcr-railway-'));
+  const files = [
+    'Dockerfile',
+    'docker-compose.yml',
+    'render.yaml',
+    'vercel.json',
+    'railway.json',
+    'next.config.ts',
+    path.join('src', 'db', 'schema.sql'),
+  ];
+  for (const rel of files) {
+    const dest = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(process.cwd(), rel), dest);
+  }
+  mutate(dir);
+  return dir;
+}
+
+function runPreflightIn(dir: string) {
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(dir);
+    return runStagingPreflight(RAILWAY_STAGING_ENV);
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+test('RAIL-1: Railway Staging Manifest Runs Schema Migration Before Production Server', () => {
+  const railwayPath = path.join(process.cwd(), 'railway.json');
+  const json = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
+
+  const preDeploy = json.deploy?.preDeployCommand;
+  const startCommand = json.deploy?.startCommand;
+  const preDeployStr = Array.isArray(preDeploy) ? preDeploy.join(' && ') : preDeploy || '';
+  const startCommandStr = Array.isArray(startCommand) ? startCommand.join(' && ') : startCommand || '';
+
+  assert.ok(
+    preDeployStr.includes('node scripts/db-init.mjs') || startCommandStr.includes('node scripts/db-init.mjs'),
+    'Railway staging must apply src/db/schema.sql via scripts/db-init.mjs on every deploy'
+  );
+  assert.ok(
+    startCommandStr.includes('npm start'),
+    'Railway start command must launch the production server via npm start (never the dev server)'
+  );
+  assert.equal(json.deploy?.healthcheckPath, '/api/health');
+  assert.ok(
+    typeof json.deploy?.healthcheckTimeout === 'number' && json.deploy.healthcheckTimeout >= 10,
+    'Railway healthcheck timeout must allow schema bootstrap plus Next.js boot'
+  );
+  assert.equal(json.deploy?.restartPolicyType, 'ON_FAILURE');
+});
+
+test('RAIL-2: Container Binds All Interfaces and Probes the Runtime PORT', () => {
+  const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf-8');
+
+  assert.match(
+    dockerfile,
+    /ENV HOSTNAME=0\.0\.0\.0/,
+    'Container must bind 0.0.0.0 so the Railway edge proxy can reach the app'
+  );
+  assert.match(
+    dockerfile,
+    /HEALTHCHECK[\s\S]*\$\{PORT\}/,
+    'Container healthcheck must probe the runtime PORT rather than a hardcoded 3000'
+  );
+  assert.ok(
+    !dockerfile.includes('http://localhost:3000/api/health'),
+    'Healthcheck must not hardcode port 3000: platforms may inject a different PORT'
+  );
+});
+
+test('RAIL-3: Staging Pre-flight Accepts an Unmodified Railway Topology', () => {
+  const dir = withTempProjectRoot(() => {});
+  try {
+    const result = runPreflightIn(dir);
+    assert.equal(
+      result.ok,
+      true,
+      `Unmodified Railway topology must pass pre-flight. Errors: ${result.errors.join(', ')}`
+    );
+    assert.ok(
+      result.passedChecks.some((c) => c.includes('db-init schema migration then production server')),
+      'Pre-flight must report the Railway migration-then-serve path as a passing check'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('RAIL-4: Staging Pre-flight Fails Loudly When Railway Skips Schema Initialization', () => {
+  const dir = withTempProjectRoot((d) => {
+    const railwayPath = path.join(d, 'railway.json');
+    const json = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
+    delete json.deploy.preDeployCommand;
+    json.deploy.startCommand = 'npm start';
+    fs.writeFileSync(railwayPath, JSON.stringify(json, null, 2));
+  });
+  try {
+    const result = runPreflightIn(dir);
+    assert.equal(result.ok, false, 'A Railway deploy that never applies the schema must block deployment');
+    assert.ok(
+      result.errors.some((e) => e.includes('db-init.mjs')),
+      `Expected a db-init.mjs migration error, received: ${result.errors.join(' | ')}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('RAIL-5: Staging Pre-flight Fails Loudly When Railway Starts a Dev Server or Loses the Healthcheck', () => {
+  // 1. Dev server as the start command
+  const devDir = withTempProjectRoot((d) => {
+    const railwayPath = path.join(d, 'railway.json');
+    const json = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
+    json.deploy.startCommand = 'node scripts/db-init.mjs && npm run dev';
+    fs.writeFileSync(railwayPath, JSON.stringify(json, null, 2));
+  });
+  try {
+    const devResult = runPreflightIn(devDir);
+    assert.equal(devResult.ok, false, 'A Railway dev-server start command must block deployment');
+    assert.ok(devResult.errors.some((e) => e.includes('npm start')));
+  } finally {
+    fs.rmSync(devDir, { recursive: true, force: true });
+  }
+
+  // 2. Healthcheck path removed
+  const healthDir = withTempProjectRoot((d) => {
+    const railwayPath = path.join(d, 'railway.json');
+    const json = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
+    delete json.deploy.healthcheckPath;
+    fs.writeFileSync(railwayPath, JSON.stringify(json, null, 2));
+  });
+  try {
+    const healthResult = runPreflightIn(healthDir);
+    assert.equal(healthResult.ok, false, 'A Railway manifest without /api/health must block deployment');
+    assert.ok(healthResult.errors.some((e) => e.includes('healthcheckPath')));
+  } finally {
+    fs.rmSync(healthDir, { recursive: true, force: true });
+  }
+});
+/**
+ * RAIL-6..RAIL-9 — Platform-Independent Hardening & Post-Deploy Staging Smoke
+ */
+test('RAIL-6: Application Security Headers Are Declared in next.config.ts (Not Only at the Edge)', () => {
+  const configPath = path.join(process.cwd(), 'next.config.ts');
+  assert.ok(fs.existsSync(configPath), 'next.config.ts must exist in root');
+
+  const config = fs.readFileSync(configPath, 'utf-8');
+  assert.match(config, /async headers\(\)/, 'next.config.ts must declare a headers() block');
+  assert.match(config, /X-Content-Type-Options["']?,?\s*value:\s*["']nosniff["']/s, 'next.config.ts must set X-Content-Type-Options: nosniff');
+  assert.ok(config.includes('X-Frame-Options'), 'next.config.ts must set X-Frame-Options');
+  assert.ok(config.includes('"DENY"'), 'next.config.ts must set X-Frame-Options to DENY');
+  assert.ok(
+    config.includes('max-age=31536000; includeSubDomains; preload'),
+    'next.config.ts must set a 1-year HSTS policy'
+  );
+
+  // Parity with the Vercel edge configuration: the app layer must never be weaker.
+  const vercelJson = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'vercel.json'), 'utf-8')
+  );
+  const globalBlock = vercelJson.headers.find((h: any) => h.source === '/(.*)');
+  for (const header of globalBlock.headers) {
+    assert.ok(
+      config.includes(header.key) && config.includes(header.value),
+      `next.config.ts must mirror vercel.json header ${header.key}: ${header.value} for non-Vercel platforms (Railway/Render/Docker)`
+    );
+  }
+});
+
+test('RAIL-7: Staging Pre-flight Fails Loudly When the Application Drops Security Headers', () => {
+  const dir = withTempProjectRoot((d) => {
+    fs.writeFileSync(path.join(d, 'next.config.ts'), 'const nextConfig = { reactStrictMode: true };\nexport default nextConfig;\n');
+  });
+  try {
+    const result = runPreflightIn(dir);
+    assert.equal(result.ok, false, 'Dropping application security headers must block staging deployment');
+    assert.ok(
+      result.errors.some((e) => e.includes('security headers')),
+      `Expected an application security header error, received: ${result.errors.join(' | ')}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function jsonResponse(body: any, status = 200, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json', ...headers },
+  });
+}
+
+const SMOKE_SECURITY_HEADERS = {
+  'x-frame-options': 'DENY',
+  'x-content-type-options': 'nosniff',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+};
+
+/** Fake staging service that passes every smoke check. */
+function healthyStagingFetch(url: string, init?: any): Promise<Response> {
+  if (url.endsWith('/api/health')) {
+    return Promise.resolve(
+      jsonResponse(
+        { status: 'healthy', timestamp: new Date().toISOString(), version: '1.0.0' },
+        200,
+        SMOKE_SECURITY_HEADERS
+      )
+    );
+  }
+  if (url.endsWith('/dashboard')) {
+    return Promise.resolve(
+      new Response(null, { status: 307, headers: { location: '/login' } })
+    );
+  }
+  if (url.endsWith('/api/admin/fleet')) {
+    return Promise.resolve(jsonResponse({ error: 'Unauthorized' }, 401));
+  }
+  return Promise.resolve(new Response('Not Found', { status: 404 }));
+}
+
+test('RAIL-8: Staging Smoke Verifier Passes on a Healthy Deployment', async () => {
+  const result = await runStagingSmokeCheck('https://mcr-staging.up.railway.app', healthyStagingFetch);
+
+  assert.equal(result.ok, true, `Healthy staging deploy must pass smoke: ${result.errors.join(' | ')}`);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.passedChecks.length, 4);
+  assert.ok(result.passedChecks.some((c) => c.includes('/api/health')));
+  assert.ok(result.passedChecks.some((c) => c.includes('security headers')));
+  assert.ok(result.passedChecks.some((c) => c.includes('/dashboard')));
+  assert.ok(result.passedChecks.some((c) => c.includes('fail-closed')));
+});
+
+test('RAIL-9: Staging Smoke Verifier Fails Loudly on Posture Leaks, Missing Headers, and Open Boundaries', async () => {
+  // 1. Health endpoint leaking internal posture
+  const leakyResult = await runStagingSmokeCheck('https://staging.example.com', (url: string) =>
+    Promise.resolve(
+      jsonResponse(
+        {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          version: '1.0.0',
+          storageEngine: 'postgresql',
+          mockMode: false,
+          activeTenants: 4,
+        },
+        200,
+        SMOKE_SECURITY_HEADERS
+      )
+    )
+  );
+  assert.equal(leakyResult.ok, false);
+  assert.ok(leakyResult.errors.some((e) => e.includes('exactly {status, timestamp, version}')));
+
+  // 2. Missing security headers (Railway container without app-level headers)
+  const noHeaderResult = await runStagingSmokeCheck('https://staging.example.com', (url: string) => {
+    if (url.endsWith('/api/health')) {
+      return Promise.resolve(
+        jsonResponse({ status: 'healthy', timestamp: new Date().toISOString(), version: '1.0.0' })
+      );
+    }
+    if (url.endsWith('/dashboard')) {
+      return Promise.resolve(new Response(null, { status: 307, headers: { location: '/login' } }));
+    }
+    return Promise.resolve(jsonResponse({ error: 'Unauthorized' }, 401));
+  });
+  assert.equal(noHeaderResult.ok, false);
+  assert.ok(noHeaderResult.errors.some((e) => e.includes('X-Frame-Options')));
+
+  // 3. Exposed operator boundary + dashboard that no longer redirects
+  const exposedResult = await runStagingSmokeCheck('https://staging.example.com', (url: string) => {
+    if (url.endsWith('/api/health')) {
+      return Promise.resolve(
+        jsonResponse(
+          { status: 'healthy', timestamp: new Date().toISOString(), version: '1.0.0' },
+          200,
+          SMOKE_SECURITY_HEADERS
+        )
+      );
+    }
+    if (url.endsWith('/dashboard')) {
+      return Promise.resolve(new Response('<html>dashboard</html>', { status: 200 }));
+    }
+    return Promise.resolve(jsonResponse({ fleet: 'all tenants' }, 200));
+  });
+  assert.equal(exposedResult.ok, false);
+  assert.ok(exposedResult.errors.some((e) => e.includes('redirect to /login')));
+  assert.ok(exposedResult.errors.some((e) => e.includes('Operator boundary may be exposed')));
+
+  // 4. Unreachable service and non-absolute target
+  const unreachable = await runStagingSmokeCheck('https://staging.example.com', () =>
+    Promise.reject(new Error('ECONNREFUSED'))
+  );
+  assert.equal(unreachable.ok, false);
+  assert.ok(unreachable.errors.some((e) => e.includes('GET /api/health failed')));
+
+  const badTarget = await runStagingSmokeCheck('mcr-staging.up.railway.app', healthyStagingFetch);
+  assert.equal(badTarget.ok, false);
+  assert.ok(badTarget.errors.some((e) => e.includes('must be absolute')));
+});
