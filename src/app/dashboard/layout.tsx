@@ -31,6 +31,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { COMPANY_INFO } from '@/lib/constants';
+import Modal from '@/components/modal';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -704,54 +705,44 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </nav>
 
       {/* Help Modal */}
-      {helpModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mcr-help-modal-title"
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
+      <Modal
+        open={helpModalOpen}
+        onClose={() => setHelpModalOpen(false)}
+        title="MCR Support & Knowledge Base"
+        description={`Support hours: ${COMPANY_INFO.supportHours}`}
+        footer={
+          <button
+            type="button"
+            onClick={() => setHelpModalOpen(false)}
+            className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 text-blue-600" />
-                <h3 id="mcr-help-modal-title" className="font-bold text-slate-900">
-                  MCR Support &amp; Knowledge Base
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setHelpModalOpen(false)}
-                aria-label="Close help dialog"
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="space-y-3 text-xs text-slate-600">
-              <p>
-                <strong>Need help configuring conditional call forwarding?</strong><br />
-                Visit our carrier guide in <Link href="/dashboard/forwarding" onClick={() => setHelpModalOpen(false)} className="text-blue-600 underline">Carrier Forwarding</Link> or dial your carrier activation code.
-              </p>
-              <p>
-                <strong>Support Hours:</strong><br />
-                {COMPANY_INFO.supportHours}
-              </p>
-              <p>
-                <strong>Email Support:</strong><br />
-                <span className="font-mono text-slate-800">{COMPANY_INFO.email}</span>
-              </p>
-            </div>
-            <button
-              type="button"
+            Close
+          </button>
+        }
+      >
+        <div className="space-y-3 text-xs text-slate-600">
+          <p>
+            <strong>Need help configuring conditional call forwarding?</strong>
+            <br />
+            Visit our carrier guide in{' '}
+            <Link
+              href="/dashboard/forwarding"
               onClick={() => setHelpModalOpen(false)}
-              className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
+              className="text-blue-600 underline"
             >
-              Close
-            </button>
-          </div>
+              Carrier Forwarding
+            </Link>{' '}
+            or dial your carrier activation code.
+          </p>
+          <p>
+            <strong>Email Support:</strong>
+            <br />
+            <a href={`mailto:${COMPANY_INFO.email}`} className="font-mono text-slate-800 underline">
+              {COMPANY_INFO.email}
+            </a>
+          </p>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

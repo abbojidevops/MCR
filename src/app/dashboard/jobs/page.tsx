@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Modal from '@/components/modal';
 import Link from 'next/link';
 import {
   ClipboardList,
@@ -468,323 +469,346 @@ export default function JobsPage() {
 
       {/* JOB CARD DETAIL MODAL */}
       {selectedJob && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedJob(null);
-          }}
+        <Modal
+          open
+          onClose={() => setSelectedJob(null)}
+          title={selectedJob.title}
+          description={`${selectedJob.trade} · ${selectedJob.status}`}
+          size="xl"
+          footer={
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-[11px] font-semibold text-slate-500">
+                Move this job to:
+              </span>
+              {(
+                [
+                  ['NEW', 'New Opportunities'],
+                  ['CONTACTED', 'Contacted'],
+                  ['BOOKED', 'Booked Jobs'],
+                  ['COMPLETED', 'Completed (Paid)'],
+                  ['DEAD', 'Dead'],
+                ] as const
+              ).map(([status, label]) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => handleStatusChange(selectedJob.id, status)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                    selectedJob.status === status
+                      ? 'bg-slate-800 text-white shadow-sm'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          }
         >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="job-detail-title"
-            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                {selectedJob.is_emergency && (
-                  <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                    <Flame className="h-3.5 w-3.5" aria-hidden="true" /> EMERGENCY LEAD
-                  </span>
-                )}
-                <span className="text-xs font-semibold text-slate-500 uppercase">{selectedJob.trade}</span>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              {selectedJob.is_emergency && (
+                <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                  <Flame className="h-3.5 w-3.5" aria-hidden="true" /> EMERGENCY LEAD
+                </span>
+              )}
+              <span className="text-xs font-semibold text-slate-500 uppercase">{selectedJob.trade}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedJob(null)}
+              aria-label="Close job card"
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              ✕
+            </button>
+          </div>
+
+          <h2 id="job-detail-title" className="mt-3 text-lg font-bold text-slate-900">
+            {selectedJob.title}
+          </h2>
+
+          {/* Customer Details */}
+          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Customer Name:</span>
+              <span className="font-bold text-slate-800">{selectedJob.contact?.full_name || 'Unknown Caller'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Phone Number:</span>
+              <span className="font-bold text-slate-800">{selectedJob.contact?.phone_number}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Service Address:</span>
+              <span className="font-bold text-slate-800">{selectedJob.address || 'Address provided via text'}</span>
+            </div>
+            {selectedJob.recovery_source && (
+              <div className="flex justify-between border-t border-slate-200/60 pt-2">
+                <span className="text-slate-500">Recovery Source:</span>
+                <span className="font-semibold text-emerald-700">{selectedJob.recovery_source}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Problem Description */}
+          <div className="mt-4 text-xs">
+            <span className="font-bold text-slate-700">Problem Description (from customer SMS):</span>
+            <p className="mt-1 rounded-lg border border-slate-200 bg-white p-3 text-slate-700">
+              {selectedJob.problem || 'No description provided.'}
+            </p>
+          </div>
+
+          {/* Photos if attached */}
+          {selectedJob.photo_urls && selectedJob.photo_urls.length > 0 && (
+            <div className="mt-4 text-xs">
+              <span className="font-bold text-slate-700">Customer Photos (MMS):</span>
+              <div className="mt-2 flex gap-3">
+                {selectedJob.photo_urls.map((url, idx) => (
+                  <div key={idx} className="h-24 w-24 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
+                    <img src={url} alt="Problem Photo" className="h-full w-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Revenue Tracking & Distinction */}
+          <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
+            <span className="font-bold text-xs text-emerald-950 uppercase tracking-wider">Revenue Attribution</span>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
+                <span className="text-slate-500 block text-[10px]">Estimated Job Value:</span>
+                <span className="text-base font-bold text-slate-800">${selectedJob.estimated_value || 0}</span>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
+                <span className="text-emerald-700 block text-[10px] font-bold">Confirmed Actual Revenue:</span>
+                <span className="text-base font-black text-emerald-600">
+                  ${selectedJob.actual_value !== undefined ? selectedJob.actual_value : '—'}
+                </span>
+              </div>
+            </div>
+
+            {/* Value Input */}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex-1">
+                <label htmlFor="job-actual-value" className="sr-only">
+                  Confirmed invoice value
+                </label>
+                <input
+                  id="job-actual-value"
+                  type="number"
+                  value={actualValueInput}
+                  onChange={(e) => setActualValueInput(e.target.value)}
+                  placeholder={selectedJob.estimated_value ? `Enter actual invoice value (est. $${selectedJob.estimated_value})` : 'Enter actual invoice value'}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedJob(null)}
-                aria-label="Close job card"
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                onClick={() => {
+                  const val = parseFloat(actualValueInput);
+                  if (!isNaN(val)) {
+                    handleStatusChange(selectedJob.id, selectedJob.status, val);
+                  }
+                }}
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 text-xs shadow-sm transition"
+              >
+                Save Revenue
+              </button>
+            </div>
+          </div>
+
+          {/* Activity Timeline — every entry is derived from persisted records.
+              Nothing here is asserted unless the corresponding data exists. */}
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2.5">
+            <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+              Recovery Activity Timeline
+            </span>
+            <div className="space-y-2 text-[11px] text-slate-600">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                <span>
+                  <strong>Lead created:</strong>{' '}
+                  {new Date(selectedJob.created_at).toLocaleString()}
+                </span>
+              </div>
+              {selectedJob.first_call_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+                  <span>
+                    <strong>Missed call received:</strong>{' '}
+                    {new Date(selectedJob.first_call_time).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {selectedJob.text_back_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span>
+                    <strong>Automated text-back sent:</strong>{' '}
+                    {new Date(selectedJob.text_back_time).toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {selectedJob.qualified_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
+                  <span>
+                    <strong>Lead qualified:</strong> Problem and service address captured (
+                    {new Date(selectedJob.qualified_time).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {selectedJob.contacted_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                  <span>
+                    <strong>Contacted:</strong> Technician contacted customer (
+                    {new Date(selectedJob.contacted_time).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {selectedJob.booked_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-indigo-600"></span>
+                  <span>
+                    <strong>Job booked:</strong> Confirmed on schedule (
+                    {new Date(selectedJob.booked_time).toLocaleString()})
+                  </span>
+                </div>
+              )}
+              {selectedJob.completed_time && (
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
+                  <span>
+                    <strong>Completed &amp; paid:</strong> Invoice of $
+                    {selectedJob.actual_value || selectedJob.estimated_value} settled on{' '}
+                    {new Date(selectedJob.completed_time).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+              {timelineSteps === 0 && (
+                <div className="text-[11px] text-slate-400">
+                  No further activity recorded for this lead yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bridge Call Status Banners */}
+          {bridgeCallStatus && (
+            <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
+                <span>{bridgeCallStatus}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBridgeCallStatus(null)}
+                aria-label="Dismiss bridge call status"
+                className="text-emerald-700 font-bold hover:underline shrink-0 ml-2"
               >
                 ✕
               </button>
             </div>
+          )}
+          {bridgeCallError && (
+            <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-900 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <span>{bridgeCallError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBridgeCallError(null)}
+                aria-label="Dismiss bridge call error"
+                className="text-red-700 font-bold hover:underline shrink-0 ml-2"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
-            <h2 id="job-detail-title" className="mt-3 text-lg font-bold text-slate-900">
-              {selectedJob.title}
-            </h2>
-
-            {/* Customer Details */}
-            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 text-xs space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Customer Name:</span>
-                <span className="font-bold text-slate-800">{selectedJob.contact?.full_name || 'Unknown Caller'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Phone Number:</span>
-                <span className="font-bold text-slate-800">{selectedJob.contact?.phone_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Service Address:</span>
-                <span className="font-bold text-slate-800">{selectedJob.address || 'Address provided via text'}</span>
-              </div>
-              {selectedJob.recovery_source && (
-                <div className="flex justify-between border-t border-slate-200/60 pt-2">
-                  <span className="text-slate-500">Recovery Source:</span>
-                  <span className="font-semibold text-emerald-700">{selectedJob.recovery_source}</span>
-                </div>
-              )}
+          {/* Quick Actions */}
+          <div className="mt-6 flex flex-wrap items-center justify-between border-t border-slate-100 pt-4 gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isBridgingCall || !selectedJob.contact?.phone_number}
+                onClick={() => handleBridgeCall(selectedJob.contact!.phone_number, selectedJob.id)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50 transition"
+                title="Dials your phone first, then connects to customer using your MCR business caller ID"
+              >
+                {isBridgingCall ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calling...
+                  </>
+                ) : (
+                  <>
+                    <Phone className="h-3.5 w-3.5" /> Bridge Call (Private)
+                  </>
+                )}
+              </button>
+              <a
+                href={`tel:${selectedJob.contact?.phone_number}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                aria-label={`Direct dial ${selectedJob.contact?.phone_number}`}
+                title="Direct cellular call from this device"
+              >
+                Direct Dial
+              </a>
+              <Link
+                href="/dashboard/inbox"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              >
+                <MessageSquare className="h-3.5 w-3.5" /> SMS Thread
+              </Link>
             </div>
 
-            {/* Problem Description */}
-            <div className="mt-4 text-xs">
-              <span className="font-bold text-slate-700">Problem Description (from customer SMS):</span>
-              <p className="mt-1 rounded-lg border border-slate-200 bg-white p-3 text-slate-700">
-                {selectedJob.problem || 'No description provided.'}
-              </p>
-            </div>
-
-            {/* Photos if attached */}
-            {selectedJob.photo_urls && selectedJob.photo_urls.length > 0 && (
-              <div className="mt-4 text-xs">
-                <span className="font-bold text-slate-700">Customer Photos (MMS):</span>
-                <div className="mt-2 flex gap-3">
-                  {selectedJob.photo_urls.map((url, idx) => (
-                    <div key={idx} className="h-24 w-24 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden flex items-center justify-center">
-                      <img src={url} alt="Problem Photo" className="h-full w-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Revenue Tracking & Distinction */}
-            <div className="mt-4 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 space-y-3">
-              <span className="font-bold text-xs text-emerald-950 uppercase tracking-wider">Revenue Attribution</span>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
-                  <span className="text-slate-500 block text-[10px]">Estimated Job Value:</span>
-                  <span className="text-base font-bold text-slate-800">${selectedJob.estimated_value || 0}</span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
-                  <span className="text-emerald-700 block text-[10px] font-bold">Confirmed Actual Revenue:</span>
-                  <span className="text-base font-black text-emerald-600">
-                    ${selectedJob.actual_value !== undefined ? selectedJob.actual_value : '—'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Value Input */}
-              <div className="flex items-center gap-2 pt-1">
-                <div className="flex-1">
-                  <label htmlFor="job-actual-value" className="sr-only">
-                    Confirmed invoice value
-                  </label>
-                  <input
-                    id="job-actual-value"
-                    type="number"
-                    value={actualValueInput}
-                    onChange={(e) => setActualValueInput(e.target.value)}
-                    placeholder={selectedJob.estimated_value ? `Enter actual invoice value (est. $${selectedJob.estimated_value})` : 'Enter actual invoice value'}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const val = parseFloat(actualValueInput);
-                    if (!isNaN(val)) {
-                      handleStatusChange(selectedJob.id, selectedJob.status, val);
-                    }
-                  }}
-                  className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 text-xs shadow-sm transition"
-                >
-                  Save Revenue
-                </button>
-              </div>
-            </div>
-
-            {/* Activity Timeline — every entry is derived from persisted records.
-                Nothing here is asserted unless the corresponding data exists. */}
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs space-y-2.5">
-              <span className="font-bold text-slate-800 uppercase tracking-wider text-[11px]">
-                Recovery Activity Timeline
-              </span>
-              <div className="space-y-2 text-[11px] text-slate-600">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-blue-500"></span>
-                  <span>
-                    <strong>Lead created:</strong>{' '}
-                    {new Date(selectedJob.created_at).toLocaleString()}
-                  </span>
-                </div>
-                {selectedJob.first_call_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-slate-400"></span>
-                    <span>
-                      <strong>Missed call received:</strong>{' '}
-                      {new Date(selectedJob.first_call_time).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {selectedJob.text_back_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-                    <span>
-                      <strong>Automated text-back sent:</strong>{' '}
-                      {new Date(selectedJob.text_back_time).toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {selectedJob.qualified_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-indigo-500"></span>
-                    <span>
-                      <strong>Lead qualified:</strong> Problem and service address captured (
-                      {new Date(selectedJob.qualified_time).toLocaleString()})
-                    </span>
-                  </div>
-                )}
-                {selectedJob.contacted_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-purple-500"></span>
-                    <span>
-                      <strong>Contacted:</strong> Technician contacted customer (
-                      {new Date(selectedJob.contacted_time).toLocaleString()})
-                    </span>
-                  </div>
-                )}
-                {selectedJob.booked_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-indigo-600"></span>
-                    <span>
-                      <strong>Job booked:</strong> Confirmed on schedule (
-                      {new Date(selectedJob.booked_time).toLocaleString()})
-                    </span>
-                  </div>
-                )}
-                {selectedJob.completed_time && (
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-emerald-600"></span>
-                    <span>
-                      <strong>Completed &amp; paid:</strong> Invoice of $
-                      {selectedJob.actual_value || selectedJob.estimated_value} settled on{' '}
-                      {new Date(selectedJob.completed_time).toLocaleDateString()}
-                    </span>
-                  </div>
-                )}
-                {timelineSteps === 0 && (
-                  <div className="text-[11px] text-slate-400">
-                    No further activity recorded for this lead yet.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bridge Call Status Banners */}
-            {bridgeCallStatus && (
-              <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-emerald-600 animate-pulse shrink-0" />
-                  <span>{bridgeCallStatus}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBridgeCallStatus(null)}
-                  aria-label="Dismiss bridge call status"
-                  className="text-emerald-700 font-bold hover:underline shrink-0 ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-            {bridgeCallError && (
-              <div className="mt-4 rounded-xl bg-red-50 border border-red-200 p-3 text-xs text-red-900 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
-                  <span>{bridgeCallError}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBridgeCallError(null)}
-                  aria-label="Dismiss bridge call error"
-                  className="text-red-700 font-bold hover:underline shrink-0 ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {/* Quick Actions */}
-            <div className="mt-6 flex flex-wrap items-center justify-between border-t border-slate-100 pt-4 gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isBridgingCall || !selectedJob.contact?.phone_number}
-                  onClick={() => handleBridgeCall(selectedJob.contact!.phone_number, selectedJob.id)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow hover:bg-emerald-700 disabled:opacity-50 transition"
-                  title="Dials your phone first, then connects to customer using your MCR business caller ID"
-                >
-                  {isBridgingCall ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Calling...
-                    </>
-                  ) : (
-                    <>
-                      <Phone className="h-3.5 w-3.5" /> Bridge Call (Private)
-                    </>
-                  )}
-                </button>
-                <a
-                  href={`tel:${selectedJob.contact?.phone_number}`}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  aria-label={`Direct dial ${selectedJob.contact?.phone_number}`}
-                  title="Direct cellular call from this device"
-                >
-                  Direct Dial
-                </a>
-                <Link
-                  href="/dashboard/inbox"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                >
-                  <MessageSquare className="h-3.5 w-3.5" /> SMS Thread
-                </Link>
-              </div>
-
-              {/* Status Switcher Buttons */}
-              <div className="flex flex-wrap gap-1.5 mt-3 sm:mt-0">
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange(selectedJob.id, 'CONTACTED')}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                    selectedJob.status === 'CONTACTED' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Contacted
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0)}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                    selectedJob.status === 'BOOKED' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Booked
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const finalVal = parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0;
-                    handleStatusChange(selectedJob.id, 'COMPLETED', finalVal);
-                  }}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                    selectedJob.status === 'COMPLETED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Completed (Paid)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleStatusChange(selectedJob.id, 'DEAD')}
-                  className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                    selectedJob.status === 'DEAD' ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Dead
-                </button>
-              </div>
+            {/* Status Switcher Buttons */}
+            <div className="flex flex-wrap gap-1.5 mt-3 sm:mt-0">
+              <button
+                type="button"
+                onClick={() => handleStatusChange(selectedJob.id, 'CONTACTED')}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                  selectedJob.status === 'CONTACTED' ? 'bg-amber-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Contacted
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStatusChange(selectedJob.id, 'BOOKED', parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                  selectedJob.status === 'BOOKED' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Booked
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const finalVal = parseFloat(actualValueInput) || selectedJob.actual_value || selectedJob.estimated_value || 0;
+                  handleStatusChange(selectedJob.id, 'COMPLETED', finalVal);
+                }}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                  selectedJob.status === 'COMPLETED' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Completed (Paid)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStatusChange(selectedJob.id, 'DEAD')}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                  selectedJob.status === 'DEAD' ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Dead
+              </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Modal from '@/components/modal';
 import Link from 'next/link';
 import {
   PhoneCall,
@@ -764,104 +765,77 @@ export default function DashboardOverviewPage() {
       </div>
 
       {/* Record Completed Revenue Modal */}
-      {valueModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
-          onClick={() => setValueModalOpen(false)}
-        >
+      <Modal
+        open={valueModalOpen}
+        onClose={() => setValueModalOpen(false)}
+        title="Record Completed Job Revenue"
+        description="When a job is marked completed, enter the confirmed invoice amount so it enters your confirmed actual revenue metrics."
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setValueModalOpen(false)}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              form="record-revenue-form"
+              disabled={savingValue}
+              className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 font-bold text-white shadow-sm disabled:opacity-50"
+            >
+              {savingValue ? 'Saving...' : 'Confirm Revenue'}
+            </button>
+          </>
+        }
+      >
+        {valueModalError && (
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="record-revenue-title"
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4"
+            role="alert"
+            className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] font-semibold text-rose-800"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-                <h3 id="record-revenue-title" className="font-bold text-slate-900">
-                  Record Completed Job Revenue
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setValueModalOpen(false)}
-                aria-label="Close record revenue dialog"
-                className="text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              When a job is marked completed, enter the confirmed invoice amount so it enters your confirmed actual revenue metrics.
-            </p>
-
-            {valueModalError && (
-              <div
-                role="alert"
-                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-[11px] font-semibold text-rose-800"
-              >
-                {valueModalError}
-              </div>
-            )}
-
-            <form onSubmit={handleSaveActualValue} className="space-y-3 text-xs">
-              <div>
-                <label htmlFor="record-revenue-job" className="block text-slate-600 font-bold mb-1">
-                  Select Recovered Job
-                </label>
-                <select
-                  id="record-revenue-job"
-                  value={selectedJobId}
-                  onChange={(e) => setSelectedJobId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                  {data.recentLeads.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.customerName} — {j.issue} (${j.actualRevenue || j.estimatedValue})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="record-revenue-amount" className="block text-slate-600 font-bold mb-1">
-                  Confirmed Completed Amount ($)
-                </label>
-                <input
-                  id="record-revenue-amount"
-                  type="number"
-                  min="0"
-                  step="10"
-                  required
-                  placeholder="0.00"
-                  value={enteredActualValue}
-                  onChange={(e) => setEnteredActualValue(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="pt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setValueModalOpen(false)}
-                  className="flex-1 rounded-xl border border-slate-200 py-2.5 font-bold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingValue}
-                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-2.5 font-bold text-white shadow-sm disabled:opacity-50"
-                >
-                  {savingValue ? 'Saving...' : 'Confirm Revenue'}
-                </button>
-              </div>
-            </form>
+            {valueModalError}
           </div>
-        </div>
-      )}
+        )}
+
+        <form id="record-revenue-form" onSubmit={handleSaveActualValue} className="space-y-3 text-xs">
+          <div>
+            <label htmlFor="record-revenue-job" className="block text-slate-600 font-bold mb-1">
+              Select Recovered Job
+            </label>
+            <select
+              id="record-revenue-job"
+              value={selectedJobId}
+              onChange={(e) => setSelectedJobId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 p-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {data.recentLeads.map((j) => (
+                <option key={j.id} value={j.id}>
+                  {j.customerName} — {j.issue} (${j.actualRevenue || j.estimatedValue})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="record-revenue-amount" className="block text-slate-600 font-bold mb-1">
+              Confirmed Completed Amount ($)
+            </label>
+            <input
+              id="record-revenue-amount"
+              type="number"
+              min="0"
+              step="10"
+              required
+              placeholder="0.00"
+              value={enteredActualValue}
+              onChange={(e) => setEnteredActualValue(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 p-2 text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

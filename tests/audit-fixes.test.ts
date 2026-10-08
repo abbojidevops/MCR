@@ -530,3 +530,69 @@ test('ACC-10: the dashboard badge and alert panel reflect real session state', (
   assert.match(source, /fetch\('\/api\/jobs'\)/, 'alerts must come from real job data');
   assert.match(source, /No emergency alerts/, 'must have an honest empty state');
 });
+
+// ============================================================================
+// 6. Modal accessibility (focus trap, restore, scroll lock)
+// ============================================================================
+
+test('MODAL-1: a reusable Modal component exists and is used by every dialog', () => {
+  assert.ok(existsSync(join(ROOT, 'src/components/modal.tsx')), 'Modal component must exist');
+
+  for (const page of [
+    'src/app/dashboard/layout.tsx',
+    'src/app/dashboard/page.tsx',
+    'src/app/dashboard/jobs/page.tsx',
+  ]) {
+    const source = read(page);
+    assert.match(source, /from '@\/components\/modal'/, `${page} must use the shared Modal`);
+    // No hand-rolled overlay should remain.
+    assert.ok(
+      !source.includes('role="dialog"'),
+      `${page} must not declare its own dialog role — use Modal`
+    );
+    assert.ok(
+      !source.includes('fixed inset-0'),
+      `${page} must not build its own overlay`
+    );
+  }
+});
+
+test('MODAL-2: the Modal implements focus trap, restore, Escape, and scroll lock', () => {
+  const source = read('src/components/modal.tsx');
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /aria-modal="true"/);
+  assert.match(source, /aria-labelledby=\{titleId\}/, 'the dialog must have an accessible name');
+  assert.match(source, /tabIndex=\{-1\}/, 'the panel must be programmatically focusable');
+
+  // Focus moves in on open and back to the trigger on close.
+  assert.match(source, /restoreFocusRef\.current = document\.activeElement/);
+  assert.match(source, /previous\.focus\(\)/, 'focus must return to the opening control');
+
+  // Tab cycling is contained.
+  assert.match(source, /event\.key !== 'Tab'/);
+  assert.match(source, /event\.preventDefault\(\)/);
+
+  // Escape closes.
+  assert.match(source, /event\.key === 'Escape'/);
+
+  // Background scroll is locked and restored.
+  assert.match(source, /document\.body\.style\.overflow/);
+
+  // Backdrop click closes, but a click inside the panel does not.
+  assert.match(source, /e\.target === e\.currentTarget/);
+});
+
+test('MODAL-3: the Modal exposes a required accessible name', () => {
+  const source = read('src/components/modal.tsx');
+  const props = source.match(/export interface ModalProps \{[\s\S]*?\n\}/);
+  assert.ok(props, 'ModalProps must be declared');
+  assert.match(props![0], /title: string;/, 'title is required — no optional marker');
+  assert.match(props![0], /onClose: \(\) => void;/, 'onClose is required');
+  assert.match(props![0], /open: boolean;/, 'open is required');
+});
+
+test('MODAL-4: dialogs are keyboard-dismissible and announce their close button', () => {
+  const source = read('src/components/modal.tsx');
+  assert.match(source, /aria-label=\{`Close \$\{title\}`\}/, 'the close button must be labelled');
+  assert.match(source, /aria-describedby=\{description \? descriptionId : undefined\}/);
+});
