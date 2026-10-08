@@ -17,13 +17,13 @@ which were re-verified live.
 
 | | |
 |---|---|
-| Routes audited | 15 (8 tenant dashboard, 5 operator console, login surfaces, marketing/legal cross-checks) |
-| Files changed | 33 (+2 976 / −941) |
-| New files | 8 |
-| Regression tests added | 26 (`tests/audit-fixes.test.ts`) |
+| Routes audited | 22 (10 tenant dashboard, 5 operator console, 7 public/legal) |
+| Files changed | 44 (+4 548 / −1 800) |
+| New files | 11 |
+| Regression tests added | 36 (`tests/audit-fixes.test.ts`) |
 | `npx tsc --noEmit` | clean |
 | `npm run build` | clean (48/48 pages) |
-| `npm test` | **271 / 274 pass** — see §7 for the 3 pre-existing failures |
+| `npm test` | **281 / 284 pass** — see §7 for the 3 pre-existing failures |
 
 ---
 
@@ -269,7 +269,42 @@ was removed from it so the build runs in production mode.
 
 ---
 
-## 10. Recommended follow-ups (not done)
+## 10. Access-flow pass (follow-up commit `b8082e1`)
+
+You asked for the whole path — first click to working dashboard — to be clean
+and predictable. That is a second commit on top of the audit fixes.
+
+### Fixed
+
+| # | Issue | Fix |
+|---|---|---|
+| 10.1 | **Open redirect on both sign-in screens.** `?next=` came from the URL and was pushed into the router unvalidated, so `?next=https://evil.example` turned our own login screen into a redirector | New `src/lib/safe-redirect.ts` accepts only same-origin relative paths inside known app surfaces, and never re-enters the auth flow just completed. Used by tenant login, operator login, and the already-signed-in redirect |
+| 10.2 | **`?next=` was silently discarded.** The middleware correctly bounced an anonymous visitor to `/login?next=/dashboard/reports`, but the form always did `router.push('/dashboard')` | Honoured end to end. Verified live: `/login?next=/dashboard/jobs` lands on `/dashboard/jobs`; a hostile `next` falls back to the role default |
+| 10.3 | Admins and tenants landed in the same place after sign-in | Role from the login response routes admins to `/admin`, tenants to `/dashboard` |
+| 10.4 | `/onboarding` was unguarded — a signed-in tenant could start a second account | Server-side guard redirects to their own dashboard |
+| 10.5 | **Signup lost all progress on refresh.** 12 steps, no persistence | Draft persisted to `localStorage` and restored on mount, with a named step rail replacing the bare "Step 3 of 12". The password is never written to browser storage |
+| 10.6 | **A failed signup navigated to `/dashboard`.** The old catch block did `router.push('/dashboard')` on a network error, leaving the customer signed out with no account and no explanation; API errors used `alert()` | `role="alert"` banner with the HTTP status, draft retained so the customer can retry |
+| 10.7 | Three separate auth layouts with different branding | New `src/components/auth/auth-shell.tsx` — one brand mark, one footer, one set of legal links, one support contact. Operator sign-in keeps its deliberately distinct dark theme to signal "restricted console" |
+| 10.8 | Default Next.js 404 | Branded `src/app/not-found.tsx` with routes back into the app and a support contact |
+
+### Honesty fixes on the dashboard chrome
+
+- **The notification bell showed fabricated alerts.** "🚨 Water Heater Rupture — Emergency customer at 123 Main St" and "📞 Missed Call Recovered" were hardcoded and presented as real. It now renders this tenant's actual emergency-flagged jobs from `/api/jobs`, links each to its job card, and has an honest "No emergency alerts" empty state.
+- **The "DEMO ACCOUNT" badge was hardcoded**, so every real customer saw it. It now follows the session's real `isDemo` flag.
+- The sign-in screen states plainly that password reset is by email, rather than implying a self-service flow that does not exist.
+
+### Verified live
+
+Signup creates the account, sets the session, and lands on the dashboard;
+duplicate email → `409`; weak password → `400` with usable copy. All 22 routes
+(10 tenant, 5 operator, 7 public) return the expected status, and the 404 page
+renders.
+
+10 new regression tests (`ACC-1`…`ACC-10`), 36/36 in the audit suite.
+
+---
+
+## 11. Recommended follow-ups (not done)
 
 1. **Pick one support address.** `COMPANY_INFO.email` (`support@getmcr.com`) now
    wins everywhere except the privacy policy's `privacy@mcr-recovery.com`.
