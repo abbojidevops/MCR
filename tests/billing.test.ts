@@ -2,6 +2,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'fs';
+import * as path from 'path';
 import { NextRequest } from 'next/server';
 
 // Domain and Auth modules
@@ -239,4 +241,166 @@ test('B8: Customer Creation Flow — Stamps Customer ID upon Real Creation / Che
 
   // Reset clean state
   db.updateSubscription(TENANT_A, { stripe_customer_id: undefined });
+});
+
+// ---------------------------------------------------------------------------
+// STRIPE-1..STRIPE-5 — Webhook Authentication Boundary
+//
+// Staging runs with no live Stripe credentials, exactly as deployed. The route
+// previously skipped signature verification unless an undocumented STRIPE_LIVE
+// variable was set AND NODE_ENV was 'production', so any anonymous caller could
+// POST forged events that mutated subscription state.
+// ---------------------------------------------------------------------------
+
+import crypto from 'crypto';
+import { POST as stripeWebhookPost } from '@/app/api/webhooks/stripe/route';
+
+function stripeRequest(body: any, headers: Record<string, string> = {}, rawBody?: string) {
+  return new NextRequest(new URL('http://localhost:3001/api/webhooks/stripe'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: rawBody !== undefined ? rawBody : JSON.stringify(body),
+  });
+}
+
+function stripeSignature(payload: string, secret: string, timestampSeconds = Math.floor(Date.now() / 1000)) {
+  const sig = crypto.createHmac('sha256', secret).update(`${timestampSeconds}.${payload}`).digest('hex');
+  return `t=${timestampSeconds},v1=${sig}`;
+}
+
+function withEnv(vars: Record<string, string | undefined>, fn: () => Promise<void>) {
+  const previous = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  return fn().finally(() => {
+    for (const [k, v] of Object.entries(previous)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+}
+
+test('STRIPE-1: Staging (no live Stripe config) refuses anonymous webhooks without mutating billing state', async () => {
+  await withEnv(
+    { STRIPE_SECRET_KEY: undefined, STRIPE_WEBHOOK_SECRET: undefined, NEXT_PUBLIC_STRIPE_LIVE: undefined },
+    async () => {
+      const before = db.getSubscription(TENANT_A).subscription;
+      const beforeTier = before?.plan_id;
+      const beforeStatus = before?.status;
+
+      const res = await stripeWebhookPost(
+        stripeRequest({
+          id: 'evt_forged_staging_1',
+          type: 'customer.subscription.updated',
+          data: { object: { metadata: { accountId: TENANT_A }, plan: { id: 'price_business' } } },
+        })
+      );
+
+      assert.equal(res.status, 503, 'Anonymous webhooks must be refused fail-closed while Stripe is not live');
+      const body = await res.json();
+      assert.match(body.error, /disabled|fail-closed/i);
+
+      const after = db.getSubscription(TENANT_A).subscription;
+      assert.equal(after?.plan_id, beforeTier, 'A forged webhook must not mutate subscription state');
+      assert.equal(after?.status, beforeStatus, 'A forged webhook must not mutate subscription status');
+      assert.equal(
+        db.isWebhookProcessed('stripe', 'evt_forged_staging_1'),
+        false,
+        'Refused webhooks must not be recorded as processed'
+      );
+    }
+  );
+});
+
+test('STRIPE-2: Live Stripe without STRIPE_WEBHOOK_SECRET fails closed with 503', async () => {
+  await withEnv(
+    { STRIPE_SECRET_KEY: 'sk_live_test_key', STRIPE_WEBHOOK_SECRET: undefined, NEXT_PUBLIC_STRIPE_LIVE: 'true' },
+    async () => {
+      const res = await stripeWebhookPost(
+        stripeRequest({ id: 'evt_live_no_secret', type: 'invoice.paid', data: { object: {} } })
+      );
+      assert.equal(res.status, 503, 'Live Stripe without a webhook secret must refuse all webhooks');
+      const body = await res.json();
+      assert.match(body.error, /STRIPE_WEBHOOK_SECRET/);
+    }
+  );
+});
+
+test('STRIPE-3: Live Stripe rejects unsigned, forged, and replayed webhooks', async () => {
+  const secret = 'whsec_staging_verification_secret';
+  await withEnv(
+    { STRIPE_SECRET_KEY: 'sk_live_test_key', STRIPE_WEBHOOK_SECRET: secret, NEXT_PUBLIC_STRIPE_LIVE: 'true' },
+    async () => {
+      const payload = JSON.stringify({
+        id: 'evt_live_forged',
+        type: 'customer.subscription.updated',
+        data: { object: { metadata: { accountId: TENANT_A } } },
+      });
+
+      // 1. No signature header
+      const unsigned = await stripeWebhookPost(stripeRequest(null, {}, payload));
+      assert.equal(unsigned.status, 400, 'Missing signature must be refused with 400');
+
+      // 2. Well-formed but forged signature
+      const forged = await stripeWebhookPost(
+        stripeRequest(null, { 'stripe-signature': 't=1700000000,v1=' + 'a'.repeat(64) }, payload)
+      );
+      assert.equal(forged.status, 403, 'Forged signature must be refused with 403');
+
+      // 3. Signature computed over a different body (tampered payload)
+      const tampered = await stripeWebhookPost(
+        stripeRequest(null, { 'stripe-signature': stripeSignature('{"different":true}', secret) }, payload)
+      );
+      assert.equal(tampered.status, 403, 'Signature mismatch must be refused');
+
+      // 4. Valid signature but stale timestamp (replay of an old event)
+      const staleSignature = stripeSignature(payload, secret, Math.floor(Date.now() / 1000) - 3600);
+      const replayed = await stripeWebhookPost(stripeRequest(null, { 'stripe-signature': staleSignature }, payload));
+      assert.equal(replayed.status, 403, 'A signature outside the replay tolerance window must be refused');
+    }
+  );
+});
+
+test('STRIPE-4: Live Stripe accepts a correctly signed webhook and processes it once (idempotent)', async () => {
+  const secret = 'whsec_staging_verification_secret';
+  await withEnv(
+    { STRIPE_SECRET_KEY: 'sk_live_test_key', STRIPE_WEBHOOK_SECRET: secret, NEXT_PUBLIC_STRIPE_LIVE: 'true' },
+    async () => {
+      const payload = JSON.stringify({
+        id: 'evt_live_signed_ok',
+        type: 'invoice.payment_failed',
+        data: { object: { customer: 'cus_test_staging', metadata: { accountId: TENANT_B } } },
+      });
+      const headers = { 'stripe-signature': stripeSignature(payload, secret) };
+
+      const first = await stripeWebhookPost(stripeRequest(null, headers, payload));
+      assert.equal(first.status, 200, `Correctly signed webhook must be processed (got ${first.status})`);
+      const firstBody = await first.json();
+      assert.equal(firstBody.received, true);
+
+      const second = await stripeWebhookPost(stripeRequest(null, headers, payload));
+      assert.equal(second.status, 200);
+      const secondBody = await second.json();
+      assert.equal(secondBody.idempotent, true, 'A replayed webhook id must be reported as idempotent');
+
+      db.clearProcessedWebhooks();
+    }
+  );
+});
+
+test('STRIPE-5: Route Uses the Documented NEXT_PUBLIC_STRIPE_LIVE Switch', () => {
+  const routePath = path.join(process.cwd(), 'src', 'app', 'api', 'webhooks', 'stripe', 'route.ts');
+  const source = fs.readFileSync(routePath, 'utf-8');
+
+  assert.ok(
+    source.includes('NEXT_PUBLIC_STRIPE_LIVE'),
+    'Stripe webhook route must read NEXT_PUBLIC_STRIPE_LIVE, the variable documented in .env.example and used by the billing library'
+  );
+  assert.equal(
+    /process\.env\.STRIPE_LIVE(?!_)/.test(source),
+    false,
+    'Stripe webhook route must not gate verification on the undocumented STRIPE_LIVE variable'
+  );
 });

@@ -102,6 +102,10 @@ export async function GET(req: NextRequest) {
         totalCallsLogged: totalCalls,
         totalJobsLogged: totalJobs,
         storageEngine: db.getStorageEngine(),
+        // Operator-visible truth about the PostgreSQL deployment: a service that
+        // advertises "postgresql" but whose dual-persistence writes are failing
+        // must not look healthy.
+        persistence: db.getPostgresPersistenceStatus(),
       },
       telecom: telecomCheck,
       compliance: complianceCheck,

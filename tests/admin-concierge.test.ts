@@ -191,7 +191,7 @@ test('ADMIN-4: Admin Concierge Digest Report Trigger — POST /api/admin/fleet a
     isDemo: false,
   });
 
-  const created = localTracker.createAccount('Concierge Digest Rooter', 'drain_cleaning', '+12175559813');
+  const created = localTracker.createAccount('Concierge Digest Rooter', 'plumbing', '+12175559813');
   const testAccId = created.account.id;
 
   try {

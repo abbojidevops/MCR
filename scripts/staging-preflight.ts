@@ -76,7 +76,21 @@ export function runStagingPreflight(envOverride?: Record<string, string>): Prefl
     }
   }
 
-  // 4. Schema Syntax & Required Tables Audit
+  // 4. Public App URL (webhook callbacks, absolute links, and secure cookies in staging)
+  const appUrl = env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl || !/^https?:\/\//i.test(appUrl)) {
+    warnings.push(
+      'NEXT_PUBLIC_APP_URL is not set to an absolute URL — set it to the Railway staging domain so webhook callbacks and links resolve correctly'
+    );
+  } else if (/^http:\/\//i.test(appUrl) && !/localhost|127\.0\.0\.1/i.test(appUrl)) {
+    warnings.push(
+      'NEXT_PUBLIC_APP_URL uses http:// on a public host — staging and production must use https://'
+    );
+  } else {
+    passedChecks.push('NEXT_PUBLIC_APP_URL is an absolute URL');
+  }
+
+  // 5. Schema Syntax & Required Tables Audit
   const schemaPath = path.join(rootDir, 'src', 'db', 'schema.sql');
   if (!fs.existsSync(schemaPath)) {
     errors.push(`Production schema file missing at ${schemaPath}`);
@@ -110,7 +124,7 @@ export function runStagingPreflight(envOverride?: Record<string, string>): Prefl
     }
   }
 
-  // 5. Cloud Manifests Verification
+  // 6. Cloud Manifests Verification
   // Docker
   const dockerfilePath = path.join(rootDir, 'Dockerfile');
   const composePath = path.join(rootDir, 'docker-compose.yml');
@@ -143,16 +157,80 @@ export function runStagingPreflight(envOverride?: Record<string, string>): Prefl
   if (fs.existsSync(railwayPath)) {
     try {
       const railwayJson = JSON.parse(fs.readFileSync(railwayPath, 'utf-8'));
-      if (railwayJson.deploy?.healthcheckPath === '/api/health') {
-        passedChecks.push('Railway manifest (railway.json) verified with health check');
+
+      // 6a. Docker builder must be pinned so Railway never silently falls back to
+      // auto-detection and builds a different artifact than docker-compose / Render.
+      if (railwayJson.build?.builder !== 'DOCKERFILE') {
+        errors.push('railway.json build.builder must be "DOCKERFILE"');
+      } else if (railwayJson.build?.dockerfilePath !== 'Dockerfile') {
+        errors.push('railway.json build.dockerfilePath must be "Dockerfile"');
       } else {
+        passedChecks.push('Railway build pinned to the repository Dockerfile');
+      }
+
+      // 6b. Schema must be applied on deploy. Without a pre-deploy/start hook the
+      // container boots against an empty database and every tenant query fails.
+      const preDeploy = railwayJson.deploy?.preDeployCommand;
+      const startCommand = railwayJson.deploy?.startCommand;
+      const preDeployStr = Array.isArray(preDeploy) ? preDeploy.join(' && ') : preDeploy || '';
+      const startCommandStr = Array.isArray(startCommand) ? startCommand.join(' && ') : startCommand || '';
+
+      if (!preDeployStr.includes('db-init.mjs') && !startCommandStr.includes('db-init.mjs')) {
+        errors.push(
+          'railway.json must run schema initialization on deploy (deploy.preDeployCommand or deploy.startCommand must invoke scripts/db-init.mjs)'
+        );
+      } else if (
+        !startCommandStr.includes('npm start') &&
+        !startCommandStr.includes('next start')
+      ) {
+        errors.push(
+          'railway.json deploy.startCommand must launch the production server via "npm start" (dev server is never allowed)'
+        );
+      } else {
+        passedChecks.push(
+          'Railway deploy runs db-init schema migration then production server (npm start)'
+        );
+      }
+
+      // 6c. Health check + restart policy for the staging service.
+      if (railwayJson.deploy?.healthcheckPath !== '/api/health') {
         errors.push('railway.json is missing deploy.healthcheckPath = "/api/health"');
+      } else if (railwayJson.deploy?.restartPolicyType !== 'ON_FAILURE') {
+        errors.push('railway.json deploy.restartPolicyType must be "ON_FAILURE"');
+      } else {
+        passedChecks.push(
+          'Railway manifest (railway.json) verified with /api/health healthcheck and ON_FAILURE restarts'
+        );
       }
     } catch (err: any) {
       errors.push(`railway.json JSON parsing failed: ${err.message}`);
     }
   } else {
     errors.push('railway.json missing from project root');
+  }
+
+  // Application-level security headers (platform independent: Railway, Render, Docker, Vercel)
+  const nextConfigPath = path.join(rootDir, 'next.config.ts');
+  if (!fs.existsSync(nextConfigPath)) {
+    errors.push('next.config.ts missing from project root');
+  } else {
+    const nextConfigContent = fs.readFileSync(nextConfigPath, 'utf-8');
+    const requiredHeaders = [
+      'X-Content-Type-Options',
+      'X-Frame-Options',
+      'Strict-Transport-Security',
+    ];
+    const missingHeaders = requiredHeaders.filter((h) => !nextConfigContent.includes(h));
+
+    if (missingHeaders.length > 0) {
+      errors.push(
+        `next.config.ts must declare application security headers so deployment targets without edge config (Railway, Render, docker-compose) are still hardened; missing: ${missingHeaders.join(', ')}`
+      );
+    } else {
+      passedChecks.push(
+        'Application security headers declared in next.config.ts and applied on every platform'
+      );
+    }
   }
 
   // Vercel

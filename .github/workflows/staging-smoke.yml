@@ -1,0 +1,55 @@
+name: Staging Smoke Verification
+
+# Manual, on-demand verification of a deployed staging service.
+#
+# Why this exists: the deploy itself is triggered from Railway, but the post-deploy
+# verification must run from somewhere that can reach the staging URL. Running it
+# here records the result in the repository instead of depending on someone's
+# laptop being on the right network.
+#
+# This workflow only READS the staging service: it checks the public health
+# payload, the application-served security headers, the /dashboard auth redirect
+# and the fail-closed operator boundary. It enables no live Twilio or Stripe
+# processing and needs no secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: 'Deployed staging base URL (e.g. https://mcr-saas-app.up.railway.app)'
+        required: true
+        type: string
+      wait_seconds:
+        description: 'Seconds to poll /api/health for readiness before checking (0 = fail fast)'
+        required: false
+        default: '120'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  staging-smoke:
+    name: Verify deployed staging service
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run staging smoke verifier
+        # Live processing stays off: no Twilio or Stripe credentials are supplied
+        # to this job, so the webhook boundaries remain fail-closed.
+        env:
+          TWILIO_MOCK_MODE: 'true'
+          NEXT_PUBLIC_STRIPE_LIVE: 'false'
+          NEXT_PUBLIC_TWILIO_LIVE: 'false'
+        run: npm run staging:smoke -- "${{ inputs.staging_url }}" --wait=${{ inputs.wait_seconds }}

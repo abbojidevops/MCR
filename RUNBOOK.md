@@ -121,11 +121,34 @@ docker compose up -d --build
 curl -s http://localhost:3000/api/health | jq
 ```
 
-### Option B: Vercel / Railway
+### Option B: Railway (Staging & Production PaaS)
+Railway builds this repository through `railway.json` + the root `Dockerfile`, applies the schema via a pre-deploy command, then serves the app with `npm start` behind a `/api/health` healthcheck.
+
+```bash
+# 1. Railway project: Deploy from GitHub repo + Add PostgreSQL 16
+# 2. Set service variables (Railway reads railway.json automatically):
+#      DATABASE_URL=${{Postgres.DATABASE_URL}}
+#      ADMIN_PASSWORD=<openssl rand -base64 24>   (>=12 chars, upper+lower+digit)
+#      SESSION_SECRET=<openssl rand -hex 32>      (>=32 chars)
+#      NEXT_PUBLIC_APP_URL=https://<your-service>.up.railway.app
+#      TWILIO_MOCK_MODE=true                      (staging)
+# 3. Verify the topology locally BEFORE pushing:
+ADMIN_PASSWORD='...' SESSION_SECRET='...' \
+DATABASE_URL='postgresql://user:pass@host:5432/mcr_db' \
+NEXT_PUBLIC_APP_URL='https://<your-service>.up.railway.app' \
+npm run staging:preflight
+# 4. After the deploy goes live, smoke-test the running staging service.
+#    --wait polls /api/health until the fresh container is serving (default 120s):
+npm run staging:smoke -- https://<your-service>.up.railway.app --wait
+```
+
+Full procedure, variable reference, rollback and troubleshooting: [Railway Staging Deployment Guide](docs/RAILWAY_STAGING.md).
+
+### Option C: Vercel (static/serverless edge)
 1. Push git repository to GitHub / GitLab.
-2. Link project in Vercel or Railway dashboard.
-3. Configure environment variables in Settings.
-4. Set build command: `npm run build` and output directory: `.next`.
+2. Link project in the Vercel dashboard (framework preset: Next.js).
+3. Configure environment variables in Settings; security headers are pre-declared in `vercel.json`.
+4. Deploy — Vercel handles build (`npm run build`) and routing automatically.
 
 ---
 

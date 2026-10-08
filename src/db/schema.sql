@@ -4,8 +4,19 @@
 -- ============================================================================
 
 -- Extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+--
+-- This schema intentionally declares NO extensions.
+-- All primary keys are application-generated VARCHAR(100) identifiers, so neither
+-- "uuid-ossp" nor "pgcrypto" is referenced anywhere below.
+--
+-- Deployment rule: managed PostgreSQL providers (Railway, Render, RDS, Cloud SQL)
+-- frequently run the application role without the privilege required to
+-- CREATE EXTENSION, and slim/self-hosted PostgreSQL images may not ship the
+-- contrib modules at all. Because scripts/db-init.mjs applies this file inside a
+-- single transaction, a single unauthorized CREATE EXTENSION statement aborts the
+-- entire schema and fails the deployment. Keep this file free of extension
+-- dependencies; if UUID generation is ever required, use the core built-in
+-- gen_random_uuid() (PostgreSQL 13+) rather than a contrib extension.
 
 -- 1. USERS & IDENTITY
 CREATE TABLE IF NOT EXISTS users (

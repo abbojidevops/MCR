@@ -1,5 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+// Static imports are REQUIRED here. Reaching these helpers through a dynamic
+// `require('./postgres')` breaks in the production build: webpack emits
+// src/db/postgres.ts as an async module, so the dynamically required namespace is
+// returned before its named exports are materialized. getPostgresPool() would then
+// throw "… is not a function", which the surrounding try/catch reduced to a
+// console warning — every PostgreSQL write silently no-opped while the API still
+// reported success. Static imports let the bundler link the real exports.
+import {
+  getPostgresPool,
+  isPostgresConfigured as isPostgresConfiguredFromPg,
+} from './postgres';
 import {
   Account,
   BusinessProfile,
@@ -74,6 +85,13 @@ const DB_FILE = path.join(DATA_DIR, 'mcr_db.json');
 class DatabaseRepository {
   private state: DatabaseState;
   private initialized = false;
+  /**
+   * Most recent PostgreSQL dual-persistence failure, if any.
+   * Surfaced by getPostgresPersistenceStatus() so a deployment that advertises
+   * PostgreSQL storage but silently fails to write is visible to operators rather
+   * than degrading to a console warning.
+   */
+  private lastPostgresPersistError: { operation: string; message: string; at: string } | null = null;
 
   constructor() {
     this.state = this.getInitialState();
@@ -430,7 +448,6 @@ class DatabaseRepository {
     // Dual persistence: PostgreSQL sync if configured
     if (this.isPostgresConfigured()) {
       try {
-        const { getPostgresPool } = require('./postgres');
         const pool = getPostgresPool();
         if (pool) {
           pool.query(
@@ -448,7 +465,7 @@ class DatabaseRepository {
               account.updated_at,
             ]
           ).catch((err: any) => {
-            console.warn('[Postgres createAccount error]:', err?.message);
+            this.recordPostgresPersistFailure(`createAccount(${account.id})`, err?.message);
           });
         }
       } catch (err: any) {
@@ -502,11 +519,10 @@ class DatabaseRepository {
     // Dual persistence: PostgreSQL deletion if configured
     if (this.isPostgresConfigured()) {
       try {
-        const { getPostgresPool } = require('./postgres');
         const pool = getPostgresPool();
         if (pool) {
           pool.query('DELETE FROM accounts WHERE id = $1', [cleanId]).catch((err: any) => {
-            console.warn('[Postgres deleteAccount error]:', err?.message);
+            this.recordPostgresPersistFailure(`deleteAccount(${cleanId})`, err?.message);
           });
         }
       } catch (err: any) {
@@ -1297,13 +1313,42 @@ class DatabaseRepository {
   // --------------------------------------------------------------------------
   // Persistence Health
   // --------------------------------------------------------------------------
-  public isPostgresConfigured(): boolean {
+  private recordPostgresPersistFailure(operation: string, message?: string): void {
+    this.lastPostgresPersistError = {
+      operation,
+      message: message || 'unknown error',
+      at: new Date().toISOString(),
+    };
+    console.error(
+      `[Postgres dual-persistence FAILED] ${operation}: ${message || 'unknown error'} — the write was NOT persisted to PostgreSQL.`
+    );
+  }
+
+  /**
+   * Operator-facing storage diagnostics: which engine is actually serving reads,
+   * whether writes are dual-persisted to PostgreSQL, and the last write failure.
+   */
+  public getPostgresPersistenceStatus() {
+    const configured = this.isPostgresConfigured();
+    let connected = false;
     try {
-      const { isPostgresConfigured: checkPgConfigured } = require('./postgres');
-      return Boolean(checkPgConfigured());
+      connected = configured && getPostgresPool() !== null;
     } catch {
-      return Boolean(process.env.DATABASE_URL);
+      connected = false;
     }
+    return {
+      configured,
+      poolAvailable: connected,
+      lastPersistError: this.lastPostgresPersistError,
+    };
+  }
+
+  public isPostgresConfigured(): boolean {
+    // Must reflect the SAME check the persistence paths use. Previously this fell
+    // back to a bare `Boolean(process.env.DATABASE_URL)` when the dynamic require
+    // failed, so getStorageEngine() advertised "postgresql" while the writes went
+    // nowhere and the deployment looked healthy.
+    return isPostgresConfiguredFromPg();
   }
 
   public getStorageEngine(): 'postgresql' | 'file_json' {
@@ -1317,7 +1362,6 @@ class DatabaseRepository {
     }
     if (this.isPostgresConfigured()) {
       try {
-        const { getPostgresPool } = require('./postgres');
         const pool = getPostgresPool();
         if (pool) {
           const res = await pool.query('DELETE FROM accounts WHERE id = $1', [cleanId]);
