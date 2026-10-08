@@ -304,7 +304,115 @@ renders.
 
 ---
 
-## 11. Recommended follow-ups (not done)
+---
+
+## 11. Operator polish pass (commit `a5dcf05`)
+
+Two defects found while reviewing the operator console, both of the same class
+as the rest of this audit: the product claiming something it does not do.
+
+### 11.1 Email dispatch reported delivery for messages never sent
+
+`EmailService.sendEmail()` logged to the console and returned
+`{ success: true, messageId }`. Its docstring claimed it "sends via
+SMTP/Postmark in prod". It does not — there is no nodemailer, Postmark,
+SendGrid or Resend dependency anywhere in the project.
+
+The chain therefore lied three times over:
+
+| Step | What it claimed |
+|---|---|
+| `sendEmail()` | success, with a message ID |
+| `/api/reports/dispatch` | `results.email = { messageId, to, subject }` |
+| Reports page | **green** toast: "Weekly recovery digest dispatched to …" |
+
+A customer could click "Send Test Weekly Email", get a green confirmation that
+it reached their inbox, and wait for mail that would never arrive.
+
+Fixed end to end:
+
+- `sendEmail` now returns `EmailDispatchResult` carrying `delivered`,
+  `transport` (`'smtp' | 'log_only'`) and a plain-language `notice`. The
+  no-transport path logs `[EMAIL NOT SENT — no transport configured]`.
+- `EmailService.hasTransport()` is the single switch for wiring a real
+  transport later (`SMTP_URL` / `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /
+  `RESEND_API_KEY`). If a key is set but no client is implemented it still
+  reports `delivered: false` rather than pretending.
+- The dispatch route passes `delivered`, `transport` and `notice` through.
+- The Reports page branches on `delivered`. An undelivered digest shows an
+  **amber** warning explaining that no outbound email service is configured —
+  never a green success.
+
+Live verification against the production build:
+
+```
+POST /api/reports/dispatch {"type":"weekly_email"}
+  "delivered": false,
+  "transport": "log_only",
+  "notice": "No outbound email transport is configured on this deployment,
+             so this message was rendered and logged but not sent…"
+```
+
+**Still unavailable, for the same reason:** self-service password reset. There
+is no transport to send a reset link through, so the flow is not built rather
+than stubbed. Adding it before a transport exists would repeat exactly this
+defect.
+
+### 11.2 Dialogs had no focus management
+
+The app had three hand-rolled overlays (`role="dialog"`) and none of them
+managed focus. Focus stayed on the page behind the dialog, Tab walked straight
+out into the background, and closing left focus nowhere — every dialog
+unusable without a mouse.
+
+New `src/components/modal.tsx` handles the six things a bespoke overlay almost
+always gets wrong: `role="dialog"` + `aria-modal` + a programmatic accessible
+name; focus moves in on open; Tab / Shift+Tab cycle inside; Escape closes;
+focus returns to the opener; background scroll is locked and restored. All
+three surfaces were migrated onto it, and the job dialog's status-change
+buttons moved into its `footer` slot.
+
+Verified at runtime rather than by reading source.
+`tests/modal-focus.test.ts` drives the real DOM contract through jsdom:
+
+- focus moves into the dialog on open
+- eight consecutive Tab presses never reach the page behind it and never land
+  on a disabled control
+- Tab wraps last→first, Shift+Tab wraps first→last
+- focus returns to the opener on close
+- the accessible name resolves to the dialog's heading
+
+### 11.3 Text and icon contrast below WCAG AA
+
+`scripts/contrast-audit.py` resolves every Tailwind colour pair in the operator
+console, tenant dashboard and public surfaces to real sRGB and computes the
+WCAG ratio. It judges text against 1.4.3 (4.5:1) and icon-only tiles against
+1.4.11 (3:1) — judging icons at the text bar produces false positives that hide
+the real failures.
+
+Of 268 measurable pairs, 15 were below threshold:
+
+| Pair | Before | After | Count |
+|---|---|---|---|
+| white on `emerald-600` (button labels) | 3.77:1 | `emerald-700` 5.48:1 | 8 |
+| white on `amber-600` | 3.19:1 | `amber-700` 5.02:1 | 1 |
+| `slate-400` on `slate-100` | 2.34:1 | `slate-600` 6.92:1 | 1 |
+| `slate-400` on white | 2.56:1 | `slate-500` 4.76:1 | 1 |
+| `slate-500` on `slate-100` | 4.34:1 | `slate-600` 6.92:1 | 2 |
+| `red-600` on `red-50` | 4.41:1 | `red-700` 5.91:1 | 1 |
+| `amber-600` icon on `amber-100` | 2.86:1 | `amber-700` 4.51:1 | 1 |
+
+The most common failure was the product's own primary green button: white on
+`emerald-600` is 3.77:1 — acceptable for a large icon, below the bar for the
+12px bold label on it.
+
+The audit is proven non-vacuous: reverting one fix makes it report that exact
+pair again. `CONTRAST-1/2/3` lock it in — the script must exit clean, must
+measure 200+ pairs under both thresholds, and the contrast maths for each fixed
+pair is re-derived independently so a palette regression is caught even if the
+script is weakened.
+
+## 12. Recommended follow-ups (not done)
 
 1. **Pick one support address.** `COMPANY_INFO.email` (`support@getmcr.com`) now
    wins everywhere except the privacy policy's `privacy@mcr-recovery.com`.
@@ -315,8 +423,15 @@ renders.
 3. **PostgreSQL profile persistence.** Either add `business_profiles` SQL and the
    missing columns, or document in the UI that profile settings are file-backed
    only.
-4. **Modal focus management** — trap focus and restore it on close.
-5. **Colour-contrast audit** of the operator console.
+4. ~~**Modal focus management** — trap focus and restore it on close.~~
+   **Done** in §11.2 (`7bc7ceb`).
+5. ~~**Colour-contrast audit** of the operator console.~~ **Done** in §11.3
+   (`a5dcf05`), 15 pairs fixed, now enforced by `CONTRAST-1/2/3`.
 6. **Business-hours storage**, if day-of-week routing is actually wanted: the
    `business_hours` table exists in `src/db/schema.sql:94` but has no repository
    method and no consumer.
+7. **Outbound email transport**, if the weekly digest or a self-service
+   password reset is ever wanted. `EmailService.hasTransport()` is the single
+   switch; set `SMTP_URL` (or `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /
+   `RESEND_API_KEY`) and implement the client. Until then the digest honestly
+   reports `delivered: false` and no reset flow exists.
