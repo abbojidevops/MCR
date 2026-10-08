@@ -91,6 +91,29 @@ Key properties:
 
 ---
 
+### Staging data persistence (read this before you expect data to survive)
+
+| Behaviour | Detail |
+| :--- | :--- |
+| **Schema on a fresh database** | The pre-deploy step creates all **36 tables**. A newly provisioned managed PostgreSQL contains **no rows**: the seeded demo tenants live in the file store that ships inside the image, not in SQL. |
+| **Reads** | Tenant reads are served from the in-memory/file store (`data/mcr_db.json`), not from SQL. |
+| **Writes** | Account creates/deletes are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes the truth under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
+| **Container filesystem** | Ephemeral. Without a volume, staging tenant data created through the UI is lost on the next deploy/restart and the image re-seeds itself. |
+
+**Recommended for staging continuity:** attach a Railway volume mounted at `/app/data`
+(service → *Settings → Volumes*). It must be writable by **uid 1001** — the image runs as the
+non-root `nextjs` user. If the mount is not writable, the app logs
+`Failed to write repository file` / `Repository file storage fallback to in-memory` and
+continues running from memory (no crash, no durable state). An empty volume is safe: the
+repository re-seeds `data/mcr_db.json` on first boot.
+
+> **Known limitation / follow-up:** the durable fix is to make the repository's read path
+> PostgreSQL-backed rather than file-backed, so the volume becomes unnecessary and SQL is the
+> single source of truth. Until then, treat PostgreSQL on staging as the migration target and
+> audit trail, and keep the volume attached.
+
+---
+
 ## 4. Pre-Deploy Verification (run locally before pushing)
 
 ```bash
@@ -165,6 +188,8 @@ expected for staging.
 | `/admin` returns `503 Service Unavailable` | `ADMIN_PASSWORD` missing on the service | Set `ADMIN_PASSWORD` (≥ 12 chars, upper + lower + digit) |
 | `/api/webhooks/*` returns `503` for carrier callbacks | `CARRIER_WEBHOOK_SECRET` not configured | Set a 32-byte hex secret; the endpoint fails closed by design |
 | Every tenant query fails right after a deploy | Schema was never applied (pre-deploy command removed) | Restore `deploy.preDeployCommand` in `railway.json`; `npm run staging:preflight` blocks this case |
+| Tenant created through onboarding disappears after a redeploy | Ephemeral container filesystem; staging has no volume and reads are file-backed | Attach a volume at `/app/data` (writable by uid 1001), or move development work to a database-backed read path |
+| Operator `/api/health` shows `storageEngine: postgresql` but the SQL `accounts` table stays empty | Dual-persistence writes failing silently (historically: the production bundle could not resolve `require('./postgres')` named exports, so the write no-opped while the API returned 200) | Fixed by static imports in `src/db/repository.ts`; `checks.database.persistence.lastPersistError` and the `PG-5` test now surface any regression |
 
 ---
 
