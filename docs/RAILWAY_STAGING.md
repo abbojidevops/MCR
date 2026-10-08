@@ -66,7 +66,7 @@ Key properties:
 | :--- | :--- | :--- |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference) | `scripts/db-init.mjs` fails the deploy if unset in production |
 | `ADMIN_PASSWORD` | `openssl rand -base64 24` — must be ≥ 12 chars with upper, lower **and** numeric characters | pre-flight error; `/admin` returns 503 when unset |
-| `SESSION_SECRET` | `openssl rand -hex 32` (≥ 32 chars) | pre-flight error; signs session cookies |
+| `SESSION_SECRET` | `openssl rand -hex 32` — at least 32 random bytes (256 bits). Length alone is not accepted: a long but patterned value is rejected | pre-flight error; signs session cookies |
 | `NEXT_PUBLIC_APP_URL` | The staging domain, e.g. `https://mcr-saas-app-staging.up.railway.app` | pre-flight warning when absent/relative |
 
 ### Staging telephony (simulation)
@@ -100,12 +100,27 @@ Key properties:
 | **Writes** | Account creates/deletes are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes the truth under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
 | **Container filesystem** | Ephemeral. Without a volume, staging tenant data created through the UI is lost on the next deploy/restart and the image re-seeds itself. |
 
-**Recommended for staging continuity:** attach a Railway volume mounted at `/app/data`
-(service → *Settings → Volumes*). It must be writable by **uid 1001** — the image runs as the
-non-root `nextjs` user. If the mount is not writable, the app logs
-`Failed to write repository file` / `Repository file storage fallback to in-memory` and
-continues running from memory (no crash, no durable state). An empty volume is safe: the
-repository re-seeds `data/mcr_db.json` on first boot.
+**Required for staging:** attach a Railway volume mounted at `/app/data`
+(service → *Settings → Volumes*) that is **writable by UID 1001** — the image runs as the
+non-root `nextjs` user. Note that a volume mount supplies its own ownership, so the image's
+`chown -R nextjs:nodejs /app` does **not** apply to the mounted path.
+
+Verify it from inside the deployment (Railway → service → ⋯ → *Shell*, or
+`railway run npm run staging:requirements`):
+
+```bash
+npm run staging:requirements     # reports the volume requirement as PASS/FAIL with the fix
+id -u                            # should print 1001; the mount must accept writes from it
+```
+
+The pre-deploy step (`db-init.mjs`) also probes the directory and prints
+`✓ Data directory /app/data is writable (uid 1001)`. If it is not writable it warns loudly
+(and fails the deploy when `MCR_REQUIRE_PERSISTENT_DATA=true`). At runtime, a non-writable
+mount makes the app log `Failed to write repository file` /
+`Repository file storage fallback to in-memory` and continue from memory — no crash, but no
+durable state either, and tenant data is lost on the next redeploy. An empty volume is safe:
+the repository re-seeds `data/mcr_db.json` on first boot.
+Escape hatch for deliberate ephemeral runs: `MCR_SKIP_DATA_DIR_CHECK=true`.
 
 > **Known limitation / follow-up:** the durable fix is to make the repository's read path
 > PostgreSQL-backed rather than file-backed, so the volume becomes unnecessary and SQL is the
@@ -114,9 +129,33 @@ repository re-seeds `data/mcr_db.json` on first boot.
 
 ---
 
+## 3a. The Staging Requirement Set (enforced by `staging:requirements`)
+
+| # | Requirement | Enforced by | Failure behaviour |
+| :-- | :--- | :--- | :--- |
+| 1 | PostgreSQL **16** | `staging:requirements` queries `server_version` | FAIL naming the detected major version |
+| 2 | `DATABASE_URL=${{Postgres.DATABASE_URL}}` | requirements + pre-flight | FAIL if unset; WARN if an unresolved placeholder |
+| 3 | `ADMIN_PASSWORD` ≥ 12 chars with upper, lower **and** digit | pre-flight + requirements + `/admin` 503 boundary | FAIL; the admin boundary returns 503 when unset |
+| 4 | `SESSION_SECRET` ≥ 32 random bytes (256 bits) | pre-flight + requirements (length **and** entropy) | FAIL with the `openssl rand -hex 32` hint |
+| 5 | `NEXT_PUBLIC_APP_URL` = final HTTPS Railway domain | requirements + pre-flight (WARN) | FAIL when absent, localhost or non-HTTPS |
+| 6 | `TWILIO_MOCK_MODE=true`, live processing off | requirements (`findLiveProcessingSwitches`) | FAIL, listing each switch that would enable live processing |
+| 7 | Volume mounted at `/app/data`, writable by UID 1001 | `db-init.mjs` probe + requirements live check | loud warning at pre-deploy; FAIL in the requirements report |
+| 8 | Schema applied by the pre-deploy step | requirements checks the 8 core tables | FAIL if the schema step did not run |
+
+Run it with the staging values exported (`npm run staging:requirements`) or in the deployed
+container's shell. It prints PASS/WARN/FAIL per requirement plus the numbered Railway
+dashboard steps, and never prints secret values.
+
+---
+
 ## 4. Pre-Deploy Verification (run locally before pushing)
 
 ```bash
+# 0. Requirements verifier: codifies the 7 staging requirements below, including
+#    LIVE checks (PostgreSQL major version, schema presence, volume writability)
+#    and prints the dashboard-only steps. Run it after setting the staging values:
+npm run staging:requirements
+
 # 1. Full unit/integration suite, type-check, hygiene invariance and security probes
 npm run lint
 npm test

@@ -36,6 +36,14 @@ function createMockRequest(
   });
 }
 
+/**
+ * 64 hex characters == 32 random bytes, exactly what `openssl rand -hex 32`
+ * produces. Used so fixtures satisfy the SESSION_SECRET entropy requirement
+ * (>= 256 bits) rather than merely the length requirement.
+ */
+const STRONG_SESSION_SECRET =
+  'f4c1a9d83b27e65094af1d2c8b7e035af61c2938d405eb7a19c2f8d6470ba3e5';
+
 test('DEP-1: Database Isolation Topology — docker-compose.yml Does Not Publish Port 5432 to Host', () => {
   const composePath = path.join(process.cwd(), 'docker-compose.yml');
   const content = fs.readFileSync(composePath, 'utf-8');
@@ -450,7 +458,7 @@ test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets 
   // 1. Weak ADMIN_PASSWORD fails
   const weakAdminResult = runStagingPreflight({
     ADMIN_PASSWORD: 'short',
-    SESSION_SECRET: 'a'.repeat(32),
+    SESSION_SECRET: STRONG_SESSION_SECRET,
   });
   assert.equal(weakAdminResult.ok, false);
   assert.ok(weakAdminResult.errors.some((e) => e.includes('ADMIN_PASSWORD must be at least 12')));
@@ -466,7 +474,7 @@ test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets 
   // 3. Burned database password fails
   const burnedDbResult = runStagingPreflight({
     ADMIN_PASSWORD: 'SuperSecurePass2026!',
-    SESSION_SECRET: 'a'.repeat(32),
+    SESSION_SECRET: STRONG_SESSION_SECRET,
     DATABASE_URL: 'postgresql://mcr_user:mcr_password@localhost:5432/mcr_db',
   });
   assert.equal(burnedDbResult.ok, false);
@@ -475,7 +483,7 @@ test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets 
   // 4. Valid staging topology passes
   const validResult = runStagingPreflight({
     ADMIN_PASSWORD: 'SuperSecurePass2026!',
-    SESSION_SECRET: 'x'.repeat(40),
+    SESSION_SECRET: STRONG_SESSION_SECRET,
     DATABASE_URL: 'postgresql://mcr_user:StrongStagingPass2026!Db@localhost:5432/mcr_db',
     TWILIO_MOCK_MODE: 'true',
   });
@@ -494,7 +502,7 @@ test('DEP-10: Staging Pre-flight Verification Tool — Detects Insecure Secrets 
  */
 const RAILWAY_STAGING_ENV = {
   ADMIN_PASSWORD: 'SuperSecurePass2026!',
-  SESSION_SECRET: 'x'.repeat(40),
+  SESSION_SECRET: STRONG_SESSION_SECRET,
   DATABASE_URL: 'postgresql://mcr_user:StrongStagingPass2026!Db@localhost:5432/mcr_db',
   NEXT_PUBLIC_APP_URL: 'https://mcr-staging.up.railway.app',
   TWILIO_MOCK_MODE: 'true',
