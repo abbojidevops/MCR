@@ -286,3 +286,31 @@ test('SR-13: Requirements Report Keeps Live Processing Disabled by Default', asy
   // The actual token value must never appear in the report.
   assert.equal(live?.detail.includes('live-token-should-be-reported'), false);
 });
+
+test('SR-14: The Runtime Data Directory Resolves Like the Pre-Deploy Probe', () => {
+  // scripts/db-init.mjs probes MCR_DATA_DIR (the staging volume mount) before the
+  // deploy. If the repository ignored that variable, the probe could pass while
+  // the app persisted somewhere ephemeral instead.
+  const repositorySource = fs
+    .readFileSync(path.join(process.cwd(), 'src', 'db', 'repository.ts'), 'utf-8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+
+  assert.match(
+    repositorySource,
+    /process\.env\.MCR_DATA_DIR\s*\|\|\s*path\.join\(process\.cwd\(\),\s*'data'\)/,
+    'The repository must honour MCR_DATA_DIR, falling back to <cwd>/data'
+  );
+
+  // Both resolvers must agree for a given override.
+  const override = '/mnt/staging-volume';
+  const previous = process.env.MCR_DATA_DIR;
+  process.env.MCR_DATA_DIR = override;
+  try {
+    assert.equal(resolveDataDirectory(), override, 'db-init must honour MCR_DATA_DIR');
+  } finally {
+    if (previous === undefined) delete process.env.MCR_DATA_DIR;
+    else process.env.MCR_DATA_DIR = previous;
+  }
+});

@@ -79,7 +79,10 @@ interface DatabaseState {
   revokedSessions: string[];
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// The data directory must resolve the same way here and in scripts/db-init.mjs
+// (which probes it for the staging volume requirement), otherwise the pre-deploy
+// check could pass while the runtime writes somewhere else entirely.
+const DATA_DIR = process.env.MCR_DATA_DIR || path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'mcr_db.json');
 
 class DatabaseRepository {
