@@ -55,11 +55,6 @@ export default function SettingsPage() {
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState<any>(null);
 
-  // Business Hours & After-Hours State
-  const [afterHoursEnabled, setAfterHoursEnabled] = useState(true);
-  const [afterHoursMessage, setAfterHoursMessage] = useState(
-    'Thanks for calling Apex Plumbing! Our office is closed for the evening. If you have an active leak or urgent emergency, reply YES and we will page our on-call technician immediately.'
-  );
   // Intake Flow Settings
   const [customTradeQuestion, setCustomTradeQuestion] = useState(
     'What type of plumbing issue are you experiencing today?'
@@ -67,7 +62,6 @@ export default function SettingsPage() {
   const [customEmergencyKeywords, setCustomEmergencyKeywords] = useState<string[]>([]);
   const [newCustomKeyword, setNewCustomKeyword] = useState('');
   const [isSavingIntake, setIsSavingIntake] = useState(false);
-  const [isSavingHours, setIsSavingHours] = useState(false);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -95,12 +89,6 @@ export default function SettingsPage() {
         }
         if (data.profile.custom_intake_question) {
           setCustomTradeQuestion(data.profile.custom_intake_question);
-        }
-        if (data.profile.after_hours_message) {
-          setAfterHoursMessage(data.profile.after_hours_message);
-        }
-        if (data.profile.after_hours_enabled !== undefined) {
-          setAfterHoursEnabled(data.profile.after_hours_enabled);
         }
         if (data.profile.crm_webhook_url) {
           setCrmWebhookUrl(data.profile.crm_webhook_url);
@@ -163,36 +151,6 @@ export default function SettingsPage() {
       setToastError(err?.message || 'Network error — your changes were not saved.');
     } finally {
       setIsSavingIntake(false);
-    }
-  };
-
-  const handleSaveHours = async () => {
-    setIsSavingHours(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          updates: {
-            after_hours_enabled: afterHoursEnabled,
-            after_hours_message: afterHoursMessage,
-          },
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.success) {
-        setToastError(
-          data?.error ||
-            `Could not save the hours settings (HTTP ${res.status}). Your changes were not saved.`
-        );
-        return;
-      }
-      showToast('After-hours text-back settings saved.');
-    } catch (err: any) {
-      console.error(err);
-      setToastError(err?.message || 'Network error — your changes were not saved.');
-    } finally {
-      setIsSavingHours(false);
     }
   };
 
@@ -662,84 +620,34 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ---------------- TAB 2: BUSINESS HOURS & AFTER-HOURS ---------------- */}
+      {/* ---------------- TAB 2: BUSINESS HOURS ---------------- */}
       {activeTab === 'hours' && (
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Clock className="h-4 w-4 text-blue-600" />
-              <h2 className="text-sm font-bold text-slate-900">Standard Operating Schedule</h2>
+              <h2 className="text-sm font-bold text-slate-900">Business Hours &amp; Routing</h2>
             </div>
 
-            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-[11px] text-amber-900">
-              <div className="font-bold text-amber-950">What this tab controls today</div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900" role="status">
+              <div className="font-bold text-amber-950">Weekly business-hour scheduling is not available</div>
               <p className="mt-1 leading-relaxed">
-                MCR does not store a weekly open/close schedule. Text-backs are sent around the clock,
-                24/7 — the moment a call rings out, the customer is texted back automatically. The only
-                time-based rule enforced by the platform is the TCPA quiet-hours window of{' '}
-                <strong>8:00 AM – 9:00 PM in the caller&apos;s local timezone</strong>: a text-back that
-                would land outside that window is held until the next permitted send time. Emergency
-                keywords are still flagged and escalated to your phone at any hour.
-              </p>
-              <p className="mt-2 leading-relaxed">
-                Your operating timezone (set on the Business Profile tab) is used for quiet-hour
-                calculations and scheduled reports. If you need calendar-aware routing by day of week,
-                contact{' '}
-                <a href={`mailto:${COMPANY_INFO.email}`} className="font-semibold underline">
-                  {COMPANY_INFO.email}
-                </a>
-                .
+                MCR does not store your weekly opening hours or use them to change call routing or text-back messages.
+                There is no separate after-hours message setting today, so this page has no schedule to save.
               </p>
             </div>
 
-            {/* After-Hours Behavior */}
-            <div className="border-t border-slate-100 pt-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900">After-Hours Auto Text-Back</div>
-                  <p className="text-slate-500 text-[11px]">
-                    Send a modified message when calls are missed outside of normal working hours.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={afterHoursEnabled}
-                  onChange={(e) => setAfterHoursEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-              </div>
-
-              {afterHoursEnabled && (
-                <div className="mt-2 space-y-2">
-                  <label className="block font-medium text-slate-700 text-[11px]">
-                    After-Hours Response Message
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={afterHoursMessage}
-                    onChange={(e) => setAfterHoursMessage(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 p-3 text-xs focus:ring-1 focus:ring-blue-500"
-                  />
-                  <div className="text-[10px] text-slate-400">
-                    Complies with TCPA regulations by honoring opt-outs and providing clear emergency escalation instructions.
-                  </div>
-                </div>
-              )}
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
+              <h3 className="font-bold text-slate-900">What MCR does today</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
+                <li>Missed-call text-backs are sent as soon as possible, subject to the caller&apos;s local TCPA quiet-hours window (8:00 AM–9:00 PM).</li>
+                <li>Messages outside that window are held until the next permitted time.</li>
+                <li>Emergency keywords can still trigger owner alerts at any hour.</li>
+              </ul>
+              <p className="mt-3 leading-relaxed">
+                Your operating timezone is used for platform quiet-hour calculations and scheduled reports. It does not create a weekly business-hours schedule.
+              </p>
             </div>
-
-            <button
-              type="button"
-              onClick={handleSaveHours}
-              disabled={isSavingHours}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
-            >
-              {isSavingHours ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {isSavingHours ? 'Saving...' : 'Save Hours Settings'}
-            </button>
           </div>
         </div>
       )}

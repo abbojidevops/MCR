@@ -25,10 +25,6 @@ export const TENANT_EDITABLE_PROFILE_FIELDS = [
   'custom_intake_question',
   'custom_emergency_keywords',
 
-  // After-hours behaviour
-  'after_hours_enabled',
-  'after_hours_message',
-
   // Outbound CRM integration
   'crm_webhook_url',
   'crm_webhook_secret',

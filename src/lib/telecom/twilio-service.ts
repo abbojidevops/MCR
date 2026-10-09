@@ -156,6 +156,7 @@ export class TwilioService {
     }
 
     const accountId = phoneNumberRecord.account_id;
+    await db.hydrateBusinessProfileFromPostgres(accountId);
     const profile = db.getBusinessProfile(accountId);
     const trade = (profile?.trade || 'plumbing') as TradeKey;
     const template = TRADE_TEMPLATES[trade] || TRADE_TEMPLATES.plumbing;
@@ -344,6 +345,7 @@ export class TwilioService {
     }
 
     const accountId = phoneNumberRecord.account_id;
+    await db.hydrateBusinessProfileFromPostgres(accountId);
     const profile = db.getBusinessProfile(accountId);
     const businessName = profile?.business_name || 'Our Team';
     const trade = (profile?.trade || 'plumbing') as TradeKey;

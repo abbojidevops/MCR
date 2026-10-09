@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, SessionPayload } from '@/lib/session';
+import { db } from '@/db/repository';
 
 export interface AuthenticatedContext {
   session: SessionPayload;
@@ -26,6 +27,18 @@ export async function requireTenantAuth(
         status: 401,
       },
       { status: 401 }
+    );
+  }
+
+  try {
+    // PostgreSQL is the durable copy when configured. Hydrate the request
+    // process's sync repository cache before downstream handlers read profiles.
+    await db.hydrateBusinessProfileFromPostgres(session.accountId);
+  } catch (err: any) {
+    console.error('[Tenant profile load failed]', err?.message || err);
+    return NextResponse.json(
+      { error: 'Your saved account settings are temporarily unavailable. Please try again.' },
+      { status: 503 }
     );
   }
 

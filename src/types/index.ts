@@ -63,8 +63,6 @@ export interface BusinessProfile {
   average_ticket?: number;
   custom_emergency_keywords?: string[];
   custom_intake_question?: string;
-  after_hours_message?: string;
-  after_hours_enabled?: boolean;
   crm_webhook_url?: string;
   crm_webhook_secret?: string;
   crm_webhook_events?: string[];

@@ -128,24 +128,72 @@ async function main() {
     if (dbData.profiles?.length) {
       for (const prof of dbData.profiles) {
         await client.query(
-          `INSERT INTO business_profiles (id, account_id, business_name, trade, emergency_phone, notification_phone, timezone)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO business_profiles (
+             id, account_id, business_name, legal_name, trade, is_demo, ein, address, city, state, zip,
+             timezone, website, emergency_phone, notification_phone, carrier_name, forwarding_configured,
+             average_ticket, custom_emergency_keywords, custom_intake_question, crm_webhook_url,
+             crm_webhook_secret, crm_webhook_events, created_at, updated_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+             $18, $19::jsonb, $20, $21, $22, $23::jsonb, $24, $25
+           )
            ON CONFLICT (account_id) DO UPDATE SET
              business_name = EXCLUDED.business_name,
+             legal_name = EXCLUDED.legal_name,
              trade = EXCLUDED.trade,
-             emergency_phone = EXCLUDED.emergency_phone;`,
+             is_demo = EXCLUDED.is_demo,
+             ein = EXCLUDED.ein,
+             address = EXCLUDED.address,
+             city = EXCLUDED.city,
+             state = EXCLUDED.state,
+             zip = EXCLUDED.zip,
+             timezone = EXCLUDED.timezone,
+             website = EXCLUDED.website,
+             emergency_phone = EXCLUDED.emergency_phone,
+             notification_phone = EXCLUDED.notification_phone,
+             carrier_name = EXCLUDED.carrier_name,
+             forwarding_configured = EXCLUDED.forwarding_configured,
+             average_ticket = EXCLUDED.average_ticket,
+             custom_emergency_keywords = EXCLUDED.custom_emergency_keywords,
+             custom_intake_question = EXCLUDED.custom_intake_question,
+             crm_webhook_url = EXCLUDED.crm_webhook_url,
+             crm_webhook_secret = EXCLUDED.crm_webhook_secret,
+             crm_webhook_events = EXCLUDED.crm_webhook_events,
+             updated_at = EXCLUDED.updated_at;`,
           [
             prof.id || prof.account_id,
             prof.account_id,
             prof.business_name,
+            prof.legal_name || null,
             prof.trade || 'plumbing',
-            prof.emergency_phone,
-            prof.notification_phone,
+            prof.is_demo ?? false,
+            prof.ein || null,
+            prof.address || null,
+            prof.city || null,
+            prof.state || null,
+            prof.zip || null,
             prof.timezone || 'America/Chicago',
+            prof.website || null,
+            prof.emergency_phone || null,
+            prof.notification_phone || null,
+            prof.carrier_name || null,
+            prof.forwarding_configured ?? false,
+            Number.isFinite(prof.average_ticket) ? prof.average_ticket : null,
+            JSON.stringify(Array.isArray(prof.custom_emergency_keywords) ? prof.custom_emergency_keywords : []),
+            prof.custom_intake_question || null,
+            prof.crm_webhook_url || null,
+            prof.crm_webhook_secret || null,
+            JSON.stringify(
+              Array.isArray(prof.crm_webhook_events)
+                ? prof.crm_webhook_events
+                : ['job.created', 'job.booked', 'job.updated']
+            ),
+            prof.created_at || new Date().toISOString(),
+            prof.updated_at || new Date().toISOString(),
           ]
         );
       }
-      console.log(`   ✓ Migrated ${dbData.profiles.length} business profiles.`);
+      console.log(`   ✓ Migrated ${dbData.profiles.length} business profiles and editable settings.`);
     }
 
     // 4.5 Phone Numbers

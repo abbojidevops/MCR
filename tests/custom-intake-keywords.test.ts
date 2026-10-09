@@ -191,39 +191,27 @@ test('CUSTOM-3: Intake Step ASK_PROBLEM Interpolates Contractor Custom Intake Qu
   }
 });
 
-test('CUSTOM-4: Contractor Saves After-Hours Custom Message & Toggle via Settings', async () => {
+test('CUSTOM-4: Unsupported after-hours controls are rejected, not saved as working settings', async () => {
   const token = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
   const profile = db.getBusinessProfile(TENANT_A);
   assert.ok(profile);
+  const before = { ...profile };
 
-  const origEnabled = profile.after_hours_enabled;
-  const origMessage = profile.after_hours_message;
-
-  try {
-    const patchReq = createMockRequest('http://localhost:3001/api/settings', {
-      method: 'PATCH',
-      token,
-      body: {
-        updates: {
-          after_hours_enabled: false,
-          after_hours_message: 'Our shop is closed until 7am. For true emergencies call our night tech.',
-        },
+  const patchReq = createMockRequest('http://localhost:3001/api/settings', {
+    method: 'PATCH',
+    token,
+    body: {
+      updates: {
+        after_hours_enabled: false,
+        after_hours_message: 'We are closed until 7am.',
       },
-    });
+    },
+  });
 
-    const patchRes = await settingsPatch(patchReq);
-    assert.equal(patchRes.status, 200);
-    const patchData = await patchRes.json();
-    assert.equal(patchData.profile.after_hours_enabled, false);
-    assert.equal(
-      patchData.profile.after_hours_message,
-      'Our shop is closed until 7am. For true emergencies call our night tech.'
-    );
-  } finally {
-    // Restore profile
-    db.updateBusinessProfile(TENANT_A, {
-      after_hours_enabled: origEnabled,
-      after_hours_message: origMessage,
-    });
-  }
+  const patchRes = await settingsPatch(patchReq);
+  assert.equal(patchRes.status, 400);
+  const patchData = await patchRes.json();
+  assert.match(patchData.error, /not available for tenant editing/i);
+  assert.deepEqual(patchData.rejectedFields.sort(), ['after_hours_enabled', 'after_hours_message']);
+  assert.deepEqual(db.getBusinessProfile(TENANT_A), before, 'rejected fields must not mutate the profile');
 });

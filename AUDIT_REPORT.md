@@ -1,10 +1,9 @@
 # MCR — Authenticated Dashboard QA & Improvement Report
 
-**Branch:** `arena/e10e84e6-mcr` (commit `0a1528d`)
-**Date:** 2026-10-08
+**Branch:** `arena/e10e84e6-mcr`
+**Date:** 2026-10-09
 **Live preview:** production build of this branch, `next start -p 3100`
-**Status:** committed and pushed. **No PR opened, nothing merged** — the branch is
-yours to review in the live preview first.
+**Status:** PR #4 remains open and unmerged. Review the live preview before merging.
 
 ---
 
@@ -18,12 +17,10 @@ which were re-verified live.
 | | |
 |---|---|
 | Routes audited | 22 (10 tenant dashboard, 5 operator console, 7 public/legal) |
-| Files changed | 44 (+4 548 / −1 800) |
-| New files | 11 |
-| Regression tests added | 36 (`tests/audit-fixes.test.ts`) |
+| Regression coverage | 60 new or updated checks across the audit, modal, and PostgreSQL-profile suites |
 | `npx tsc --noEmit` | clean |
-| `npm run build` | clean (48/48 pages) |
-| `npm test` | **281 / 284 pass** — see §7 for the 3 pre-existing failures |
+| `npm run build` | clean (47/47 pages) |
+| `npm test` | **305 / 308 pass** — the 3 failures require PostgreSQL, which is not running in this sandbox |
 
 ---
 
@@ -196,11 +193,11 @@ Applied across the dashboard and console:
 
 ```
 npx tsc --noEmit   → clean
-npm run build      → clean, 48/48 pages generated
-npm test           → 271 / 274 pass
+npm run build      → clean, 47/47 pages generated
+npm test           → 305 / 308 pass
 ```
 
-### The 3 failures are a pre-existing environmental baseline, not a regression
+### The 3 failures are the PostgreSQL-only environmental baseline
 
 | Test | Reason |
 |---|---|
@@ -208,43 +205,58 @@ npm test           → 271 / 274 pass
 | `PG-3: Dual-Persistence Operations & Cascade Lifecycle` | idem |
 | `PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL` | idem |
 
-This sandbox has no `postgres`, `psql`, `pg_ctl`, `initdb` or `docker` binary and
-no `/usr/lib/postgresql`. These three suites cannot run here and failed before
-any of my changes. Run them against the docker-compose stack to confirm.
+There is no PostgreSQL server in this sandbox. The profile-persistence behavior
+is covered here with a fake pool; run the three live database checks against the
+deployment database before release.
 
-### New regression suite — `tests/audit-fixes.test.ts` (26 cases, all passing)
+### Regression suites
 
-| Group | Covers |
-|---|---|
-| `SET-1…6` | Privileged fields never tenant-editable; partition behaviour; non-object payloads; **live PATCH mass-assignment returns 400 and mutates nothing**; allow-listed field succeeds; `forwarding_configured` stays writable |
-| `DEMO-1…6` | Production with no flag withholds credentials; explicit flag and staging-named envs expose them; local dev exposes them; falsy values do not unlock; the login form embeds no literal credentials |
-| `OPS-1…4` | `/admin/login` rewrite; anonymous HTML redirect carries `?next=` and API callers keep 401; operator-login posts to the admin API and handles 503/429; every admin surface offers sign-out |
-| `HON-1…10` | Dead settings controls gone; real billing field names; every catch sets an error toast; jobs timeline is timestamp-derived and asserts no fabricated events; dedupe copy matches the enforced window; forwarding labelled self-reported; carrier matrix has no fabricated benchmarks; concierge has no fake dispatch; billing discloses gateway state; risk counts are derived |
+- `tests/audit-fixes.test.ts`: **47/47 passing** — tenant-editable settings,
+  access routing, honest email reporting, and WCAG contrast.
+- `tests/modal-focus.test.ts`: **7/7 passing** — jsdom runtime checks for focus
+  entry, tab cycling, Escape, focus restoration and accessible naming.
+- `tests/postgres-profile-persistence.test.ts`: **6/6 passing** — initial
+  account/profile write, targeted settings update, database-to-cache hydration,
+  failed-write behavior, API error reporting, and schema/migration coverage.
+- `tests/custom-intake-keywords.test.ts`: **4/4 passing**; the old after-hours
+  save test now verifies that unsupported controls are rejected without changing
+  profile data.
 
-Wired into the `npm test` glob and available as `npm run test:audit`.
-
-> The suite sets `NODE_ENV=test`, so `db.saveToFile()` short-circuits and the
-> tests never write to `data/mcr_db.json`.
+The suites are wired into `npm test`. Tests set `NODE_ENV=test`, so
+`db.saveToFile()` short-circuits and the tests never write to
+`data/mcr_db.json`.
 
 ---
 
 ## 8. Persistence findings you should know about
 
-- `db.saveToFile()` writes `data/mcr_db.json` on every mutation and
-  `loadFromFile()` restores on boot — file persistence works.
-- **PostgreSQL dual-persistence only covers `accounts`.**
-  `src/db/repository.ts` dual-writes only in `createAccount` (INSERT … ON
-  CONFLICT) and `deleteAccount` (DELETE). `src/db/postgres.ts` contains **no
-  `business_profiles` SQL at all**, and `src/db/schema.sql`'s
-  `business_profiles` table already lacks `custom_emergency_keywords`,
-  `crm_webhook_url` and `average_ticket`, which the app already persists
-  file-only.
-  **Consequence:** any new optional `BusinessProfile` field is safe to add
-  (file-only), but do not assume a profile change reaches PostgreSQL. This is
-  why the dead intake toggles were removed rather than persisted — wiring them
-  up would have been a lie.
-- `getPostgresPersistenceStatus` does **not** exist in `src/db/postgres.ts`; the
-  health route uses a different helper. Re-verify before touching it.
+- The repository still uses `data/mcr_db.json` for general application state.
+  This pass does **not** claim that every MCR table has moved to PostgreSQL.
+- Business profiles now have a real PostgreSQL persistence path when a valid
+  `DATABASE_URL` is configured. `business_profiles` stores the profile fields
+  used by settings, including emergency keywords, intake question, CRM webhook
+  settings, demo status and average ticket. Idempotent `ALTER TABLE ... ADD
+  COLUMN IF NOT EXISTS` statements upgrade databases created by older releases.
+- `scripts/migrate-to-postgres.ts` now imports those profile values from the JSON
+  store, not only the business name, trade and phone numbers.
+- New signup waits for the account and its profile to reach PostgreSQL. Profile
+  saves update the database first, then refresh the in-memory/file copy. A failed
+  database save returns an error and does not change the local profile or claim
+  success.
+- Authenticated tenant requests load the current profile from PostgreSQL into the
+  request process before reading it. Operator fleet and tenant-specific actions
+  hydrate the profiles they use; Twilio voice/SMS and CRM webhook handlers also
+  read the saved profile.
+- With no valid PostgreSQL configuration, local development still uses the JSON
+  file store.
+
+**Business-hours decision:** do not add a weekly schedule or new after-hours
+messaging behavior yet. This changes when customer texts and calls are handled,
+so it needs product rules and testing beyond a storage-only change. The Settings
+page now says plainly that weekly hours and separate after-hours messages are
+unavailable; the misleading toggle and save button are gone, and the API rejects
+those old fields. The existing `business_hours` SQL table remains unused; no
+hours are stored or applied.
 
 ---
 
@@ -254,9 +266,9 @@ The production build of this branch is running on port **3100**.
 
 | Surface | URL | Session |
 |---|---|---|
-| Tenant sign-in | `/login` | demo credentials shown (this env sets `DEMO_MODE=true`) |
+| Tenant sign-in | `/login` | demo credentials shown (the ignored preview `.env.local` sets `MCR_DEMO_MODE=true`) |
 | Operator sign-in | `/operator-login` | `ADMIN_PASSWORD` from `.env.local` |
-| Dashboard | `/dashboard` | Apex owner |
+| Dashboard | `/dashboard` | CoolBreeze owner |
 | Settings | `/dashboard/settings` | check Hours, Intake, TCPA, Billing tabs |
 | Billing | `/dashboard/billing` | 68 / 200 calls, live-payments notice |
 | Jobs | `/dashboard/jobs` | activity timeline, dialog a11y, CSV export |
@@ -412,7 +424,32 @@ measure 200+ pairs under both thresholds, and the contrast maths for each fixed
 pair is re-derived independently so a palette regression is caught even if the
 script is weakened.
 
-## 12. Recommended follow-ups (not done)
+
+---
+
+## 12. Profile persistence and business-hours decision
+
+The recommendation was to make tenant profile settings durable wherever MCR is
+configured with PostgreSQL, while keeping the existing JSON store as the local
+fallback. This pass implements that limited guarantee end to end:
+
+1. Added the missing profile columns and safe upgrades for existing databases.
+2. Expanded the file-to-PostgreSQL migration to copy the full profile.
+3. Added account/profile persistence for new signups and awaited writes for
+   tenant settings, CRM webhook configuration and operator forwarding changes.
+4. Hydrated profiles from PostgreSQL before tenant API, operator fleet/tenant
+   actions, and external telephony/webhook handlers read the synchronous cache.
+5. Added tests proving that a failed database write does not update the local
+   profile or return a successful save.
+
+The other decision was to **not** build calendar-aware business hours yet. The
+existing Settings tab suggested an after-hours message could be customized, but
+the runtime never used those fields. That control was removed instead of making
+an unreviewed change to customer messaging/routing. The tab now explains what
+works today and what is unavailable. A future business-hours feature needs an
+explicit product rule before storage or routing is added.
+
+## 13. Recommended follow-ups (not done)
 
 1. **Pick one support address.** `COMPANY_INFO.email` (`support@getmcr.com`) now
    wins everywhere except the privacy policy's `privacy@mcr-recovery.com`.
@@ -420,16 +457,15 @@ script is weakened.
 2. **Decide the demo-credentials policy for production.** Either set
    `MCR_DEMO_MODE=true` on staging, or accept that staging sign-in needs real
    seeded credentials.
-3. **PostgreSQL profile persistence.** Either add `business_profiles` SQL and the
-   missing columns, or document in the UI that profile settings are file-backed
-   only.
+3. ~~**PostgreSQL profile persistence.**~~ Done in §12 for business profiles
+   only; the rest of application state remains file-backed unless separately
+   migrated.
 4. ~~**Modal focus management** — trap focus and restore it on close.~~
    **Done** in §11.2 (`7bc7ceb`).
 5. ~~**Colour-contrast audit** of the operator console.~~ **Done** in §11.3
    (`a5dcf05`), 15 pairs fixed, now enforced by `CONTRAST-1/2/3`.
-6. **Business-hours storage**, if day-of-week routing is actually wanted: the
-   `business_hours` table exists in `src/db/schema.sql:94` but has no repository
-   method and no consumer.
+6. **Weekly business-hour scheduling** remains unavailable by design for now;
+   define the operational rules before adding a schedule or after-hours messages.
 7. **Outbound email transport**, if the weekly digest or a self-service
    password reset is ever wanted. `EmailService.hasTransport()` is the single
    switch; set `SMTP_URL` (or `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /

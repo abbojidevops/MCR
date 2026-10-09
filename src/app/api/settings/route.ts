@@ -55,8 +55,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            'Forbidden: one or more submitted fields are not tenant-editable. ' +
-            'Tenant identity, demo flags, and registered legal details are managed by the platform operator.',
+            'Forbidden: one or more submitted fields are not available for tenant editing. ' +
+            'Only the fields listed below can be changed from this screen.',
           rejectedFields: rejected,
           editableFields: TENANT_EDITABLE_PROFILE_FIELDS,
         },
@@ -71,7 +71,16 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const updatedProfile = db.updateBusinessProfile(accountId, permitted as any);
+    let updatedProfile;
+    try {
+      updatedProfile = await db.updateBusinessProfilePersistent(accountId, permitted as any);
+    } catch (err: any) {
+      console.error('[Settings profile persistence failed]', err?.message || err);
+      return NextResponse.json(
+        { error: 'Could not save your settings to persistent storage. Your changes were not saved.' },
+        { status: 503 }
+      );
+    }
     if (!updatedProfile) {
       return notFoundResponse();
     }
