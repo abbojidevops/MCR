@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ShieldAlert,
@@ -117,6 +117,19 @@ export default function RiskRegisterPage() {
     },
   ]);
 
+  const counts = useMemo(() => {
+    const highImpact = risks.filter(
+      (r) => r.impact === 'High' || r.impact === 'Critical'
+    ).length;
+    return {
+      total: risks.length,
+      highImpact,
+      mitigated: risks.filter((r) => r.status === 'Mitigated').length,
+      monitoring: risks.filter((r) => r.status === 'Monitoring').length,
+      active: risks.filter((r) => r.status === 'Active').length,
+    };
+  }, [risks]);
+
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6 sm:p-10">
       <div className="mx-auto max-w-7xl space-y-8">
@@ -127,8 +140,10 @@ export default function RiskRegisterPage() {
               <ShieldAlert className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">SaaS Risk Register & Mitigation Matrix</h1>
-              <span className="text-xs text-slate-400">Section 62 Formal Risk Governance Tracker</span>
+              <h1 className="text-xl font-bold tracking-tight">SaaS Risk Register &amp; Mitigation Matrix</h1>
+              <span className="text-xs text-slate-400">
+                Manually maintained internal planning register — not live system telemetry
+              </span>
             </div>
           </div>
 
@@ -144,20 +159,26 @@ export default function RiskRegisterPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
             <span className="text-xs font-medium text-slate-400">Total Tracked Risks</span>
-            <div className="mt-2 text-3xl font-extrabold text-white">{risks.length}</div>
-            <div className="mt-1 text-xs text-emerald-400">100% Mitigations Architected</div>
+            <div className="mt-2 text-3xl font-extrabold text-white">{counts.total}</div>
+            <div className="mt-1 text-xs text-slate-400">
+              {counts.mitigated} mitigated · {counts.monitoring} monitoring · {counts.active} active
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
             <span className="text-xs font-medium text-slate-400">High / Critical Impact Risks</span>
-            <div className="mt-2 text-3xl font-extrabold text-amber-400">6</div>
-            <div className="mt-1 text-xs text-slate-400">Safeguards actively implemented</div>
+            <div className="mt-2 text-3xl font-extrabold text-amber-400">{counts.highImpact}</div>
+            <div className="mt-1 text-xs text-slate-400">
+              Status is self-assessed by the register owner, not verified by the platform.
+            </div>
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-            <span className="text-xs font-medium text-slate-400">Concierge Validation Gate</span>
-            <div className="mt-2 text-3xl font-extrabold text-amber-400">Pending (0/3)</div>
-            <div className="mt-1 text-xs text-slate-400">0 paying pilots (pre-launch phase)</div>
+            <span className="text-xs font-medium text-slate-400">Register Last Reviewed</span>
+            <div className="mt-2 text-3xl font-extrabold text-slate-300">Manual</div>
+            <div className="mt-1 text-xs text-slate-400">
+              Update the dates and statuses in this file as the programme evolves.
+            </div>
           </div>
         </div>
 

@@ -27,8 +27,11 @@ import {
   Key,
   Lock,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { BusinessProfile, CannedReply, TradeKey } from '@/types';
+import { COMPANY_INFO } from '@/lib/constants';
+import { TRADE_TEMPLATES } from '@/lib/trade-templates';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'profile' | 'hours' | 'intake' | 'canned' | 'integrations' | 'compliance' | 'billing'>('profile');
@@ -40,6 +43,9 @@ export default function SettingsPage() {
   const [newShortcut, setNewShortcut] = useState('');
   const [newBody, setNewBody] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('https://hooks.zapier.com/hooks/catch/sample/mcr');
   const [crmWebhookUrl, setCrmWebhookUrl] = useState('');
@@ -49,29 +55,32 @@ export default function SettingsPage() {
   const [isTestingWebhook, setIsTestingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState<any>(null);
 
-  // Business Hours & After-Hours State
-  const [afterHoursEnabled, setAfterHoursEnabled] = useState(true);
-  const [afterHoursMessage, setAfterHoursMessage] = useState(
-    'Thanks for calling Apex Plumbing! Our office is closed for the evening. If you have an active leak or urgent emergency, reply YES and we will page our on-call technician immediately.'
-  );
-  const [openTime, setOpenTime] = useState('07:00');
-  const [closeTime, setCloseTime] = useState('18:00');
-
   // Intake Flow Settings
-  const [emergencyKeywordAlerts, setEmergencyKeywordAlerts] = useState(true);
-  const [collectAddress, setCollectAddress] = useState(true);
-  const [collectPhotos, setCollectPhotos] = useState(true);
   const [customTradeQuestion, setCustomTradeQuestion] = useState(
     'What type of plumbing issue are you experiencing today?'
   );
   const [customEmergencyKeywords, setCustomEmergencyKeywords] = useState<string[]>([]);
   const [newCustomKeyword, setNewCustomKeyword] = useState('');
   const [isSavingIntake, setIsSavingIntake] = useState(false);
-  const [isSavingHours, setIsSavingHours] = useState(false);
+
+  const showToast = (message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const showToastError = (message: string) => {
+    setToastError(message);
+  };
 
   const fetchSettings = async () => {
     try {
+      setLoading(true);
+      setLoadError(null);
       const res = await fetch('/api/settings');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load settings (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.profile) {
         setProfile(data.profile);
@@ -80,12 +89,6 @@ export default function SettingsPage() {
         }
         if (data.profile.custom_intake_question) {
           setCustomTradeQuestion(data.profile.custom_intake_question);
-        }
-        if (data.profile.after_hours_message) {
-          setAfterHoursMessage(data.profile.after_hours_message);
-        }
-        if (data.profile.after_hours_enabled !== undefined) {
-          setAfterHoursEnabled(data.profile.after_hours_enabled);
         }
         if (data.profile.crm_webhook_url) {
           setCrmWebhookUrl(data.profile.crm_webhook_url);
@@ -101,14 +104,19 @@ export default function SettingsPage() {
       if (data.phoneNumbers) setPhoneNumbers(data.phoneNumbers);
 
       const crRes = await fetch('/api/canned-replies');
+      if (!crRes.ok) throw new Error('Failed to load canned replies.');
       const crData = await crRes.json();
       if (crData.cannedReplies) setCannedReplies(crData.cannedReplies);
 
       const bRes = await fetch('/api/billing');
+      if (!bRes.ok) throw new Error('Failed to load billing status.');
       const bData = await bRes.json();
       setBillingInfo(bData);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'Unable to load settings.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -129,40 +137,20 @@ export default function SettingsPage() {
           },
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setToast('Intake qualification sequence and custom keywords saved.');
-        setTimeout(() => setToast(null), 3000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setToastError(
+          data?.error ||
+            `Could not save the intake settings (HTTP ${res.status}). Your changes were not saved.`
+        );
+        return;
       }
-    } catch (err) {
+      showToast('Intake qualification sequence and custom keywords saved.');
+    } catch (err: any) {
       console.error(err);
+      setToastError(err?.message || 'Network error — your changes were not saved.');
     } finally {
       setIsSavingIntake(false);
-    }
-  };
-
-  const handleSaveHours = async () => {
-    setIsSavingHours(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          updates: {
-            after_hours_enabled: afterHoursEnabled,
-            after_hours_message: afterHoursMessage,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setToast('Operating hours and after-hours text-back saved.');
-        setTimeout(() => setToast(null), 3000);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSavingHours(false);
     }
   };
 
@@ -198,13 +186,18 @@ export default function SettingsPage() {
           },
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setToast('Business settings successfully saved.');
-        setTimeout(() => setToast(null), 3000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setToastError(
+          data?.error ||
+            `Could not save the business profile (HTTP ${res.status}). Your changes were not saved.`
+        );
+        return;
       }
-    } catch (err) {
+      showToast('Business settings successfully saved.');
+    } catch (err: any) {
       console.error(err);
+      setToastError(err?.message || 'Network error — your changes were not saved.');
     } finally {
       setIsSaving(false);
     }
@@ -224,17 +217,21 @@ export default function SettingsPage() {
           bodyText: newBody,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setCannedReplies([...cannedReplies, data.cannedReply]);
-        setNewTitle('');
-        setNewShortcut('');
-        setNewBody('');
-        setToast('New canned reply template added.');
-        setTimeout(() => setToast(null), 3000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setToastError(
+          data?.error || `Could not add the canned reply (HTTP ${res.status}). Please try again.`
+        );
+        return;
       }
-    } catch (err) {
+      setCannedReplies([...cannedReplies, data.cannedReply]);
+      setNewTitle('');
+      setNewShortcut('');
+      setNewBody('');
+      showToast('New canned reply template added.');
+    } catch (err: any) {
       console.error(err);
+      setToastError(err?.message || 'Network error — the canned reply was not saved.');
     }
   };
 
@@ -253,13 +250,18 @@ export default function SettingsPage() {
           },
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        setToast('CRM Webhook settings and HMAC security configuration saved.');
-        setTimeout(() => setToast(null), 3000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        setToastError(
+          data?.error ||
+            `Could not save the webhook settings (HTTP ${res.status}). Your changes were not saved.`
+        );
+        return;
       }
-    } catch (err) {
+      showToast('CRM Webhook settings and HMAC security configuration saved.');
+    } catch (err: any) {
       console.error(err);
+      setToastError(err?.message || 'Network error — your changes were not saved.');
     } finally {
       setIsSavingWebhook(false);
     }
@@ -296,10 +298,17 @@ export default function SettingsPage() {
           secret: crmWebhookSecret.trim() || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setWebhookResult({
+          success: false,
+          error: data?.error || `Test webhook failed (HTTP ${res.status}).`,
+        });
+        return;
+      }
       setWebhookResult(data);
     } catch (err: any) {
-      setWebhookResult({ success: false, error: err.message });
+      setWebhookResult({ success: false, error: err?.message || 'Network error sending test webhook.' });
     } finally {
       setIsTestingWebhook(false);
     }
@@ -317,14 +326,72 @@ export default function SettingsPage() {
       </div>
 
       {toast && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 flex items-center gap-2">
-          <CheckCircle className="h-4 w-4 text-emerald-600" /> {toast}
+        <div
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 flex items-center gap-2"
+        >
+          <CheckCircle className="h-4 w-4 text-emerald-600" aria-hidden="true" />{' '}
+          <span className="flex-1">{toast}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            aria-label="Dismiss notification"
+            className="rounded p-0.5 text-emerald-700 hover:bg-emerald-100"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {toastError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800 flex items-center gap-2"
+        >
+          <AlertTriangle className="h-4 w-4 text-rose-600" aria-hidden="true" />{' '}
+          <span className="flex-1">{toastError}</span>
+          <button
+            type="button"
+            onClick={() => setToastError(null)}
+            aria-label="Dismiss error"
+            className="rounded p-0.5 text-rose-700 hover:bg-rose-100"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {loadError && (
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Settings could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchSettings}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {loading && !profile && !loadError && (
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-10 w-full animate-pulse rounded-xl bg-slate-200" />
+          <div className="h-64 animate-pulse rounded-2xl bg-slate-200" />
+          <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
         </div>
       )}
 
       {/* Settings Navigation Tabs */}
       <div className="flex overflow-x-auto border-b border-slate-200 gap-1 text-xs font-semibold">
         <button
+          type="button"
+          aria-current={activeTab === 'profile' ? 'page' : undefined}
           onClick={() => setActiveTab('profile')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'profile'
@@ -336,6 +403,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'hours' ? 'page' : undefined}
           onClick={() => setActiveTab('hours')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'hours'
@@ -347,6 +416,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'intake' ? 'page' : undefined}
           onClick={() => setActiveTab('intake')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'intake'
@@ -358,6 +429,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'canned' ? 'page' : undefined}
           onClick={() => setActiveTab('canned')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'canned'
@@ -369,6 +442,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'integrations' ? 'page' : undefined}
           onClick={() => setActiveTab('integrations')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'integrations'
@@ -380,6 +455,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'compliance' ? 'page' : undefined}
           onClick={() => setActiveTab('compliance')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'compliance'
@@ -391,6 +468,8 @@ export default function SettingsPage() {
         </button>
 
         <button
+          type="button"
+          aria-current={activeTab === 'billing' ? 'page' : undefined}
           onClick={() => setActiveTab('billing')}
           className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 whitespace-nowrap transition ${
             activeTab === 'billing'
@@ -541,107 +620,34 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* ---------------- TAB 2: BUSINESS HOURS & AFTER-HOURS ---------------- */}
+      {/* ---------------- TAB 2: BUSINESS HOURS ---------------- */}
       {activeTab === 'hours' && (
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
               <Clock className="h-4 w-4 text-blue-600" />
-              <h2 className="text-sm font-bold text-slate-900">Standard Operating Schedule</h2>
+              <h2 className="text-sm font-bold text-slate-900">Business Hours &amp; Routing</h2>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Standard Opening Time</label>
-                <input
-                  type="time"
-                  value={openTime}
-                  onChange={(e) => setOpenTime(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
-                />
-              </div>
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Standard Closing Time</label>
-                <input
-                  type="time"
-                  value={closeTime}
-                  onChange={(e) => setCloseTime(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs"
-                />
-              </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900" role="status">
+              <div className="font-bold text-amber-950">Weekly business-hour scheduling is not available</div>
+              <p className="mt-1 leading-relaxed">
+                MCR does not store your weekly opening hours or use them to change call routing or text-back messages.
+                There is no separate after-hours message setting today, so this page has no schedule to save.
+              </p>
             </div>
 
-            <div className="space-y-2 text-xs">
-              <div className="font-semibold text-slate-700">Weekly Schedule</div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, idx) => (
-                  <div
-                    key={day}
-                    className={`rounded-xl border p-2.5 text-center ${
-                      idx < 5
-                        ? 'border-blue-200 bg-blue-50/50 text-blue-900'
-                        : idx === 5
-                        ? 'border-slate-200 bg-slate-50 text-slate-700'
-                        : 'border-slate-100 bg-slate-50 text-slate-400'
-                    }`}
-                  >
-                    <div className="font-bold">{day}</div>
-                    <div className="text-[10px] mt-0.5">
-                      {idx < 5 ? `${openTime} - ${closeTime}` : idx === 5 ? '8:00 AM - 1:00 PM' : 'Closed (After-Hours)'}
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
+              <h3 className="font-bold text-slate-900">What MCR does today</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
+                <li>Missed-call text-backs are sent as soon as possible, subject to the caller&apos;s local TCPA quiet-hours window (8:00 AM–9:00 PM).</li>
+                <li>Messages outside that window are held until the next permitted time.</li>
+                <li>Emergency keywords can still trigger owner alerts at any hour.</li>
+              </ul>
+              <p className="mt-3 leading-relaxed">
+                Your operating timezone is used for platform quiet-hour calculations and scheduled reports. It does not create a weekly business-hours schedule.
+              </p>
             </div>
-
-            {/* After-Hours Behavior */}
-            <div className="border-t border-slate-100 pt-4 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900">After-Hours Auto Text-Back</div>
-                  <p className="text-slate-500 text-[11px]">
-                    Send a modified message when calls are missed outside of normal working hours.
-                  </p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={afterHoursEnabled}
-                  onChange={(e) => setAfterHoursEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-              </div>
-
-              {afterHoursEnabled && (
-                <div className="mt-2 space-y-2">
-                  <label className="block font-medium text-slate-700 text-[11px]">
-                    After-Hours Response Message
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={afterHoursMessage}
-                    onChange={(e) => setAfterHoursMessage(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 p-3 text-xs focus:ring-1 focus:ring-blue-500"
-                  />
-                  <div className="text-[10px] text-slate-400">
-                    Complies with TCPA regulations by honoring opt-outs and providing clear emergency escalation instructions.
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={handleSaveHours}
-              disabled={isSavingHours}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
-            >
-              {isSavingHours ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              {isSavingHours ? 'Saving...' : 'Save Hours Settings'}
-            </button>
           </div>
         </div>
       )}
@@ -682,15 +688,14 @@ export default function SettingsPage() {
               <div className="rounded-xl border border-slate-200 p-3.5 space-y-2">
                 <div className="flex items-center justify-between font-bold text-slate-800">
                   <span>Question 2: Emergency Status Keyword Detection</span>
-                  <input
-                    type="checkbox"
-                    checked={emergencyKeywordAlerts}
-                    onChange={(e) => setEmergencyKeywordAlerts(e.target.checked)}
-                    className="h-4 w-4 rounded text-blue-600"
-                  />
+                  <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">
+                    Always Enabled
+                  </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Automatically flags messages with &quot;burst&quot;, &quot;flooding&quot;, &quot;urgent&quot;, &quot;no heat&quot;, &quot;smoke&quot;, or &quot;leaking&quot; as emergencies and triggers high-priority alerts.
+                  Every reply is scanned against the emergency keywords for your trade, plus any custom
+                  keywords you add below. A match flags the lead as an emergency and escalates an alert to
+                  your owner cell phone immediately.
                 </p>
 
                 {/* Custom Emergency Keywords Editor */}
@@ -746,35 +751,31 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Question 3: Address collection */}
-              <div className="rounded-xl border border-slate-200 p-3.5 space-y-2">
+              {/* Questions 3 & 4: fixed by trade template */}
+              <div className="rounded-xl border border-slate-200 p-3.5 space-y-3">
                 <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>Question 3: Service Address Collection</span>
-                  <input
-                    type="checkbox"
-                    checked={collectAddress}
-                    onChange={(e) => setCollectAddress(e.target.checked)}
-                    className="h-4 w-4 rounded text-blue-600"
-                  />
+                  <span>Questions 3 &amp; 4: Service Address &amp; Photo Request</span>
+                  <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-semibold">
+                    Set By Trade
+                  </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Prompts the customer: &quot;What is the service address or neighborhood so our technician can check availability?&quot;
+                  These two steps are part of the fixed sequence for your selected trade and cannot be
+                  toggled off. Here is the exact sequence MCR sends today:
                 </p>
-              </div>
-
-              {/* Question 4: Photo / MMS collection */}
-              <div className="rounded-xl border border-slate-200 p-3.5 space-y-2">
-                <div className="flex items-center justify-between font-bold text-slate-800">
-                  <span>Question 4: Photo Upload Request (MMS)</span>
-                  <input
-                    type="checkbox"
-                    checked={collectPhotos}
-                    onChange={(e) => setCollectPhotos(e.target.checked)}
-                    className="h-4 w-4 rounded text-blue-600"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Allows homeowners to text back photos of damaged equipment, model tags, or leaks directly into the conversation.
+                <ol className="space-y-2">
+                  {(TRADE_TEMPLATES[profile?.trade || 'plumbing']?.questions || []).map((q, i) => (
+                    <li
+                      key={q.key}
+                      className="rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-[11px] text-slate-700"
+                    >
+                      <span className="font-bold text-slate-900">Step {i + 1}:</span> {q.text}
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-[10px] text-slate-400">
+                  Photo steps are sent as an MMS-capable prompt; the customer may skip any step by
+                  replying freely, and MCR continues the conversation either way.
                 </p>
               </div>
             </div>
@@ -1103,8 +1104,8 @@ export default function SettingsPage() {
                 <ShieldCheck className="h-4 w-4 text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">TCPA &amp; A2P 10DLC Compliance Guardrails</h2>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                100% Protected
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-200">
+                Guardrails Active
               </span>
             </div>
 
@@ -1129,12 +1130,13 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-start gap-3">
-                <Clock className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 flex items-start gap-3">
+                <Clock className="h-4 w-4 text-slate-500 mt-0.5 shrink-0" aria-hidden="true" />
                 <div>
-                  <div className="font-bold text-amber-950">A2P 10DLC Registration In Progress</div>
-                  <p className="text-[11px] text-amber-900 mt-0.5">
-                    Brand &amp; campaign registration awaiting carrier approval (3 days to 4 weeks). Voice alerts active · Outbound text-back live upon carrier approval.
+                  <div className="font-bold text-slate-900">Quiet Hours</div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Text-backs are held outside 8:00 AM – 9:00 PM in the caller&apos;s local timezone and
+                    released at the next permitted time.
                   </p>
                 </div>
               </div>
@@ -1145,7 +1147,7 @@ export default function SettingsPage() {
                 href="/dashboard/compliance"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-4 py-2 font-bold text-slate-700 hover:bg-slate-50"
               >
-                Open Full TCPA Compliance Audit Log <ExternalLink className="h-3.5 w-3.5" />
+                View A2P 10DLC Registration Status <ExternalLink className="h-3.5 w-3.5" />
               </Link>
             </div>
           </div>
@@ -1161,9 +1163,15 @@ export default function SettingsPage() {
                 <CreditCard className="h-4 w-4 text-blue-600" />
                 <h2 className="text-sm font-bold text-slate-900">Subscription Plan &amp; Monthly Usage</h2>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-                Active Subscription
-              </span>
+              {billingInfo?.currentPlan?.id ? (
+                <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                  Current Plan: {billingInfo.currentPlan.name}
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-600 border border-slate-200">
+                  Plan status unavailable
+                </span>
+              )}
             </div>
 
             {/* 80% Usage Warning Notice if applicable */}
@@ -1173,7 +1181,10 @@ export default function SettingsPage() {
                 <div>
                   <div className="font-bold text-amber-950">Approaching Monthly Call Cap (80%+)</div>
                   <p className="mt-0.5 text-amber-800">
-                    {billingInfo.overageNotice || `You've used ${billingInfo?.usage?.calls_processed || 32} of ${billingInfo?.currentPlan?.call_cap || 40} calls this month. Additional calls are $0.35 each, or upgrade to Pro for $149/mo (200 calls).`}
+                    {billingInfo.overageNotice ||
+                      `You've used ${billingInfo?.usage?.calls_count ?? 0} of ${
+                        billingInfo?.currentPlan?.included_calls ?? 0
+                      } calls this month.`}
                   </p>
                 </div>
               </div>
@@ -1184,21 +1195,26 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-slate-700">Monthly Call Volume Usage</span>
                 <span className="font-mono text-slate-500">
-                  <strong>{billingInfo?.usage?.calls_processed || 68}</strong> of {billingInfo?.currentPlan?.call_cap || 600} included calls
+                  <strong>{billingInfo?.usage?.calls_count ?? '—'}</strong> of{' '}
+                  {billingInfo?.currentPlan?.included_calls ?? '—'} included calls
                 </span>
               </div>
               <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
                 <div
                   className={`h-full transition-all ${
-                    (billingInfo?.usagePercent || 11.3) >= 80 ? 'bg-amber-500' : 'bg-blue-600'
+                    (billingInfo?.usagePercent ?? 0) >= 80 ? 'bg-amber-500' : 'bg-blue-600'
                   }`}
-                  style={{ width: `${Math.min(100, billingInfo?.usagePercent || 11.3)}%` }}
+                  style={{ width: `${Math.min(100, billingInfo?.usagePercent ?? 0)}%` }}
                 ></div>
               </div>
               <div className="flex items-center justify-between text-[11px] text-slate-500">
                 <span>Soft Cap Protection: Automated text-backs never halt mid-emergency</span>
                 <span className="font-semibold text-slate-700">
-                  Overage Rate: ${billingInfo?.currentPlan?.id === 'starter' ? '0.35' : billingInfo?.currentPlan?.id === 'pro' ? '0.25' : '0.15'}/call
+                  Overage Rate: $
+                  {billingInfo?.currentPlan?.id && billingInfo?.planConfig?.[billingInfo.currentPlan.id]
+                    ? billingInfo.planConfig[billingInfo.currentPlan.id].overageRate.toFixed(2)
+                    : '—'}
+                  /call
                 </span>
               </div>
             </div>
@@ -1248,7 +1264,11 @@ export default function SettingsPage() {
               }`}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-slate-900">Business</h3>
-                  <span className="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[9px] font-bold">CURRENT</span>
+                  {billingInfo?.currentPlan?.id === 'business' && (
+                    <span className="rounded bg-emerald-100 text-emerald-800 px-1.5 py-0.5 text-[9px] font-bold">
+                      CURRENT
+                    </span>
+                  )}
                 </div>
                 <div>
                   <div className="text-xl font-black text-slate-900 mt-1">$299<span className="text-xs font-normal text-slate-500">/mo</span></div>
@@ -1262,7 +1282,7 @@ export default function SettingsPage() {
                 </ul>
                 <div className="pt-2">
                   <a
-                    href="mailto:support@mcr-recovery.com?subject=Business%20Rollout%20Consultation"
+                    href={`mailto:${COMPANY_INFO.email}?subject=Business%20Rollout%20Consultation`}
                     className="block text-center rounded-lg bg-slate-900 text-white font-bold py-2 text-xs hover:bg-slate-800"
                   >
                     Schedule Rollout

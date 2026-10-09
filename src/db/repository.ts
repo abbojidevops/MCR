@@ -85,6 +85,134 @@ interface DatabaseState {
 const DATA_DIR = process.env.MCR_DATA_DIR || path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'mcr_db.json');
 
+const BUSINESS_PROFILE_UPSERT_SQL = `
+  INSERT INTO business_profiles (
+    id, account_id, business_name, legal_name, trade, is_demo, ein, address, city, state, zip,
+    timezone, website, emergency_phone, notification_phone, carrier_name, forwarding_configured,
+    average_ticket, custom_emergency_keywords, custom_intake_question, crm_webhook_url,
+    crm_webhook_secret, crm_webhook_events, created_at, updated_at
+  ) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+    $18, $19::jsonb, $20, $21, $22, $23::jsonb, $24, $25
+  )
+  ON CONFLICT (account_id) DO UPDATE SET
+    business_name = EXCLUDED.business_name,
+    legal_name = EXCLUDED.legal_name,
+    trade = EXCLUDED.trade,
+    is_demo = EXCLUDED.is_demo,
+    ein = EXCLUDED.ein,
+    address = EXCLUDED.address,
+    city = EXCLUDED.city,
+    state = EXCLUDED.state,
+    zip = EXCLUDED.zip,
+    timezone = EXCLUDED.timezone,
+    website = EXCLUDED.website,
+    emergency_phone = EXCLUDED.emergency_phone,
+    notification_phone = EXCLUDED.notification_phone,
+    carrier_name = EXCLUDED.carrier_name,
+    forwarding_configured = EXCLUDED.forwarding_configured,
+    average_ticket = EXCLUDED.average_ticket,
+    custom_emergency_keywords = EXCLUDED.custom_emergency_keywords,
+    custom_intake_question = EXCLUDED.custom_intake_question,
+    crm_webhook_url = EXCLUDED.crm_webhook_url,
+    crm_webhook_secret = EXCLUDED.crm_webhook_secret,
+    crm_webhook_events = EXCLUDED.crm_webhook_events,
+    updated_at = EXCLUDED.updated_at
+`;
+
+const ACCOUNT_UPSERT_SQL = `
+  INSERT INTO accounts (id, name, slug, status, plan_tier, trial_ends_at, created_at, updated_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name,
+    slug = EXCLUDED.slug,
+    status = EXCLUDED.status,
+    plan_tier = EXCLUDED.plan_tier,
+    trial_ends_at = EXCLUDED.trial_ends_at,
+    updated_at = EXCLUDED.updated_at
+`;
+
+const ACCOUNT_ENSURE_SQL = `
+  INSERT INTO accounts (id, name, slug, status, plan_tier, trial_ends_at, created_at, updated_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+  ON CONFLICT (id) DO NOTHING
+`;
+
+const BUSINESS_PROFILE_MUTABLE_COLUMNS = new Set<string>([
+  'business_name', 'legal_name', 'trade', 'is_demo', 'ein', 'address', 'city', 'state', 'zip',
+  'timezone', 'website', 'emergency_phone', 'notification_phone', 'carrier_name',
+  'forwarding_configured', 'average_ticket', 'custom_emergency_keywords',
+  'custom_intake_question', 'crm_webhook_url', 'crm_webhook_secret', 'crm_webhook_events',
+]);
+const BUSINESS_PROFILE_JSON_COLUMNS = new Set(['custom_emergency_keywords', 'crm_webhook_events']);
+
+function jsonStringArray(value: unknown, fallback: string[] = []): string {
+  const values = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : fallback;
+  return JSON.stringify(values);
+}
+
+function parsePostgresStringArray(value: unknown): string[] | undefined {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!Array.isArray(parsed)) return undefined;
+  return parsed.filter((item): item is string => typeof item === 'string');
+}
+
+function postgresTimestampToIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string' && value) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function mapPostgresBusinessProfile(row: any): BusinessProfile {
+  const profile: BusinessProfile = {
+    id: String(row.id),
+    account_id: String(row.account_id),
+    business_name: String(row.business_name || ''),
+    trade: (row.trade || 'plumbing') as TradeKey,
+    timezone: String(row.timezone || 'America/New_York'),
+    forwarding_configured: Boolean(row.forwarding_configured),
+    created_at: postgresTimestampToIso(row.created_at),
+    updated_at: postgresTimestampToIso(row.updated_at),
+  };
+
+  const stringFields: (keyof BusinessProfile)[] = [
+    'legal_name', 'ein', 'address', 'city', 'state', 'zip', 'website',
+    'emergency_phone', 'notification_phone', 'carrier_name', 'custom_intake_question',
+    'crm_webhook_url', 'crm_webhook_secret',
+  ];
+  for (const field of stringFields) {
+    const value = row[field];
+    if (value !== null && value !== undefined) {
+      (profile as any)[field] = String(value);
+    }
+  }
+
+  if (row.is_demo !== null && row.is_demo !== undefined) profile.is_demo = Boolean(row.is_demo);
+  if (row.average_ticket !== null && row.average_ticket !== undefined) {
+    const averageTicket = Number(row.average_ticket);
+    if (Number.isFinite(averageTicket)) profile.average_ticket = averageTicket;
+  }
+
+  const customKeywords = parsePostgresStringArray(row.custom_emergency_keywords);
+  if (customKeywords) profile.custom_emergency_keywords = customKeywords;
+  const webhookEvents = parsePostgresStringArray(row.crm_webhook_events);
+  if (webhookEvents) profile.crm_webhook_events = webhookEvents;
+
+  return profile;
+}
+
 class DatabaseRepository {
   private state: DatabaseState;
   private initialized = false;
@@ -95,6 +223,7 @@ class DatabaseRepository {
    * than degrading to a console warning.
    */
   private lastPostgresPersistError: { operation: string; message: string; at: string } | null = null;
+  private pendingAccountProfileWrites = new Map<string, Promise<BusinessProfile | null>>();
 
   constructor() {
     this.state = this.getInitialState();
@@ -336,12 +465,235 @@ class DatabaseRepository {
     return this.state.profiles.find((p) => p.account_id === accountId);
   }
 
+  /**
+   * Refresh the in-memory profile from PostgreSQL when a tenant request starts.
+   * The file-backed profile remains the local/dev fallback when PostgreSQL is not
+   * configured or when a tenant has not yet been migrated to the profile table.
+   */
+  public async hydrateBusinessProfileFromPostgres(accountId: string): Promise<BusinessProfile | undefined> {
+    if (!this.isPostgresConfigured()) return this.getBusinessProfile(accountId);
+
+    const pool = getPostgresPool();
+    if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+
+    const result = await pool.query(
+      'SELECT * FROM business_profiles WHERE account_id = $1 LIMIT 1',
+      [accountId]
+    );
+    const row = result.rows?.[0];
+    if (!row) return this.getBusinessProfile(accountId);
+
+    const profile = mapPostgresBusinessProfile(row);
+    const existingIndex = this.state.profiles.findIndex((item) => item.account_id === accountId);
+    if (existingIndex >= 0) {
+      this.state.profiles[existingIndex] = profile;
+    } else {
+      this.state.profiles.push(profile);
+    }
+    return profile;
+  }
+
+  /** Load all persisted profiles for operator screens that show every tenant. */
+  public async hydrateAllBusinessProfilesFromPostgres(): Promise<void> {
+    if (!this.isPostgresConfigured()) return;
+
+    const pool = getPostgresPool();
+    if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+    const result = await pool.query('SELECT * FROM business_profiles');
+
+    for (const row of result.rows || []) {
+      const profile = mapPostgresBusinessProfile(row);
+      const existingIndex = this.state.profiles.findIndex((item) => item.account_id === profile.account_id);
+      if (existingIndex >= 0) this.state.profiles[existingIndex] = profile;
+      else this.state.profiles.push(profile);
+    }
+  }
+
+  /**
+   * Persist the account and its initial profile atomically before a new tenant
+   * is reported as onboarded. Existing synchronous createAccount callers
+   * also queue this write; API routes can await it for an honest success result.
+   */
+  public async persistAccountAndBusinessProfile(accountId: string): Promise<BusinessProfile | null> {
+    const pending = this.pendingAccountProfileWrites.get(accountId);
+    if (pending) return pending;
+
+    const account = this.getAccount(accountId);
+    const profile = this.getBusinessProfile(accountId);
+    if (!account || !profile) return null;
+
+    const write = (async () => {
+      if (this.isPostgresConfigured()) {
+        const pool = getPostgresPool();
+        if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query(ACCOUNT_UPSERT_SQL, [
+            account.id,
+            account.name,
+            account.slug,
+            account.status,
+            account.plan_tier,
+            account.trial_ends_at,
+            account.created_at,
+            account.updated_at,
+          ]);
+          await this.upsertBusinessProfileWithPool(client, profile);
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+      this.saveToFile();
+      return profile;
+    })().catch((err: any) => {
+      if (this.isPostgresConfigured()) {
+        this.recordPostgresPersistFailure(`persistAccountAndBusinessProfile(${accountId})`, err?.message);
+      }
+      throw err;
+    });
+
+    this.pendingAccountProfileWrites.set(accountId, write);
+    write.then(
+      () => {
+        if (this.pendingAccountProfileWrites.get(accountId) === write) {
+          this.pendingAccountProfileWrites.delete(accountId);
+        }
+      },
+      () => {
+        if (this.pendingAccountProfileWrites.get(accountId) === write) {
+          this.pendingAccountProfileWrites.delete(accountId);
+        }
+      }
+    );
+    return write;
+  }
+
+  /**
+   * Awaitable, fail-closed profile mutation for API routes. If PostgreSQL is
+   * configured, the change is committed there before the in-memory/file copy is
+   * changed; a failed database write is never reported as a successful save.
+   */
+  public async updateBusinessProfilePersistent(
+    accountId: string,
+    updates: Partial<BusinessProfile>
+  ): Promise<BusinessProfile | null> {
+    const pending = this.pendingAccountProfileWrites.get(accountId);
+    if (pending) await pending;
+
+    const currentProfile = this.getBusinessProfile(accountId);
+    if (!currentProfile) return null;
+
+    const updated: BusinessProfile = {
+      ...currentProfile,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (this.isPostgresConfigured()) {
+      const pool = getPostgresPool();
+      if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+      const account = this.getAccount(accountId);
+      if (!account) throw new Error('Cannot persist business profile without its tenant account');
+
+      try {
+        // Ensure the foreign-key parent exists without overwriting account status
+        // or plan changes owned by other parts of the application.
+        await pool.query(ACCOUNT_ENSURE_SQL, [
+          account.id,
+          account.name,
+          account.slug,
+          account.status,
+          account.plan_tier,
+          account.trial_ends_at,
+          account.created_at,
+          account.updated_at,
+        ]);
+
+        const fields = Object.entries(updates).filter(([field]) =>
+          BUSINESS_PROFILE_MUTABLE_COLUMNS.has(field)
+        );
+        const values: unknown[] = [accountId];
+        const assignments: string[] = [];
+        for (const [field, value] of fields) {
+          values.push(
+            BUSINESS_PROFILE_JSON_COLUMNS.has(field)
+              ? jsonStringArray(value)
+              : field === 'average_ticket'
+                ? (Number.isFinite(value) ? value : null)
+                : (value ?? null)
+          );
+          const cast = BUSINESS_PROFILE_JSON_COLUMNS.has(field) ? '::jsonb' : '';
+          assignments.push(`${field} = $${values.length}${cast}`);
+        }
+        values.push(updated.updated_at);
+        assignments.push(`updated_at = $${values.length}`);
+
+        const result = await pool.query(
+          `UPDATE business_profiles SET ${assignments.join(', ')} WHERE account_id = $1 RETURNING *`,
+          values
+        );
+        if (result.rows?.[0]) {
+          Object.assign(updated, mapPostgresBusinessProfile(result.rows[0]));
+        } else if (!result.rowCount) {
+          // A tenant imported from the file store may not have a profile row yet.
+          await this.upsertBusinessProfileWithPool(pool, updated);
+        }
+      } catch (err: any) {
+        this.recordPostgresPersistFailure(`updateBusinessProfile(${accountId})`, err?.message);
+        throw err;
+      }
+    }
+
+    const profileIndex = this.state.profiles.findIndex((item) => item.account_id === accountId);
+    if (profileIndex >= 0) this.state.profiles[profileIndex] = updated;
+    this.saveToFile();
+    return updated;
+  }
+
+  /** Synchronous file-store mutation retained for local unit fixtures. */
   public updateBusinessProfile(accountId: string, updates: Partial<BusinessProfile>): BusinessProfile | null {
     const profile = this.state.profiles.find((p) => p.account_id === accountId);
     if (!profile) return null;
     Object.assign(profile, updates, { updated_at: new Date().toISOString() });
     this.saveToFile();
     return profile;
+  }
+
+  private async upsertBusinessProfileWithPool(pool: any, profile: BusinessProfile): Promise<void> {
+    const defaultWebhookEvents = ['job.created', 'job.booked', 'job.updated'];
+    await pool.query(BUSINESS_PROFILE_UPSERT_SQL, [
+      profile.id,
+      profile.account_id,
+      profile.business_name,
+      profile.legal_name ?? null,
+      profile.trade,
+      profile.is_demo ?? false,
+      profile.ein ?? null,
+      profile.address ?? null,
+      profile.city ?? null,
+      profile.state ?? null,
+      profile.zip ?? null,
+      profile.timezone,
+      profile.website ?? null,
+      profile.emergency_phone ?? null,
+      profile.notification_phone ?? null,
+      profile.carrier_name ?? null,
+      profile.forwarding_configured ?? false,
+      Number.isFinite(profile.average_ticket) ? profile.average_ticket : null,
+      jsonStringArray(profile.custom_emergency_keywords),
+      profile.custom_intake_question ?? null,
+      profile.crm_webhook_url ?? null,
+      profile.crm_webhook_secret ?? null,
+      jsonStringArray(profile.crm_webhook_events, defaultWebhookEvents),
+      profile.created_at,
+      profile.updated_at,
+    ]);
   }
 
   public updateAccount(accountId: string, updates: Partial<Account>): Account | null {
@@ -448,35 +800,13 @@ class DatabaseRepository {
     this.state.subscriptions.push(subscription);
     this.state.usage.push(usage);
 
-    // Dual persistence: PostgreSQL sync if configured
-    if (this.isPostgresConfigured()) {
-      try {
-        const pool = getPostgresPool();
-        if (pool) {
-          pool.query(
-            `INSERT INTO accounts (id, name, slug, status, plan_tier, trial_ends_at, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, status = EXCLUDED.status, plan_tier = EXCLUDED.plan_tier;`,
-            [
-              account.id,
-              account.name,
-              account.slug,
-              account.status,
-              account.plan_tier,
-              account.trial_ends_at,
-              account.created_at,
-              account.updated_at,
-            ]
-          ).catch((err: any) => {
-            this.recordPostgresPersistFailure(`createAccount(${account.id})`, err?.message);
-          });
-        }
-      } catch (err: any) {
-        console.warn('[Postgres createAccount pool error]:', err?.message);
-      }
-    }
-
     this.saveToFile();
+
+    // Preserve the legacy synchronous API, but include the profile in its queued
+    // PostgreSQL write. User-facing signup routes await the same write below.
+    if (this.isPostgresConfigured()) {
+      void this.persistAccountAndBusinessProfile(account.id).catch(() => {});
+    }
     return { account, profile, phoneNumber };
   }
 

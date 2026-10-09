@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { verifySessionToken } from '@/lib/session';
+import AdminShell from './admin-shell';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -11,5 +12,5 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     notFound();
   }
 
-  return <>{children}</>;
+  return <AdminShell>{children}</AdminShell>;
 }

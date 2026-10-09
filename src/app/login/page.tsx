@@ -1,173 +1,56 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/session';
+import { describeDemoModeDisclosure, shouldExposeDemoCredentials } from '@/lib/demo-mode';
+import { safeNextPath } from '@/lib/safe-redirect';
+import LoginForm, { DemoCredentials } from './login-form';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+// Credentials are read per request so a redeploy can flip demo mode without a rebuild.
+export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/**
+ * Demonstration account credentials.
+ *
+ * These are ONLY rendered into the page when the deployment explicitly declares
+ * itself a demo/staging environment (see src/lib/demo-mode.ts). In a plain
+ * production deployment this screen renders no credential material at all.
+ */
+const DEMO_CREDENTIALS: DemoCredentials = {
+  email: 'demo@apexplumbing.com',
+  password: 'ApexDemo2026!Secure',
+  label: 'Demo Account Access',
+};
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ next?: string }>;
+}) {
+  const params = (searchParams ? await searchParams : {}) as { next?: string };
 
-    if (!email.trim()) {
-      setError('Email is required');
-      return;
-    }
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  const session = token ? verifySessionToken(token) : null;
 
-    if (!password) {
-      setError('Password is required');
-      return;
-    }
+  const fallback = session?.role === 'admin' ? '/admin' : '/dashboard';
 
-    setLoading(true);
+  // Already-authenticated visitors should never see the sign-in form — and if
+  // the middleware bounced them here from a specific page, honour ?next= so
+  // they land where they were originally headed.
+  if (session && session.accountId) {
+    redirect(safeNextPath(params.next, fallback));
+  }
 
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Failed to sign in. Please verify your credentials.');
-        setLoading(false);
-        return;
-      }
-
-      // Successful login - redirect to dashboard
-      router.push('/dashboard');
-    } catch {
-      setError('Network error. Unable to reach authentication service.');
-      setLoading(false);
-    }
-  };
-
-  const fillDemoCredentials = () => {
-    setEmail('demo@apexplumbing.com');
-    setPassword('ApexDemo2026!Secure');
-    setError(null);
-  };
+  const exposed = shouldExposeDemoCredentials();
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-slate-50 py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white font-extrabold text-xl shadow-md">
-            MCR
-          </div>
-        </div>
-        <h2 className="mt-4 text-center text-3xl font-extrabold tracking-tight text-slate-900">
-          Sign in to your account
-        </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Missed Call Recovery System & Lead Dispatch
-        </p>
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10">
-          {error && (
-            <div className="mb-6 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-              <AlertCircle className="h-5 w-5 flex-shrink-0 text-rose-500 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700">
-                Email address
-              </label>
-              <div className="relative mt-1.5">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Mail className="h-5 w-5" />
-                </div>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="owner@servicecompany.com"
-                  className="block w-full rounded-lg border border-slate-300 pl-10 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                Password
-              </label>
-              <div className="relative mt-1.5">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  className="block w-full rounded-lg border border-slate-300 pl-10 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-60"
-              >
-                {loading ? 'Verifying credentials...' : 'Sign In'}
-                {!loading && <ArrowRight className="h-4 w-4" />}
-              </button>
-            </div>
-          </form>
-
-          {/* Quick Demo Login Option */}
-          <div className="mt-6 border-t border-slate-100 pt-6">
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3.5 text-xs text-blue-900">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-blue-600" /> Demo Account Access
-                </span>
-                <button
-                  type="button"
-                  onClick={fillDemoCredentials}
-                  className="font-semibold text-blue-700 hover:text-blue-800 underline"
-                >
-                  Auto-fill
-                </button>
-              </div>
-              <p className="mt-1 text-slate-600">
-                demo@apexplumbing.com / ApexDemo2026!Secure
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center text-xs text-slate-500">
-            Don&apos;t have an account yet?{' '}
-            <Link href="/onboarding" className="font-semibold text-blue-600 hover:text-blue-700 underline">
-              Start Onboarding
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
+    <LoginForm
+      demoCredentials={exposed ? DEMO_CREDENTIALS : null}
+      demoDisclosureReason={
+        exposed
+          ? `Demo mode active: ${describeDemoModeDisclosure()}`
+          : 'Production deployment — demonstration credentials are not published.'
+      }
+    />
   );
 }

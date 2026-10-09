@@ -21,6 +21,7 @@ import {
   Tag,
   ShieldAlert,
   Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { Conversation, Message, CannedReply, JobCard } from '@/types';
 
@@ -46,6 +47,9 @@ export default function InboxPage() {
   const [isBridgingCall, setIsBridgingCall] = useState(false);
   const [bridgeCallStatus, setBridgeCallStatus] = useState<string | null>(null);
   const [bridgeCallError, setBridgeCallError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const messagesEndRef = React.useRef<HTMLDivElement | null>(null);
 
   // Section 12: Standard Trade Quick Replies
   const standardQuickReplies = [
@@ -57,11 +61,17 @@ export default function InboxPage() {
 
   const fetchData = async () => {
     try {
+      setLoading(true);
+      setLoadError(null);
       const [convRes, jobsRes, crRes] = await Promise.all([
         fetch('/api/conversations'),
         fetch('/api/jobs'),
         fetch('/api/canned-replies'),
       ]);
+
+      if (!convRes.ok || !jobsRes.ok || !crRes.ok) {
+        throw new Error('Unable to load conversations, jobs, or quick replies.');
+      }
 
       const convData = await convRes.json();
       const jobsData = await jobsRes.json();
@@ -76,14 +86,21 @@ export default function InboxPage() {
       }
       if (jobsData.jobs) setJobs(jobsData.jobs);
       if (crData.cannedReplies) setCannedReplies(crData.cannedReplies);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'Unable to load the inbox.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const fetchMessages = async (convId: string) => {
     try {
       const res = await fetch(`/api/conversations?conversationId=${convId}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load messages (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.messages) {
         setMessages(data.messages);
@@ -94,8 +111,9 @@ export default function InboxPage() {
       if (data.quietHours !== undefined) {
         setQuietHours(data.quietHours);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setSendError(err?.message || 'Unable to load this conversation.');
     }
   };
 
@@ -108,6 +126,11 @@ export default function InboxPage() {
       fetchMessages(selectedConvId);
     }
   }, [selectedConvId]);
+
+  // Keep the newest message in view when a thread changes or a reply lands.
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [messages, selectedConvId]);
 
   const handleSelectConv = (convId: string) => {
     setSelectedConvId(convId);
@@ -221,8 +244,52 @@ export default function InboxPage() {
   const activeConv = enrichedConversations.find((c) => c.id === selectedConvId);
   const currentSuppressed = Boolean(activeConv?.isSuppressed || isSuppressed);
 
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Conversations</h1>
+        </div>
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Inbox could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchData}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-[calc(100vh-8.5rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Conversations</h1>
+          <p className="text-xs text-slate-500">
+            Two-way SMS threads with missed callers, plus 1-tap bridge calling.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={fetchData}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+
+      <div className="flex h-[calc(100vh-13rem)] min-h-[28rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* ---------------- LEFT PANE: CONVERSATION LIST ---------------- */}
       <div
         className={`${
@@ -240,12 +307,36 @@ export default function InboxPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+          {loading && enrichedConversations.length === 0 && (
+            <div className="space-y-3 p-4" aria-hidden="true">
+              <div className="h-16 animate-pulse rounded-xl bg-slate-200" />
+              <div className="h-16 animate-pulse rounded-xl bg-slate-200" />
+              <div className="h-16 animate-pulse rounded-xl bg-slate-200" />
+            </div>
+          )}
+
+          {!loading && enrichedConversations.length === 0 && (
+            <div className="p-8 text-center text-xs text-slate-400">
+              No conversations yet. Inbound missed calls start a thread automatically.
+            </div>
+          )}
+
           {enrichedConversations.map((conv) => {
             const isSelected = conv.id === selectedConvId;
             return (
               <div
                 key={conv.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                aria-label={`Open conversation with ${conv.customerName}`}
                 onClick={() => handleSelectConv(conv.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSelectConv(conv.id);
+                  }
+                }}
                 className={`cursor-pointer p-4 transition-colors ${
                   isSelected ? 'bg-blue-50/70 border-l-4 border-blue-600' : 'hover:bg-slate-50'
                 }`}
@@ -331,10 +422,12 @@ export default function InboxPage() {
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 bg-white">
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
                   onClick={() => setMobileDetailView(false)}
+                  aria-label="Back to conversation list"
                   className="sm:hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" />
                 </button>
                 <div>
                   <div className="flex items-center gap-2">
@@ -370,7 +463,7 @@ export default function InboxPage() {
                       type="button"
                       disabled={isBridgingCall || currentSuppressed}
                       onClick={() => handleBridgeCall(activeConv.contact!.phone_number, activeConv.job?.id)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm disabled:opacity-40 transition"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-800 shadow-sm disabled:opacity-40 transition"
                       title="Dials your cell first, then connects to customer showing your MCR business caller ID"
                     >
                       {isBridgingCall ? (
@@ -412,6 +505,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setBridgeCallStatus(null)}
+                  aria-label="Dismiss bridge call status"
                   className="text-emerald-700 font-bold hover:underline shrink-0 ml-2"
                 >
                   ✕
@@ -428,6 +522,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setBridgeCallError(null)}
+                  aria-label="Dismiss bridge call error"
                   className="text-red-700 font-bold hover:underline shrink-0 ml-2"
                 >
                   ✕
@@ -554,6 +649,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setSendError(null)}
+                  aria-label="Dismiss send error"
                   className="text-red-500 hover:text-red-700 font-bold px-2 py-0.5 rounded text-xs"
                 >
                   ✕
@@ -562,7 +658,17 @@ export default function InboxPage() {
             )}
 
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40">
+            <div
+              className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/40"
+              role="log"
+              aria-live="polite"
+              aria-label={`SMS thread with ${activeConv.customerName}`}
+            >
+              {messages.length === 0 && (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No messages in this thread yet.
+                </div>
+              )}
               {messages.map((msg) => {
                 const isOutbound = msg.direction === 'outbound';
                 return (
@@ -597,6 +703,7 @@ export default function InboxPage() {
                   </div>
                 );
               })}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Section 12: Quick Replies Bar */}
@@ -647,7 +754,11 @@ export default function InboxPage() {
                 }}
                 className="flex items-center gap-2"
               >
+                <label htmlFor="inbox-composer" className="sr-only">
+                  SMS reply to {activeConv.customerName}
+                </label>
                 <input
+                  id="inbox-composer"
                   type="text"
                   disabled={currentSuppressed || isSending}
                   value={newMessageText}
@@ -679,9 +790,12 @@ export default function InboxPage() {
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8 text-center text-xs text-slate-400">
-            Select a conversation on the left to review customer messages.
+            {loading
+              ? 'Loading conversations...'
+              : 'Select a conversation on the left to review customer messages.'}
           </div>
         )}
+      </div>
       </div>
     </div>
   );

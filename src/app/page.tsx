@@ -406,7 +406,7 @@ export default function LandingPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 shadow-sm">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-700 text-sm font-bold text-white">
                 4
               </div>
               <h3 className="mt-4 text-base font-bold text-slate-900">Job Card &amp; Owner Alert</h3>
@@ -766,7 +766,7 @@ export default function LandingPage() {
 
               {/* Part 3.6: Business tier CTA changed from Start trial to Schedule Rollout */}
               <a
-                href="mailto:support@mcr-recovery.com?subject=Business%20Rollout%20Consultation"
+                href={`mailto:${COMPANY_INFO.email}?subject=Business%20Rollout%20Consultation`}
                 className="mt-8 block w-full rounded-xl bg-slate-900 py-3 text-center text-xs font-bold text-white hover:bg-slate-800 transition"
               >
                 Schedule Rollout (Talk to Us)

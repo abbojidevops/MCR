@@ -18,16 +18,25 @@ export default function CompliancePage() {
   const [compliance, setCompliance] = useState<ComplianceRegistration | null>(null);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchCompliance = async () => {
     try {
+      setLoading(true);
+      setLoadError(null);
       const res = await fetch('/api/compliance');
-      const data = await res.json();
-      if (data.compliance) {
-        setCompliance(data.compliance);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load compliance status (HTTP ${res.status})`);
       }
-    } catch (err) {
+      const data = await res.json();
+      setCompliance(data.compliance || null);
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'Unable to load compliance status.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -62,14 +71,57 @@ export default function CompliancePage() {
   const currentStatus = compliance?.status || 'signed_up';
   const currentStateObj = COMPLIANCE_STATES.find((s) => s.status === currentStatus) || COMPLIANCE_STATES[0];
 
+  if (loadError) {
+    return (
+      <div className="space-y-6 max-w-4xl">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">A2P 10DLC Telecom Compliance</h1>
+        </div>
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Compliance status could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchCompliance}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">A2P 10DLC Telecom Compliance</h1>
-        <p className="text-xs text-slate-500">
-          Carrier registration workflow with The Campaign Registry (TCR) for high-deliverability business SMS.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">A2P 10DLC Telecom Compliance</h1>
+          <p className="text-xs text-slate-500">
+            Carrier registration workflow with The Campaign Registry (TCR) for high-deliverability business SMS.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={fetchCompliance}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
+
+      {loading && !compliance && (
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
+          <div className="h-64 animate-pulse rounded-2xl bg-slate-200" />
+        </div>
+      )}
 
       {/* Compliance State Pipeline */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -77,7 +129,11 @@ export default function CompliancePage() {
           <div>
             <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Current Carrier Status</div>
             <div className="mt-1 flex items-center gap-2">
-              <span className="flex h-3 w-3 rounded-full bg-emerald-500"></span>
+              <span
+                className={`flex h-3 w-3 rounded-full ${
+                  currentStatus === 'sms_live' ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+              ></span>
               <span className="text-lg font-bold text-slate-900">{currentStateObj.label}</span>
             </div>
           </div>
@@ -171,7 +227,9 @@ export default function CompliancePage() {
           </div>
           <div className="flex justify-between border-b border-slate-100 pb-2">
             <span className="text-slate-500">EIN / Tax ID:</span>
-            <span className="font-semibold text-slate-800">{compliance?.ein || 'Verified'}</span>
+            <span className="font-semibold text-slate-800">
+              {compliance?.ein ? compliance.ein : 'Not on file'}
+            </span>
           </div>
           <div className="flex justify-between border-b border-slate-100 pb-2">
             <span className="text-slate-500">TCR Brand SID:</span>

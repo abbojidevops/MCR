@@ -75,20 +75,28 @@ export default function AdminDashboardPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'demo'>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchFleetData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await fetch('/api/admin/fleet');
-      if (!res.ok) throw new Error('Failed to fetch fleet data');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to fetch fleet data (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.success) {
         setTenants(data.tenants || []);
         setStats(data.platformStats || null);
         setAuditLogs(data.auditLogs || []);
+      } else {
+        throw new Error(data.error || 'Fleet endpoint returned an unsuccessful response.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'Unable to load fleet telemetry.');
     } finally {
       setLoading(false);
     }
@@ -116,15 +124,15 @@ export default function AdminDashboardPage() {
           callerNumber: '+12175558833',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         showToast(`Simulated missed call executed for ${businessName}. Text-back triggered.`);
         fetchFleetData();
       } else {
-        showToast(`Error: ${data.error || 'Failed to simulate call'}`);
+        showToast(`Error: ${data?.error || `Failed to simulate call (HTTP ${res.status})`}`);
       }
     } catch (err: any) {
-      showToast(`Error: ${err.message}`);
+      showToast(`Error: ${err?.message || 'Network error'}`);
     } finally {
       setActionLoading(null);
     }
@@ -142,13 +150,17 @@ export default function AdminDashboardPage() {
           forwardingConfigured: !currentStatus,
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        showToast(`Forwarding for ${businessName} marked as ${!currentStatus ? 'VERIFIED' : 'PENDING'}.`);
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        showToast(
+          `Forwarding for ${businessName} recorded as ${!currentStatus ? 'configured' : 'pending'}.`
+        );
         fetchFleetData();
+      } else {
+        showToast(`Error: ${data?.error || `Could not update forwarding (HTTP ${res.status})`}`);
       }
     } catch (err: any) {
-      showToast(`Error: ${err.message}`);
+      showToast(`Error: ${err?.message || 'Network error'}`);
     } finally {
       setActionLoading(null);
     }
@@ -166,13 +178,15 @@ export default function AdminDashboardPage() {
           digestType: 'daily_summary',
         }),
       });
-      const data = await res.json();
-      if (data.success) {
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
         showToast(`Daily summary digest triggered for ${businessName}.`);
         fetchFleetData();
+      } else {
+        showToast(`Error: ${data?.error || `Could not trigger digest (HTTP ${res.status})`}`);
       }
     } catch (err: any) {
-      showToast(`Error: ${err.message}`);
+      showToast(`Error: ${err?.message || 'Network error'}`);
     } finally {
       setActionLoading(null);
     }
@@ -210,6 +224,7 @@ export default function AdminDashboardPage() {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              type="button"
               onClick={fetchFleetData}
               disabled={loading}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition cursor-pointer"
@@ -250,11 +265,35 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {loadError && (
+          <div
+            role="alert"
+            className="rounded-2xl border border-rose-500/50 bg-rose-950/60 p-5 text-rose-200"
+          >
+            <h2 className="text-sm font-bold text-rose-100">Fleet telemetry could not be loaded.</h2>
+            <p className="mt-1 text-xs">{loadError}</p>
+            <button
+              type="button"
+              onClick={fetchFleetData}
+              className="mt-3 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-500"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
         {/* Notification Toast */}
         {toast && (
           <div className="rounded-xl border border-emerald-500/50 bg-emerald-950/80 p-3.5 text-xs font-bold text-emerald-300 flex items-center justify-between shadow-lg">
             <span>✓ {toast}</span>
-            <button onClick={() => setToast(null)} className="text-emerald-400 hover:text-white font-mono text-xs">✕</button>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              aria-label="Dismiss notification"
+              className="text-emerald-400 hover:text-white font-mono text-xs"
+            >
+              ✕
+            </button>
           </div>
         )}
 

@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
     if (timezone) profile.timezone = timezone;
     if (emergencyPhone) profile.emergency_phone = emergencyPhone;
 
+    // Do not report signup as complete until a configured PostgreSQL store has
+    // the account and its full profile. Without PostgreSQL this remains file-backed.
+    await db.persistAccountAndBusinessProfile(account.id);
+
     // 5. Store credentials in dedicated user_credentials table
     const userId = `usr-${account.id.replace('acc-', '')}`;
     const credential = db.createUserCredential({

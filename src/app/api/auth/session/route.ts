@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         'Business Owner',
         'Verizon Wireless'
       );
+      await db.persistAccountAndBusinessProfile(created.account.id);
 
       const response = NextResponse.json({
         success: true,

@@ -3,6 +3,10 @@ import { db } from '@/db/repository';
 import { getCarrierGuide } from '@/lib/carrier-guides';
 import { requireTenantAuth } from '@/lib/authz';
 import { notFoundResponse } from '@/lib/api-errors';
+import {
+  TENANT_EDITABLE_PROFILE_FIELDS,
+  partitionSettingsUpdates,
+} from '@/lib/settings-fields';
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,6 +27,7 @@ export async function GET(req: NextRequest) {
       profile,
       phoneNumbers,
       carrierGuide,
+      editableFields: TENANT_EDITABLE_PROFILE_FIELDS,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -35,15 +40,58 @@ export async function PATCH(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const { accountId } = auth;
 
-    const body = await req.json();
-    const { updates } = body;
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 });
+    }
 
-    const updatedProfile = db.updateBusinessProfile(accountId, updates);
+    const { permitted, rejected } = partitionSettingsUpdates(body?.updates);
+
+    // Fail closed and loudly: a caller attempting to write a privileged or
+    // unknown column gets a 400 and no state is mutated at all.
+    if (rejected.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            'Forbidden: one or more submitted fields are not available for tenant editing. ' +
+            'Only the fields listed below can be changed from this screen.',
+          rejectedFields: rejected,
+          editableFields: TENANT_EDITABLE_PROFILE_FIELDS,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (Object.keys(permitted).length === 0) {
+      return NextResponse.json(
+        { error: 'No updatable fields supplied', editableFields: TENANT_EDITABLE_PROFILE_FIELDS },
+        { status: 400 }
+      );
+    }
+
+    let updatedProfile;
+    try {
+      updatedProfile = await db.updateBusinessProfilePersistent(accountId, permitted as any);
+    } catch (err: any) {
+      console.error('[Settings profile persistence failed]', err?.message || err);
+      return NextResponse.json(
+        { error: 'Could not save your settings to persistent storage. Your changes were not saved.' },
+        { status: 503 }
+      );
+    }
     if (!updatedProfile) {
       return notFoundResponse();
     }
 
-    return NextResponse.json({ success: true, profile: updatedProfile });
+    db.logAudit(accountId, 'UPDATE_SETTINGS', { fields: Object.keys(permitted) });
+
+    return NextResponse.json({
+      success: true,
+      profile: updatedProfile,
+      updatedFields: Object.keys(permitted),
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

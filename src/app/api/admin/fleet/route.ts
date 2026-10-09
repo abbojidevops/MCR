@@ -11,6 +11,16 @@ export async function GET(req: NextRequest) {
     const auth = await requireAdminAuth(req);
     if (auth instanceof NextResponse) return auth;
 
+    try {
+      await db.hydrateAllBusinessProfilesFromPostgres();
+    } catch (err: any) {
+      console.error('[Operator fleet profile load failed]', err?.message || err);
+      return NextResponse.json(
+        { error: 'Tenant profile data is temporarily unavailable. Please try again.' },
+        { status: 503 }
+      );
+    }
+
     const accounts = db.getAllAccounts();
     const tenants = accounts.map((account) => {
       const profile = db.getBusinessProfile(account.id);
@@ -96,6 +106,16 @@ export async function POST(req: NextRequest) {
       return notFoundResponse();
     }
 
+    try {
+      await db.hydrateBusinessProfileFromPostgres(accountId);
+    } catch (err: any) {
+      console.error('[Operator tenant profile load failed]', err?.message || err);
+      return NextResponse.json(
+        { error: 'This tenant profile is temporarily unavailable. Please try again.' },
+        { status: 503 }
+      );
+    }
+
     if (action === 'simulate_call') {
       const { callerNumber, callerName } = body;
       const simResult = await SimulationEngine.simulateMissedCall(
@@ -118,7 +138,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'verify_forwarding') {
       const { forwardingConfigured } = body;
-      const updated = db.updateBusinessProfile(accountId, {
+      const updated = await db.updateBusinessProfilePersistent(accountId, {
         forwarding_configured: Boolean(forwardingConfigured),
       });
 

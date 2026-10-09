@@ -13,6 +13,7 @@ import {
   Clock,
   ArrowUpRight,
   Info,
+  AlertTriangle,
   Award,
   Sparkles,
   ClipboardList,
@@ -29,9 +30,13 @@ export default function ReportsPage() {
   const [weekly, setWeekly] = useState<WeeklyRecoveryReport | null>(null);
   const [daily, setDaily] = useState<DailySummaryReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [dispatchingSms, setDispatchingSms] = useState(false);
   const [dispatchingEmail, setDispatchingEmail] = useState(false);
-  const [dispatchToast, setDispatchToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [dispatchToast, setDispatchToast] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+  } | null>(null);
 
   const handleDispatch = async (type: 'daily_sms' | 'weekly_email') => {
     if (type === 'daily_sms') setDispatchingSms(true);
@@ -47,11 +52,30 @@ export default function ReportsPage() {
       const data = await res.json();
       if (!res.ok) {
         setDispatchToast({ type: 'error', message: data.error || 'Failed to dispatch report' });
+      } else if (type === 'daily_sms') {
+        setDispatchToast({
+          type: 'success',
+          message: `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`,
+        });
       } else {
-        const msg = type === 'daily_sms'
-          ? `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`
-          : `Weekly recovery digest dispatched to ${data.results?.email?.to || 'contractor email'}`;
-        setDispatchToast({ type: 'success', message: msg });
+        // Email has no real transport on this deployment. Saying "dispatched"
+        // here would tell the customer an email is on its way when nothing
+        // was ever sent — so state exactly what happened.
+        const email = data.results?.email;
+        if (email?.delivered) {
+          setDispatchToast({
+            type: 'success',
+            message: `Weekly recovery digest sent to ${email.to}.`,
+          });
+        } else {
+          setDispatchToast({
+            type: 'warning',
+            message:
+              'Weekly digest prepared, but not sent: this deployment has no outbound email ' +
+              'service configured, so nothing was delivered to your inbox. The SMS digest ' +
+              'and on-screen reports are unaffected.',
+          });
+        }
       }
     } catch (err: any) {
       setDispatchToast({ type: 'error', message: err.message || 'Dispatch network error' });
@@ -65,13 +89,22 @@ export default function ReportsPage() {
   const fetchReports = async (selectedRange: DateRangePreset = range) => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch(`/api/reports?range=${selectedRange}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load reports (HTTP ${res.status})`);
+      }
       const data = await res.json();
-      if (data.metrics) setMetrics(data.metrics);
+      if (!data.metrics) {
+        throw new Error('Report payload was incomplete. Please try again.');
+      }
+      setMetrics(data.metrics);
       if (data.weekly) setWeekly(data.weekly);
       if (data.daily) setDaily(data.daily);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err?.message || 'Unable to load reports.');
     } finally {
       setLoading(false);
     }
@@ -96,7 +129,34 @@ export default function ReportsPage() {
     );
   }
 
-  const m = metrics!;
+  if (error || !metrics) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+            Recovery &amp; Revenue Reports
+          </h1>
+        </div>
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Reports could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{error || 'No report data was returned.'}</p>
+          <button
+            type="button"
+            onClick={() => fetchReports(range)}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const m = metrics;
 
   return (
     <div className="space-y-6">
@@ -160,7 +220,9 @@ export default function ReportsPage() {
           className={`rounded-xl border p-3.5 text-xs font-medium flex items-center justify-between shadow-xs transition ${
             dispatchToast.type === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-              : 'border-rose-200 bg-rose-50 text-rose-900'
+              : dispatchToast.type === 'warning'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-rose-200 bg-rose-50 text-rose-900'
           }`}
         >
           <span>{dispatchToast.message}</span>
@@ -368,7 +430,7 @@ export default function ReportsPage() {
               <button
                 onClick={() => handleDispatch('daily_sms')}
                 disabled={dispatchingSms}
-                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-800 disabled:opacity-50 transition cursor-pointer"
               >
                 {dispatchingSms ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

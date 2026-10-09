@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   PhoneCall,
   LayoutDashboard,
@@ -28,12 +28,17 @@ import {
   ChevronUp,
   ArrowRight,
   Circle,
+  LogOut,
 } from 'lucide-react';
+import { COMPANY_INFO } from '@/lib/constants';
+import Modal from '@/components/modal';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState('acc-apex-plumbing');
+  const [businessName, setBusinessName] = useState<string | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(2);
@@ -49,14 +54,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   } | null>(null);
   const [onboardingBannerCollapsed, setOnboardingBannerCollapsed] = useState(false);
   const [onboardingBannerDismissed, setOnboardingBannerDismissed] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  // True only when the signed-in session is actually flagged as a demo account.
+  // The badge used to be hardcoded, so every real customer saw "DEMO ACCOUNT".
+  const [isDemoAccount, setIsDemoAccount] = useState(false);
+  // Real emergency leads for this tenant, used by the notification panel.
+  const [alerts, setAlerts] = useState<Array<{ id: string; title: string; detail: string }>>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
 
-  React.useEffect(() => {
+  const isActiveRoute = useCallback(
+    (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(`${href}/`)),
+    [pathname]
+  );
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Logout request failed', err);
+    } finally {
+      // Always land on the login screen, even if the revoke call failed.
+      router.replace('/login');
+      router.refresh();
+    }
+  };
+
+  useEffect(() => {
     fetch('/api/auth/session')
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (!d) return;
         if (d.accountId) setSelectedAccount(d.accountId);
+        if (d.businessName) setBusinessName(d.businessName);
+        if (typeof d.isDemo === 'boolean') setIsDemoAccount(d.isDemo);
       })
       .catch(console.error);
+
+    // Emergency leads are the only thing worth interrupting an owner for.
+    // The panel used to show two hardcoded alerts that were never real.
+    fetch('/api/jobs')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const jobs: any[] = Array.isArray(d?.jobs) ? d.jobs : [];
+        const urgent = jobs
+          .filter((j) => j.is_emergency || j.priority === 'high' || j.priority === 'urgent')
+          .slice(0, 5)
+          .map((j) => ({
+            id: j.id,
+            title: j.title || j.issue || 'Emergency lead',
+            detail: j.customer_name || j.customer_phone || 'Customer details on the job card',
+          }));
+        setAlerts(urgent);
+        setUnreadCount(urgent.length);
+      })
+      .catch(() => setAlerts([]))
+      .finally(() => setAlertsLoading(false));
 
     fetch('/api/setup-status')
       .then((r) => r.json())
@@ -109,6 +162,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { label: 'Calls', href: '/dashboard/missed-calls', icon: History },
   ];
 
+  // Close overlays on Escape for keyboard users.
+  useEffect(() => {
+    if (!helpModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHelpModalOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [helpModalOpen]);
+
   const handleQuickSimulation = async () => {
     setSimulatingCall(true);
     setSimulationToast('Simulating inbound missed call from (217) 555-8833...');
@@ -153,33 +216,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Active Authenticated Business Profile */}
         <div className="border-b border-slate-200 p-3">
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
+          <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2 mb-1">
             Active Business
-          </label>
+          </span>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-800">
-            {selectedAccount === 'acc-coolbreeze-hvac' ? 'CoolBreeze Heating & Air' : 'Apex Plumbing & Rooter'}
+            {businessName ||
+              (selectedAccount === 'acc-coolbreeze-hvac'
+                ? 'CoolBreeze Heating & Air'
+                : 'Apex Plumbing & Rooter')}
           </div>
         </div>
 
         {/* Primary Navigation */}
-        <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
+        <nav aria-label="Main menu" className="flex-1 space-y-1 p-3 overflow-y-auto">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 py-1">
             Main Menu
           </div>
           {primaryNavItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = isActiveRoute(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
                 {item.label}
               </Link>
             );
@@ -189,19 +256,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Tools &amp; Telecom
           </div>
           {secondaryNavItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = isActiveRoute(item.href);
             const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                   isActive
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
                 {item.label}
               </Link>
             );
@@ -209,11 +277,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Help Item */}
           <button
+            type="button"
             onClick={() => setHelpModalOpen(true)}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
           >
-            <HelpCircle className="h-4 w-4 text-slate-400" />
+            <HelpCircle className="h-4 w-4 text-slate-400" aria-hidden="true" />
             Help &amp; Support
+          </button>
+
+          {/* Sign out */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-700 transition-colors disabled:opacity-50"
+          >
+            <LogOut className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            {loggingOut ? 'Signing out...' : 'Sign Out'}
           </button>
         </nav>
 
@@ -270,6 +350,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             type="button"
             disabled={simulatingCall}
             onClick={handleQuickSimulation}
+            aria-label="Run a simulated missed call"
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-xs font-semibold text-white shadow hover:bg-slate-800 disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5 text-emerald-400" />
@@ -286,6 +367,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-expanded={mobileMenuOpen}
+              aria-label="Toggle navigation menu"
               className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden"
             >
               {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -299,17 +382,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Section 14: Demo Mode Badge */}
-            <div className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 shadow-xs">
-              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
-              <span>DEMO ACCOUNT</span>
-            </div>
+            {/* Demo badge — only when the signed-in session really is a demo account */}
+            {isDemoAccount && (
+              <div className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-900 shadow-xs">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>DEMO ACCOUNT</span>
+              </div>
+            )}
 
             {/* Quick action button */}
             <button
               type="button"
               disabled={simulatingCall}
               onClick={handleQuickSimulation}
+              aria-label="Run a simulated missed call"
               className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm"
             >
               <Play className="h-3 w-3 text-emerald-500" /> Test Call
@@ -320,6 +406,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 type="button"
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
+                aria-expanded={notificationsOpen}
+                aria-haspopup="true"
+                aria-label={`Notifications${
+                  alerts.length > 0 ? `, ${alerts.length} emergency` : ', no emergency alerts'
+                }`}
                 className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <Bell className="h-5 w-5" />
@@ -334,23 +425,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl z-50">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-2">
                     <span className="text-xs font-bold text-slate-900">Urgent Alerts</span>
-                    <button
-                      type="button"
-                      onClick={() => setUnreadCount(0)}
-                      className="text-[11px] font-medium text-blue-600 hover:underline"
-                    >
-                      Mark all read
-                    </button>
+                    {alerts.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setUnreadCount(0)}
+                        className="text-[11px] font-medium text-blue-600 hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                    <div className="rounded-lg bg-red-50 p-2.5 text-xs border border-red-100">
-                      <div className="font-semibold text-red-800">🚨 Water Heater Rupture</div>
-                      <div className="text-slate-600 mt-0.5">Emergency customer at 123 Main St. Action required.</div>
-                    </div>
-                    <div className="rounded-lg bg-blue-50 p-2.5 text-xs border border-blue-100">
-                      <div className="font-semibold text-blue-800">📞 Missed Call Recovered</div>
-                      <div className="text-slate-600 mt-0.5">Customer responded &amp; qualified via SMS.</div>
-                    </div>
+                    {alertsLoading && (
+                      <p className="px-2 py-3 text-[11px] text-slate-400">Loading alerts…</p>
+                    )}
+
+                    {!alertsLoading && alerts.length === 0 && (
+                      <div className="px-2 py-4 text-center">
+                        <p className="text-xs font-semibold text-slate-600">No emergency alerts</p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Leads flagged as emergencies appear here. Everything else is on the Jobs
+                          board.
+                        </p>
+                      </div>
+                    )}
+
+                    {alerts.map((alert) => (
+                      <Link
+                        key={alert.id}
+                        href="/dashboard/jobs"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="block rounded-lg bg-red-50 p-2.5 text-xs border border-red-100 hover:bg-red-100"
+                      >
+                        <div className="font-semibold text-red-800">🚨 {alert.title}</div>
+                        <div className="text-slate-600 mt-0.5">{alert.detail}</div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               )}
@@ -364,23 +474,33 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-2">Navigation</div>
             <nav className="grid grid-cols-2 gap-2">
               {[...primaryNavItems, ...secondaryNavItems].map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = isActiveRoute(item.href);
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`flex items-center gap-2 rounded-lg p-2.5 text-xs font-semibold ${
                       isActive ? 'bg-blue-50 text-blue-600' : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    <Icon className="h-4 w-4" aria-hidden="true" />
                     {item.label}
                   </Link>
                 );
               })}
             </nav>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              {loggingOut ? 'Signing out...' : 'Sign Out'}
+            </button>
           </div>
         )}
 
@@ -457,6 +577,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     type="button"
                     onClick={() => setOnboardingBannerCollapsed(!onboardingBannerCollapsed)}
                     className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-200/60 transition"
+                    aria-label={onboardingBannerCollapsed ? 'Expand checklist' : 'Collapse checklist'}
+                    aria-expanded={!onboardingBannerCollapsed}
                     title={onboardingBannerCollapsed ? 'Expand Checklist' : 'Collapse Checklist'}
                   >
                     {onboardingBannerCollapsed ? (
@@ -469,6 +591,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     type="button"
                     onClick={() => setOnboardingBannerDismissed(true)}
                     className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition"
+                    aria-label="Dismiss setup checklist"
                     title="Dismiss Banner"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -551,68 +674,75 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* ---------------- SECTION 20: MOBILE STICKY BOTTOM NAV BAR ---------------- */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 flex h-16 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden">
         {mobileBottomItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = isActiveRoute(item.href);
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition ${
                 isActive ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              <Icon className={`h-5 w-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+              <Icon className={`h-5 w-5 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} aria-hidden="true" />
               <span>{item.label}</span>
             </Link>
           );
         })}
         <button
+          type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-expanded={mobileMenuOpen}
+          aria-label="More navigation options"
           className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition ${
             mobileMenuOpen ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
           }`}
         >
-          <MoreHorizontal className="h-5 w-5 text-slate-400" />
+          <MoreHorizontal className="h-5 w-5 text-slate-400" aria-hidden="true" />
           <span>More</span>
         </button>
       </nav>
 
       {/* Help Modal */}
-      {helpModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5 text-blue-600" />
-                <h3 className="font-bold text-slate-900">MCR Support &amp; Knowledge Base</h3>
-              </div>
-              <button onClick={() => setHelpModalOpen(false)} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="space-y-3 text-xs text-slate-600">
-              <p>
-                <strong>Need help configuring conditional call forwarding?</strong><br />
-                Visit our carrier guide in <Link href="/dashboard/forwarding" onClick={() => setHelpModalOpen(false)} className="text-blue-600 underline">Carrier Forwarding</Link> or dial your carrier activation code.
-              </p>
-              <p>
-                <strong>Emergency Inquiries:</strong><br />
-                Call our 24/7 Concierge Hotline: <strong className="text-slate-900">+1 (800) 555-MCR1</strong>
-              </p>
-              <p>
-                <strong>Email Support:</strong><br />
-                <span className="font-mono text-slate-800">support@mcr-recovery.com</span>
-              </p>
-            </div>
-            <button
+      <Modal
+        open={helpModalOpen}
+        onClose={() => setHelpModalOpen(false)}
+        title="MCR Support & Knowledge Base"
+        description={`Support hours: ${COMPANY_INFO.supportHours}`}
+        footer={
+          <button
+            type="button"
+            onClick={() => setHelpModalOpen(false)}
+            className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
+          >
+            Close
+          </button>
+        }
+      >
+        <div className="space-y-3 text-xs text-slate-600">
+          <p>
+            <strong>Need help configuring conditional call forwarding?</strong>
+            <br />
+            Visit our carrier guide in{' '}
+            <Link
+              href="/dashboard/forwarding"
               onClick={() => setHelpModalOpen(false)}
-              className="w-full rounded-xl bg-slate-900 py-2.5 text-xs font-bold text-white hover:bg-slate-800"
+              className="text-blue-600 underline"
             >
-              Close
-            </button>
-          </div>
+              Carrier Forwarding
+            </Link>{' '}
+            or dial your carrier activation code.
+          </p>
+          <p>
+            <strong>Email Support:</strong>
+            <br />
+            <a href={`mailto:${COMPANY_INFO.email}`} className="font-mono text-slate-800 underline">
+              {COMPANY_INFO.email}
+            </a>
+          </p>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

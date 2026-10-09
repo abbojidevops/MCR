@@ -27,6 +27,11 @@ export async function GET(req: NextRequest) {
     const usagePercent = callCap > 0 ? (callsUsed / callCap) * 100 : 0;
     const warning80Percent = usagePercent >= 80;
 
+    // Honest billing-mode disclosure: the UI must never imply a live payment
+    // gateway is connected when Stripe is switched off for this deployment.
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    const isLiveStripe = Boolean(stripeKey && process.env.NEXT_PUBLIC_STRIPE_LIVE === 'true');
+
     return NextResponse.json({
       subscription: info.subscription,
       entitlement,
@@ -39,6 +44,14 @@ export async function GET(req: NextRequest) {
       overageNotice: warning80Percent
         ? `You have reached ${usagePercent.toFixed(0)}% of your monthly call cap (${callsUsed}/${callCap}). Automated text-backs continue uninterrupted under our soft cap.`
         : null,
+      billing: {
+        liveGateway: isLiveStripe,
+        gateway: 'Stripe',
+        mode: isLiveStripe ? 'live' : 'disabled',
+        notice: isLiveStripe
+          ? null
+          : 'Card payments are disabled on this deployment. Plan changes are recorded locally and no charge is processed.',
+      },
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
