@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { getSession } from '@/lib/session';
+import { getAdminPasswordConfigurationError } from '@/lib/security/admin-password';
 import { getSessionSecretConfigurationError } from '@/lib/security/session-secret';
 import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 export async function GET(req: NextRequest) {
-  // Keep the platform readiness signal honest without exposing why configuration failed.
+  // Keep the platform readiness signal honest without exposing which auth setting failed.
   // Protected routes return the detailed operator-facing explanation separately.
-  if (getSessionSecretConfigurationError()) {
+  if (getSessionSecretConfigurationError() || getAdminPasswordConfigurationError()) {
     return NextResponse.json(
       {
         status: 'unhealthy',

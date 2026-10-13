@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getAdminPasswordConfigurationError } from '@/lib/security/admin-password';
 import {
   getSessionSecret,
   getSessionSecretConfigurationError,
@@ -105,13 +106,9 @@ export async function proxy(req: NextRequest) {
 
   // 1. Protect all /admin/* routes strictly
   if (pathname.startsWith('/admin') || (pathname.startsWith('/api/admin') && pathname !== '/api/admin/login')) {
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword || adminPassword.trim() === '') {
-      return jsonError(
-        503,
-        'Service Unavailable: ADMIN_PASSWORD environment variable is not configured',
-        pathname
-      );
+    const configurationError = getAdminPasswordConfigurationError();
+    if (configurationError) {
+      return jsonError(503, `Service Unavailable: ${configurationError}`, pathname);
     }
 
     const session = await verifySessionEdge(token);

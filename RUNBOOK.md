@@ -51,10 +51,14 @@ NEXT_PUBLIC_APP_URL=https://mcr.yourdomain.com
 
 # Platform Operator / Admin Boundary and session signing
 # ADMIN_PASSWORD and SESSION_SECRET are supplied at runtime, never baked into the Docker image.
+# ADMIN_PASSWORD must be >=12 characters and contain upper, lower, and numeric characters.
+# Missing or weak ADMIN_PASSWORD makes operator pages and sign-in return 503.
+# Admin login allows five failed attempts per client IP per 15 minutes in each app process.
+# That in-memory limit resets on restart and is not shared across multiple replicas.
 # Generate SESSION_SECRET with `openssl rand -hex 32` (64 random hex characters).
 # Missing or weak SESSION_SECRET makes protected pages and APIs return 503.
-# /api/health returns a generic 503 without revealing details; builds do not need it.
-ADMIN_PASSWORD=your-secure-random-admin-password
+# /api/health returns a generic 503 when either auth setting is missing/weak; builds do not need it.
+ADMIN_PASSWORD=
 SESSION_SECRET=
 
 # Telephony (Twilio)

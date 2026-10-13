@@ -23,6 +23,7 @@ import {
   recordFailedLogin,
   resetLoginRateLimit,
   clearAllRateLimits,
+  MAX_TRACKED_RATE_LIMIT_KEYS,
 } from '@/lib/auth/rate-limiter';
 import { TENANT_SCOPED_API_ROUTES } from '@/lib/routes';
 import { createFixtureTracker } from '@/lib/test-hygiene';
@@ -206,6 +207,38 @@ test('A6: Rate Limiting Throttles Brute Force Login Attempts (429)', async () =>
   const res = await loginHandler(req);
   assert.equal(res.status, 429, 'Throttled login must return 429');
   clearAllRateLimits();
+});
+
+test('A6a: Rate-Limit Attempts Expire and Attacker-Controlled Keys Stay Bounded', () => {
+  clearAllRateLimits();
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+
+  try {
+    for (let i = 0; i < 5; i++) recordFailedLogin('expiring-ip', 'expiring@example.test');
+    assert.equal(isLoginRateLimited('expiring-ip', 'expiring@example.test').limited, true);
+
+    now += 15 * 60 * 1000 + 1;
+    assert.equal(isLoginRateLimited('expiring-ip', 'expiring@example.test').limited, false);
+
+    clearAllRateLimits();
+    for (let i = 0; i < 5; i++) recordFailedLogin('oldest-ip', 'oldest@example.test');
+    assert.equal(isLoginRateLimited('oldest-ip', 'oldest@example.test').limited, true);
+
+    for (let i = 0; i < MAX_TRACKED_RATE_LIMIT_KEYS; i++) {
+      recordFailedLogin(`spray-ip-${i}`, `spray-${i}@example.test`);
+    }
+
+    assert.equal(
+      isLoginRateLimited('oldest-ip', 'oldest@example.test').limited,
+      false,
+      'Oldest keys must be evicted when the process-local store reaches its cap'
+    );
+  } finally {
+    Date.now = originalNow;
+    clearAllRateLimits();
+  }
 });
 
 test('A7: POST /api/auth/login Valid Credentials Issues Session Cookie (200)', async () => {

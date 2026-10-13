@@ -65,9 +65,14 @@ Key properties:
 | Variable | Value / How to generate | Enforced by |
 | :--- | :--- | :--- |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference) | `scripts/db-init.mjs` fails the deploy if unset in production |
-| `ADMIN_PASSWORD` | `openssl rand -base64 24` — must be ≥ 12 chars with upper, lower **and** numeric characters | pre-flight error; `/admin` returns 503 when unset |
+| `ADMIN_PASSWORD` | `openssl rand -base64 24` — must be ≥ 12 chars with upper, lower **and** numeric characters | pre-flight error; operator pages/login return 503 when missing or weak |
 | `SESSION_SECRET` | `openssl rand -hex 32` — at least 32 random bytes (256 bits). Length alone is not accepted: a long but patterned value is rejected | pre-flight error; signs session cookies |
 | `NEXT_PUBLIC_APP_URL` | The staging domain, e.g. `https://mcr-saas-app-staging.up.railway.app` | pre-flight warning when absent/relative |
+
+Operator login allows five failed passwords per client IP per 15 minutes. Its
+counter is in-memory and process-local: it resets on restart and is not shared
+across replicas. For a multi-replica deployment, add a shared-store or
+platform-level rate limit; this application does not distribute the counter.
 
 ### Staging telephony (simulation)
 
@@ -159,7 +164,7 @@ Escape hatch for deliberate ephemeral runs: `MCR_SKIP_DATA_DIR_CHECK=true`.
 | :-- | :--- | :--- | :--- |
 | 1 | PostgreSQL **16** | `staging:requirements` queries `server_version` | FAIL naming the detected major version |
 | 2 | `DATABASE_URL=${{Postgres.DATABASE_URL}}` | requirements + pre-flight | FAIL if unset; WARN if an unresolved placeholder |
-| 3 | `ADMIN_PASSWORD` ≥ 12 chars with upper, lower **and** digit | pre-flight + requirements + `/admin` 503 boundary | FAIL; the admin boundary returns 503 when unset |
+| 3 | `ADMIN_PASSWORD` ≥ 12 chars with upper, lower **and** digit | pre-flight + requirements + runtime admin boundary | FAIL; admin pages and login return 503 when missing or weak |
 | 4 | `SESSION_SECRET` ≥ 32 random bytes (256 bits) | pre-flight + requirements (length **and** entropy) | FAIL with the `openssl rand -hex 32` hint |
 | 5 | `NEXT_PUBLIC_APP_URL` = final HTTPS Railway domain | requirements + pre-flight (WARN) | FAIL when absent, localhost or non-HTTPS |
 | 6 | `TWILIO_MOCK_MODE=true`, live processing off | requirements (`findLiveProcessingSwitches`) | FAIL, listing each switch that would enable live processing |

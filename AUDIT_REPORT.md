@@ -542,9 +542,9 @@ There is no application fallback: a missing key or a key below the existing
 session-authenticated APIs return a clear 503 configuration error, and session
 issuance returns 503 without setting a cookie. The public sign-in screens remain
 reachable so operators can correct the runtime configuration. The public
-`/api/health` readiness check now returns a generic 503 when session signing is
-unavailable, without exposing the cause or any secret, so a broken deployment
-cannot be marked healthy.
+`/api/health` readiness check now returns a generic 503 when authentication
+configuration is unavailable, without exposing the cause or any secret, so a
+broken deployment cannot be marked healthy.
 
 Secret validation is request-time rather than module-import/build-time. A
 separate production build from a clean temporary copy with all `.env*` files
@@ -561,3 +561,37 @@ checks skipped because no local server was available; `npm run lint` and
 key, the dashboard redirected to sign-in, and the admin route remained locked.
 The local `.env.local` contents were not inspected or recorded. PR #4 remains
 open for the user's preview review.
+
+## 17. Operator login policy, throttling, and bounded limiter state (2026-10-13)
+
+The production operator boundary and `/api/admin/login` now apply the existing
+`validateAdminPassword` policy at request time. Missing or weak `ADMIN_PASSWORD`
+configuration fails with 503, without disclosing the supplied value. This closes
+the gap where deployment pre-flight enforced password strength but a direct
+production start could still accept a weak operator password.
+
+Failed operator-password attempts are throttled at five per observed client IP
+per 15-minute window. The operator limiter uses its own bucket so those failures
+do not consume a tenant's login allowance. The shared in-memory tenant/operator
+rate-limit maps drop expired attempts when a key is checked/updated and cap each
+store at 10,000 keys, which prevents rotating email/IP identifiers from growing
+a process without bound.
+These counters remain **process-local** and reset on restart; they are not a
+distributed limit across replicas, so production edge/gateway controls remain
+useful for multi-replica deployments.
+
+`.env.example` no longer supplies a weak-looking admin password placeholder.
+The runbook documents the policy and the process-local rate-limit limitation.
+`/api/health` returns its existing minimal generic 503 when either the session
+secret or admin password is unavailable/weak; it does not reveal which value is
+wrong.
+
+**Verification (2026-10-13):** `npm run deploy:check` passed all 332 tests
+(329 passed; 3 PostgreSQL checks skipped because no local server was available),
+all seven green security probes, and the red-probe regression check. `npm run
+lint` passed. A production build with `.env.local` moved aside and no auth secrets
+in the build environment completed successfully (46/46 pages). The production
+preview returned HTTP 200 for `/` and `/api/health`; anonymous admin-page access
+redirected to `/operator-login`, the protected admin API returned 401, and an
+incorrect operator password returned 401. CI will be reported after the branch
+push. PR #4 remains open and unmerged for the user's preview review.

@@ -14,7 +14,7 @@ import type { FetchLike } from '../scripts/staging-smoke';
 import { proxy as middleware } from '@/proxy';
 import { POST as adminLoginHandler } from '@/app/api/admin/login/route';
 import { POST as loginHandler } from '@/app/api/auth/login/route';
-import { clearAllRateLimits } from '@/lib/auth/rate-limiter';
+import { clearAllRateLimits, isLoginRateLimited } from '@/lib/auth/rate-limiter';
 import { resolveClientIp, isCloudflareIp } from '@/lib/security/client-ip';
 import { verifySessionToken, SESSION_COOKIE_NAME } from '@/lib/session';
 
@@ -209,6 +209,14 @@ test('DEP-5: Admin Boundary Fail-Closed — Middleware Returns 503 for Missing O
     const resWeakSession = await middleware(reqWeakSession);
     assert.equal(resWeakSession.status, 503);
     assert.match((await resWeakSession.json()).error, /at least 32 bytes .* entropy/);
+
+    // 5. Production admin routes also reject a weak operator password.
+    process.env.SESSION_SECRET = STRONG_SESSION_SECRET;
+    process.env.ADMIN_PASSWORD = 'short';
+    const reqWeakAdminPassword = createMockRequest('http://localhost:3001/admin/concierge');
+    const resWeakAdminPassword = await middleware(reqWeakAdminPassword);
+    assert.equal(resWeakAdminPassword.status, 503);
+    assert.match((await resWeakAdminPassword.json()).error, /ADMIN_PASSWORD must be at least 12/);
   } finally {
     if (originalAdminPw !== undefined) {
       process.env.ADMIN_PASSWORD = originalAdminPw;
@@ -284,6 +292,116 @@ test('DEP-6: Admin Login Boundary 503 Fail-Closed & Constant-Time Auth', async (
   }
 });
 
+test('DEP-6a: Admin Login Rejects a Weak Production Password Configuration', async () => {
+  const originalAdminPassword = process.env.ADMIN_PASSWORD;
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  try {
+    (process.env as any).NODE_ENV = 'production';
+    process.env.ADMIN_PASSWORD = 'short';
+    const response = await adminLoginHandler(
+      createMockRequest('http://localhost:3001/api/admin/login', {
+        method: 'POST',
+        body: { password: 'short' },
+      })
+    );
+
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /ADMIN_PASSWORD must be at least 12/);
+    assert.equal(response.headers.get('set-cookie'), null);
+  } finally {
+    if (originalAdminPassword !== undefined) {
+      process.env.ADMIN_PASSWORD = originalAdminPassword;
+    } else {
+      delete process.env.ADMIN_PASSWORD;
+    }
+    if (originalNodeEnv !== undefined) {
+      (process.env as any).NODE_ENV = originalNodeEnv;
+    } else {
+      delete (process.env as any).NODE_ENV;
+    }
+  }
+});
+
+test('DEP-6b: Admin Login Limits Failed Password Attempts Per Client IP', async () => {
+  const originalAdminPassword = process.env.ADMIN_PASSWORD;
+  const originalSessionSecret = process.env.SESSION_SECRET;
+  clearAllRateLimits();
+
+  const submitAdminPassword = (password: string, headers?: Record<string, string>) =>
+    adminLoginHandler(
+      createMockRequest('http://localhost:3001/api/admin/login', {
+        method: 'POST',
+        body: { password },
+        headers,
+      })
+    );
+
+  try {
+    process.env.ADMIN_PASSWORD = 'SuperSecureAdminPassword2026!';
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await submitAdminPassword('WrongPassword123!');
+      assert.equal(response.status, 401, 'Each of the first five bad passwords must be rejected normally');
+    }
+
+    assert.equal(
+      isLoginRateLimited('127.0.0.1', 'demo@apexplumbing.com').limited,
+      false,
+      'Operator password failures must not consume a tenant login limit'
+    );
+
+    const limitedResponse = await submitAdminPassword('WrongPassword123!', {
+      'x-forwarded-for': '203.0.113.25',
+    });
+    assert.equal(limitedResponse.status, 429, 'A spoofed forwarding header must not bypass the observed-IP limit');
+    assert.ok(Number(limitedResponse.headers.get('retry-after')) > 0);
+    assert.match((await limitedResponse.json()).error, /too many failed admin login attempts/i);
+
+    // A matching password without a signing key is not a completed login and
+    // must not clear the existing admin attempts.
+    clearAllRateLimits();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      assert.equal((await submitAdminPassword('WrongPassword123!')).status, 401);
+    }
+    delete process.env.SESSION_SECRET;
+    const noSessionResponse = await submitAdminPassword('SuperSecureAdminPassword2026!');
+    assert.equal(noSessionResponse.status, 503);
+    if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = originalSessionSecret;
+
+    assert.equal((await submitAdminPassword('WrongPassword123!')).status, 401);
+    assert.equal(
+      isLoginRateLimited('127.0.0.1', undefined, 'admin').limited,
+      true,
+      'A failed session issuance must not clear four prior operator failures'
+    );
+
+    // A fully issued session does clear that IP's admin failure bucket.
+    clearAllRateLimits();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      assert.equal((await submitAdminPassword('WrongPassword123!')).status, 401);
+    }
+    const successResponse = await submitAdminPassword('SuperSecureAdminPassword2026!');
+    assert.equal(successResponse.status, 200);
+    assert.match(successResponse.headers.get('set-cookie') || '', /mcr_session=/);
+    assert.equal(
+      isLoginRateLimited('127.0.0.1', undefined, 'admin').limited,
+      false,
+      'Successful operator authentication must clear that IP\'s failure history'
+    );
+  } finally {
+    clearAllRateLimits();
+    if (originalAdminPassword !== undefined) {
+      process.env.ADMIN_PASSWORD = originalAdminPassword;
+    } else {
+      delete process.env.ADMIN_PASSWORD;
+    }
+    if (originalSessionSecret !== undefined) process.env.SESSION_SECRET = originalSessionSecret;
+    else delete process.env.SESSION_SECRET;
+  }
+});
+
 test('DEP-7: Image Secret Hygiene — .dockerignore Excludes Secrets, node_modules, and DB', () => {
   const ignorePath = path.join(process.cwd(), '.dockerignore');
   assert.ok(fs.existsSync(ignorePath), '.dockerignore must exist');
@@ -302,6 +420,8 @@ test('DEP-8: Operator Documentation — RUNBOOK.md §2 Documents ADMIN_PASSWORD 
   assert.ok(content.includes('ADMIN_PASSWORD'), 'RUNBOOK.md §2 must document ADMIN_PASSWORD');
   assert.ok(content.includes('SESSION_SECRET'), 'RUNBOOK.md §2 must document the session signing secret');
   assert.ok(content.includes('Missing or weak SESSION_SECRET makes protected pages and APIs return 503'));
+  assert.ok(content.includes('five failed attempts per client IP per 15 minutes'));
+  assert.ok(content.includes('not shared across multiple replicas'));
   assert.ok(content.includes('builds do not need it'), 'RUNBOOK.md must clarify the secret is runtime-only');
   assert.ok(content.includes('503 Service Unavailable'), 'RUNBOOK.md §2 must document 503 fail-closed guarantee');
   assert.ok(content.includes('db-init.mjs'), 'RUNBOOK.md §2 must document db-init.mjs');
