@@ -593,5 +593,8 @@ lint` passed. A production build with `.env.local` moved aside and no auth secre
 in the build environment completed successfully (46/46 pages). The production
 preview returned HTTP 200 for `/` and `/api/health`; anonymous admin-page access
 redirected to `/operator-login`, the protected admin API returned 401, and an
-incorrect operator password returned 401. CI will be reported after the branch
-push. PR #4 remains open and unmerged for the user's preview review.
+incorrect operator password returned 401. GitHub CI run
+[38390667775](https://github.com/abbojidevops/MCR/actions/runs/38390667775)
+passed type-checking, the test suite, staging pre-flight, production build, and
+the deployment/hygiene/security gate. PR #4 remains open and unmerged for the
+user's preview review.
