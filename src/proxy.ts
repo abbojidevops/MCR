@@ -70,7 +70,7 @@ function jsonError(status: number, error: string, pathname: string, extraHeaders
   );
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Extract session token from cookie or Authorization header

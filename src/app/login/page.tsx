@@ -35,7 +35,7 @@ export default async function LoginPage({
   const fallback = session?.role === 'admin' ? '/admin' : '/dashboard';
 
   // Already-authenticated visitors should never see the sign-in form — and if
-  // the middleware bounced them here from a specific page, honour ?next= so
+  // the access guard redirected them here from a specific page, honour ?next= so
   // they land where they were originally headed.
   if (session && session.accountId) {
     redirect(safeNextPath(params.next, fallback));

@@ -20,7 +20,7 @@ export default function OperatorLoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
-  // If ADMIN_PASSWORD is not configured the middleware answers 503 for every
+  // If ADMIN_PASSWORD is not configured the access guard returns 503 for every
   // /admin/* path. Detect that up front so the operator sees why.
   useEffect(() => {
     let cancelled = false;

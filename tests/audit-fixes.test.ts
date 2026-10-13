@@ -224,14 +224,14 @@ test('DEMO-6: the login page does not hardcode credentials', () => {
 // ============================================================================
 
 test('OPS-1: /admin/login is rewritten onto the public operator sign-in route', () => {
-  const middleware = read('src/middleware.ts');
+  const middleware = read('src/proxy.ts');
   assert.match(middleware, /\/admin\/login/);
   assert.match(middleware, /NextResponse\.rewrite/);
   assert.match(middleware, /operator-login/i);
 });
 
 test('OPS-2: anonymous HTML navigations to /admin redirect to the sign-in screen', () => {
-  const middleware = read('src/middleware.ts');
+  const middleware = read('src/proxy.ts');
   assert.match(middleware, /isDocumentNavigation/);
   assert.match(middleware, /searchParams\.set\('next'/);
   assert.match(middleware, /WWW-Authenticate/, 'API callers keep the 401 contract');
@@ -698,25 +698,22 @@ test('CONTRAST-2: the audit actually measures pairs and judges icons separately'
 });
 
 test('CONTRAST-3: the audit catches a deliberate low-contrast regression', () => {
-  // Prove the check is not vacuously passing by reintroducing a known-bad
-  // pair into a scratch copy of the script's own palette and re-running.
+  // Derive the probe colours from Tailwind's installed theme and call the same
+  // conversion/contrast functions as the audit. This catches palette drift too.
   const probe = `
-def luminance(h):
-    h=h.lstrip('#'); f=[int(h[i:i+2],16)/255 for i in (0,2,4)]
-    f=[c/12.92 if c<=0.03928 else ((c+0.055)/1.055)**2.4 for c in f]
-    return 0.2126*f[0]+0.7152*f[1]+0.0722*f[2]
-def cr(a,b):
-    l1,l2=luminance(a),luminance(b); return round((max(l1,l2)+0.05)/(min(l1,l2)+0.05),2)
-# white on emerald-600 is the pair that was fixed. It must be flagged.
-assert cr('#ffffff','#059669') < 4.5, 'white on emerald-600 must fail the text bar'
-assert cr('#ffffff','#047857') >= 4.5, 'white on emerald-700 must pass the text bar'
-assert cr('#94a3b8','#f1f5f9') < 4.5, 'slate-400 on slate-100 must fail'
-assert cr('#475569','#f1f5f9') >= 4.5, 'slate-600 on slate-100 must pass'
-assert cr('#d97706','#fef3c7') < 3.0, 'amber-600 on amber-100 must fail the icon bar'
-assert cr('#b45309','#fef3c7') >= 3.0, 'amber-700 on amber-100 must pass the icon bar'
-print('contrast maths verified')
+import runpy
+check = runpy.run_path('scripts/contrast-audit.py')
+palette, named = check['load_tailwind_palette']()
+ratio = check['contrast']
+assert ratio(named['white'], palette['emerald'][600]) < 4.5, 'white on emerald-600 must fail text AA'
+assert ratio(named['white'], palette['emerald'][700]) >= 4.5, 'white on emerald-700 must pass text AA'
+assert ratio(palette['slate'][400], palette['slate'][100]) < 4.5, 'slate-400 on slate-100 must fail'
+assert ratio(palette['slate'][600], palette['slate'][100]) >= 4.5, 'slate-600 on slate-100 must pass'
+assert ratio(palette['amber'][600], palette['amber'][100]) < 3.0, 'amber-600 on amber-100 must fail the icon bar'
+assert ratio(palette['amber'][700], palette['amber'][100]) >= 3.0, 'amber-700 on amber-100 must pass the icon bar'
+print('Tailwind theme and contrast maths verified')
 `;
   const result = spawnSync('python3', ['-c', probe], { encoding: 'utf8', timeout: 60_000 });
   assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
-  assert.match(result.stdout, /contrast maths verified/);
+  assert.match(result.stdout, /Tailwind theme and contrast maths verified/);
 });

@@ -258,11 +258,11 @@ class DatabaseRepository {
 
   private loadFromFile() {
     try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+      if (!fs.existsSync(/* turbopackIgnore: true */ DATA_DIR)) {
+        fs.mkdirSync(/* turbopackIgnore: true */ DATA_DIR, { recursive: true });
       }
-      if (fs.existsSync(DB_FILE)) {
-        const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      if (fs.existsSync(/* turbopackIgnore: true */ DB_FILE)) {
+        const raw = fs.readFileSync(/* turbopackIgnore: true */ DB_FILE, 'utf-8');
         const parsed = JSON.parse(raw);
         this.state = {
           ...this.getInitialState(),
@@ -298,10 +298,10 @@ class DatabaseRepository {
       return;
     }
     try {
-      if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
+      if (!fs.existsSync(/* turbopackIgnore: true */ DATA_DIR)) {
+        fs.mkdirSync(/* turbopackIgnore: true */ DATA_DIR, { recursive: true });
       }
-      fs.writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.writeFileSync(/* turbopackIgnore: true */ DB_FILE, JSON.stringify(this.state, null, 2), 'utf-8');
     } catch (err) {
       console.error('Failed to write repository file:', err);
     }

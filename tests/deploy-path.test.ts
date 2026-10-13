@@ -11,7 +11,7 @@ import { validateSchemaSyntax, validateDatabaseCredentials } from '../scripts/db
 import { runStagingPreflight } from '../scripts/staging-preflight';
 import { runStagingSmokeCheck, resolveWaitSeconds } from '../scripts/staging-smoke';
 import type { FetchLike } from '../scripts/staging-smoke';
-import { middleware } from '@/middleware';
+import { proxy as middleware } from '@/proxy';
 import { POST as adminLoginHandler } from '@/app/api/admin/login/route';
 import { POST as loginHandler } from '@/app/api/auth/login/route';
 import { clearAllRateLimits } from '@/lib/auth/rate-limiter';
@@ -90,6 +90,18 @@ test('DEP-2: Production Start Path — Uses NODE_ENV=production and npm start (N
     compose.includes('npm start'),
     'docker-compose.yml command must use npm start'
   );
+});
+
+test('NODE-1: the declared Node requirement matches local, CI, and production runtimes', () => {
+  const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
+  const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+  const ciWorkflow = fs.readFileSync(path.join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+  const nodeVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
+
+  assert.equal(packageJson.engines.node, '>=20.9.0');
+  assert.equal(nodeVersion, '22');
+  assert.match(dockerfile, /FROM node:22-alpine/);
+  assert.match(ciWorkflow, /node-version:\s*22/);
 });
 
 test('DEP-3: Database Initialization Tooling — scripts/db-init.mjs Exists and is Packaged in Image', () => {

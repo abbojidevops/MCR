@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import OperatorLoginForm from './operator-login-form';
 
-// Operator sign-in is a per-request screen (it reports live middleware state),
+// Operator sign-in is a per-request screen (it reports live access-guard state),
 // and the client form reads ?next= from the URL.
 export const dynamic = 'force-dynamic';
 

@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ master, main ]
@@ -35,11 +38,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Audit dependency tree
+        run: npm audit --audit-level=moderate
 
       - name: Type-check (tsc --noEmit)
         run: npm run lint

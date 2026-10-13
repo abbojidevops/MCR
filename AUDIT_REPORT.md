@@ -1,7 +1,7 @@
 # MCR — Authenticated Dashboard QA & Improvement Report
 
 **Branch:** `arena/e10e84e6-mcr`
-**Date:** 2026-10-09
+**Date:** 2026-10-13
 **Live preview:** production build of this branch, `next start -p 3100`
 **Status:** PR #4 remains open and unmerged. Review the live preview before merging.
 
@@ -19,8 +19,9 @@ which were re-verified live.
 | Routes audited | 22 (10 tenant dashboard, 5 operator console, 7 public/legal) |
 | Regression coverage | 60 new or updated checks across the audit, modal, and PostgreSQL-profile suites |
 | `npx tsc --noEmit` | clean |
-| `npm run build` | clean (47/47 pages) |
-| `npm test` | **305 / 308 pass** — the 3 failures require PostgreSQL, which is not running in this sandbox |
+| `npm run build` | clean (Next.js 16.4.0, 46/46 pages) |
+| `npm audit` | no known vulnerabilities |
+| `npm test` | **307 / 310 pass; 3 skipped** — live PostgreSQL checks skip when the local server is unavailable |
 
 ---
 
@@ -193,21 +194,23 @@ Applied across the dashboard and console:
 
 ```
 npx tsc --noEmit   → clean
-npm run build      → clean, 47/47 pages generated
-npm test           → 305 / 308 pass
+npm run build      → clean on Next.js 16.4.0 / Tailwind CSS 4.3.3, 46/46 pages
+npm audit          → 0 vulnerabilities
+npm test           → 307 / 310 pass; 3 skipped when local PostgreSQL is unavailable
 ```
 
-### The 3 failures are the PostgreSQL-only environmental baseline
+### Live PostgreSQL checks are environment-dependent
 
-| Test | Reason |
+| Test | Local result |
 |---|---|
-| `PG-2: Live Database Engine Connectivity & Schema Structure` | requires PostgreSQL at `127.0.0.1:5433` |
-| `PG-3: Dual-Persistence Operations & Cascade Lifecycle` | idem |
-| `PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL` | idem |
+| `PG-2: Live Database Engine Connectivity & Schema Structure` | skipped if PostgreSQL is not reachable at `127.0.0.1:5433` |
+| `PG-3: Dual-Persistence Operations & Cascade Lifecycle` | skipped under the same missing-server condition |
+| `PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL` | skipped under the same missing-server condition |
 
 There is no PostgreSQL server in this sandbox. The profile-persistence behavior
-is covered here with a fake pool; run the three live database checks against the
-deployment database before release.
+is covered here with a fake pool. CI runs the three live checks against its
+PostgreSQL 16 service; connection/authentication errors still fail rather than
+being hidden as skips.
 
 ### Regression suites
 
@@ -262,7 +265,9 @@ hours are stored or applied.
 
 ## 9. Live preview
 
-The production build of this branch is running on port **3100**.
+The production build of this branch is running on port **3100** (Next.js 16.4.0,
+Tailwind CSS 4.3.3). The latest login, settings, and access-boundary smoke checks
+passed after the framework update.
 
 | Surface | URL | Session |
 |---|---|---|
@@ -398,7 +403,8 @@ Verified at runtime rather than by reading source.
 
 `scripts/contrast-audit.py` resolves every Tailwind colour pair in the operator
 console, tenant dashboard and public surfaces to real sRGB and computes the
-WCAG ratio. It judges text against 1.4.3 (4.5:1) and icon-only tiles against
+WCAG ratio. It now reads Tailwind 4's installed OKLCH theme tokens directly, so
+the audit stays aligned with the actual CSS palette. It judges text against 1.4.3 (4.5:1) and icon-only tiles against
 1.4.11 (3:1) — judging icons at the text bar produces false positives that hide
 the real failures.
 
@@ -417,6 +423,10 @@ Of 268 measurable pairs, 15 were below threshold:
 The most common failure was the product's own primary green button: white on
 `emerald-600` is 3.77:1 — acceptable for a large icon, below the bar for the
 12px bold label on it.
+
+The ratios above record the original Tailwind 3 palette audit. After the
+framework upgrade, the checker was switched to Tailwind 4's actual OKLCH tokens
+and all 268 current pairs still pass; the updated live result is recorded in §14.
 
 The audit is proven non-vacuous: reverting one fix makes it report that exact
 pair again. `CONTRAST-1/2/3` lock it in — the script must exit clean, must
@@ -471,3 +481,35 @@ explicit product rule before storage or routing is added.
    switch; set `SMTP_URL` (or `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /
    `RESEND_API_KEY`) and implement the client. Until then the digest honestly
    reports `delivered: false` and no reset flow exists.
+
+
+---
+
+## 14. Security and toolchain modernization (2026-10-13)
+
+To keep the product current without a blind dependency sweep, the framework and
+styling toolchain were upgraded to their current stable major versions, then
+built and tested against the full app:
+
+- Next.js **16.4.0** and React **19.3.0**, running on the production-matched
+  Node.js 22 runtime.
+- Tailwind CSS **4.3.3**, its official PostCSS plugin, and `tailwind-merge`
+  **3.7.0**. The custom design tokens now live beside the global CSS instead of
+  in a legacy Tailwind 3 config.
+- Migrated `src/middleware.ts` to Next 16's `src/proxy.ts` convention and kept
+  the existing route protection, redirects, rewrites, and API 401/503 behavior.
+- Updated CI to use reproducible `npm ci` installs on Node 22, run `npm audit`
+  before tests, and restrict the workflow token to read-only repository access.
+- Updated the contrast checker to convert Tailwind 4's shipped OKLCH palette to
+  sRGB before calculating WCAG contrast. **268 pairs checked; no failures.**
+- `npm audit` now reports **0 vulnerabilities** across production and development
+  dependencies. The toolchain's full major-version changes pass the production
+  build and the focused access, deployment, persistence, and dialog test suites.
+- PostgreSQL engine tests now **skip only when the local server is unreachable**;
+  actual authentication/database failures remain failures. CI has a PostgreSQL
+  service and still runs the live checks.
+
+Latest validation: `npm run lint` clean; `npm run build` clean with 46/46 pages;
+`npm test` 307 of 310 passing and 3 skipped locally for the unavailable
+PostgreSQL server; `npm audit` clean; `npm run deploy:check` passed. The production
+preview is available on port 3100.

@@ -39,11 +39,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run staging smoke verifier
         # Live processing stays off: no Twilio or Stripe credentials are supplied
