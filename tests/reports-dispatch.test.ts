@@ -1,4 +1,7 @@
 (process.env as any).NODE_ENV = 'test';
+process.env.TWILIO_MOCK_MODE = 'true';
+delete process.env.SMTP_URL;
+delete process.env.EMAIL_FROM;
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +36,7 @@ function createMockRequest(
   });
 }
 
-test('REPORT-1: Dispatching Daily SMS Summary Delivers Formatted Metrics Text to Contractor', async () => {
+test('REPORT-1: Daily SMS summary reports mock mode without claiming provider delivery', async () => {
   const token = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
   const req = createMockRequest('http://localhost:3001/api/reports/dispatch', {
     token,
@@ -44,11 +47,12 @@ test('REPORT-1: Dispatching Daily SMS Summary Delivers Formatted Metrics Text to
   assert.equal(res.status, 200, 'Daily SMS dispatch must return 200 OK');
 
   const data = await res.json();
-  assert.equal(data.success, true);
+  assert.equal(data.success, false, 'A mocked SMS is not a successful provider dispatch');
   assert.equal(data.accountId, TENANT_A);
   assert.ok(data.dispatchedAt);
   assert.ok(data.results.sms, 'Must contain SMS dispatch results');
-  assert.ok(data.results.sms.sid, 'Must generate valid SMS SID');
+  assert.equal(data.results.sms.status, 'mocked');
+  assert.ok(data.results.sms.sid, 'Mock transport should return a clearly marked mock SID');
   assert.ok(data.results.sms.to, 'Must designate contractor recipient phone');
   assert.match(
     data.results.sms.body,
@@ -59,7 +63,7 @@ test('REPORT-1: Dispatching Daily SMS Summary Delivers Formatted Metrics Text to
   assert.match(data.results.sms.body, /Text-backs sent:/);
 });
 
-test('REPORT-2: Dispatching Weekly Email Digest Renders & Sends HTML Report to Contractor', async () => {
+test('REPORT-2: Weekly email response reports log-only status when SMTP is not configured', async () => {
   const token = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
   const req = createMockRequest('http://localhost:3001/api/reports/dispatch', {
     token,
@@ -70,10 +74,13 @@ test('REPORT-2: Dispatching Weekly Email Digest Renders & Sends HTML Report to C
   assert.equal(res.status, 200, 'Weekly email dispatch must return 200 OK');
 
   const data = await res.json();
-  assert.equal(data.success, true);
+  assert.equal(data.success, false, 'Log-only email must not count as a successful dispatch');
   assert.ok(data.results.email, 'Must contain email dispatch results');
-  assert.ok(data.results.email.messageId, 'Must generate message ID');
-  assert.ok(data.results.email.to, 'Must designate contractor recipient email');
+  assert.equal(data.results.email.accepted, false, 'No SMTP server accepted the message');
+  assert.equal(data.results.email.messageId, null, 'Do not fabricate a provider message ID');
+  assert.equal(data.results.email.transport, 'log_only');
+  assert.match(data.results.email.notice, /SMTP_URL and EMAIL_FROM/);
+  assert.ok(data.results.email.to, 'Must designate the account recipient email');
   assert.match(
     data.results.email.subject,
     /Weekly Report: Apex Plumbing/i,
@@ -81,7 +88,7 @@ test('REPORT-2: Dispatching Weekly Email Digest Renders & Sends HTML Report to C
   );
 });
 
-test('REPORT-3: Combined Digest Dispatch ("type: all") Dispatches Both SMS & Email', async () => {
+test('REPORT-3: Combined digest returns honest SMS and email outcomes', async () => {
   const token = createSessionToken({ accountId: TENANT_B, role: 'owner', isDemo: false });
   const req = createMockRequest('http://localhost:3001/api/reports/dispatch', {
     token,
@@ -92,9 +99,11 @@ test('REPORT-3: Combined Digest Dispatch ("type: all") Dispatches Both SMS & Ema
   assert.equal(res.status, 200);
 
   const data = await res.json();
-  assert.equal(data.success, true);
-  assert.ok(data.results.sms, 'Must dispatch SMS');
-  assert.ok(data.results.email, 'Must dispatch email');
+  assert.equal(data.success, false, 'Neither a mock SMS nor an unsent email counts as a successful dispatch');
+  assert.ok(data.results.sms, 'Must include SMS outcome');
+  assert.equal(data.results.sms.status, 'mocked');
+  assert.ok(data.results.email, 'Must include email outcome');
+  assert.equal(data.results.email.accepted, false);
   assert.match(data.results.sms.body, /TODAY'S MISSED-CALL REPORT for CoolBreeze/i);
   assert.match(data.results.email.subject, /Weekly Report: CoolBreeze/i);
 });
@@ -131,12 +140,43 @@ test('REPORT-5: Missing Notification Phone Triggers 400 Bad Request', async () =
     const res = await dispatchPost(req);
     assert.equal(res.status, 400, 'Must return 400 when contractor phone is missing');
     const data = await res.json();
-    assert.match(data.error, /No notification phone configured/i);
+    assert.match(data.error, /No notification phone is configured/i);
   } finally {
     // Restore profile to maintain strict 0-delta hygiene
     db.updateBusinessProfile(TENANT_A, {
       notification_phone: origNotification,
       emergency_phone: origEmergency,
     });
+  }
+});
+
+test('REPORT-6: invalid dispatch types are rejected without choosing a default channel', async () => {
+  const token = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: false });
+  const requests = [
+    createMockRequest('http://localhost:3001/api/reports/dispatch', {
+      token,
+      body: { type: 'weekly-email' },
+    }),
+    createMockRequest('http://localhost:3001/api/reports/dispatch', {
+      token,
+      body: { type: 42 },
+    }),
+  ];
+
+  for (const req of requests) {
+    const res = await dispatchPost(req);
+    assert.equal(res.status, 400);
+  }
+});
+
+test('REPORT-7: demo sessions cannot trigger external SMS or email dispatch', async () => {
+  const token = createSessionToken({ accountId: TENANT_A, role: 'owner', isDemo: true });
+  for (const type of ['daily_sms', 'weekly_email', 'all']) {
+    const req = createMockRequest('http://localhost:3001/api/reports/dispatch', {
+      token,
+      body: { type },
+    });
+    const res = await dispatchPost(req);
+    assert.equal(res.status, 403, `Demo session must not dispatch ${type}`);
   }
 });

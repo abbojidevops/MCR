@@ -233,11 +233,11 @@ export default function CompliancePage() {
           </div>
           <div className="flex justify-between border-b border-slate-100 pb-2">
             <span className="text-slate-500">TCR Brand SID:</span>
-            <span className="font-mono text-slate-800">{compliance?.brand_sid || 'BN_pending'}</span>
+            <span className="font-mono text-slate-800">{compliance?.brand_sid || 'Not assigned'}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-500">Campaign SID:</span>
-            <span className="font-mono text-slate-800">{compliance?.campaign_sid || 'CM_pending'}</span>
+            <span className="font-mono text-slate-800">{compliance?.campaign_sid || 'Not assigned'}</span>
           </div>
         </div>
 

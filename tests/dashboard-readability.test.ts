@@ -173,9 +173,10 @@ test('D6: Email Service Honesty (No Fabricated 2,450 or 14 Fallbacks)', async ()
     'Email subject must not default to fabricated $2,450'
   );
   assert(
-    rendered.subject.includes('$0 in missed calls'),
-    'Email subject must report $0 when no value exists'
+    rendered.subject.includes('Weekly report: Zero Plumbing') && !rendered.subject.includes('$0'),
+    'Email subject must not turn a missing value into a reported $0'
   );
+  assert.match(rendered.html, /Estimated opportunity value:<\/strong> Not available/);
   assert(
     !rendered.html.includes('2,450'),
     'Email HTML must not contain fabricated $2,450'

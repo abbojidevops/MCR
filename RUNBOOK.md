@@ -61,6 +61,12 @@ TWILIO_AUTH_TOKEN=your_auth_token_here
 TWILIO_PHONE_NUMBER=+15551234567
 TWILIO_MOCK_MODE=false # Set to false in production
 
+# Optional outbound email (configure both only after selecting an authorized sender).
+# URL-encode SMTP username/password; use smtps:// for TLS from connection start.
+# SMTP_URL=smtps://user:URL_ENCODED_PASSWORD@smtp.example.net:465
+# EMAIL_FROM=MCR Reports <reports@your-verified-domain.example>
+# SMTP acceptance does not confirm inbox delivery. No default sender is provided.
+
 # Database (PostgreSQL)
 # In development, MCR falls back to file-persistent JSON at ./data/mcr_db.json if DATABASE_URL is unset.
 # In Docker deployments, Postgres credentials must be supplied via environment variables.

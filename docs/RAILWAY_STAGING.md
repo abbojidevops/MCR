@@ -84,6 +84,7 @@ Key properties:
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_*` | Only needed to exercise live billing |
 | `CLOUDFLARE_TUNNEL_SECRET` | When staging is fronted by a Cloudflare Zero-Trust tunnel |
 | `ALERT_WEBHOOK_URL` / `ADMIN_NOTIFICATION_EMAIL` | Owner/operator alerting |
+| `SMTP_URL` + `EMAIL_FROM` | Optional outbound email pair. Leave both unset to keep sending disabled; SMTP acceptance does not confirm inbox delivery. Use only a sender domain you control. |
 | `NEXT_PUBLIC_STRIPE_LIVE` / `NEXT_PUBLIC_TWILIO_LIVE` / `NEXT_PUBLIC_POSTGRES_LIVE` | Launch-gate live-state overrides used by `/admin/launch-gate` |
 | `MCR_DEMO_MODE` (or the legacy `DEMO_MODE`) | Set to `true` **only** on a demo/staging box. Controls whether the `/login` screen may display the demonstration credentials. See the section below. |
 

@@ -599,69 +599,71 @@ test('MODAL-4: dialogs are keyboard-dismissible and announce their close button'
 });
 
 // ============================================================================
-// 7. Email dispatch must not claim delivery it did not achieve
+// 7. Email dispatch must report SMTP acceptance, not claim inbox delivery
 // ============================================================================
 
-test('EMAIL-1: sendEmail reports delivery honestly instead of always returning success', () => {
+test('EMAIL-1: sendEmail reports provider acceptance honestly', () => {
   const source = read('src/lib/email/email-service.ts');
 
-  // The result type must carry an explicit delivery verdict.
-  assert.match(source, /export interface EmailDispatchResult/, 'a dispatch result type must exist');
-  assert.match(source, /delivered: boolean/, 'the result must say whether it was delivered');
-  assert.match(source, /transport: 'smtp' \| 'log_only'/, 'the transport actually taken must be reported');
-  assert.match(source, /notice: string/, 'a human-readable explanation must accompany the result');
-
-  // With no transport configured the log line must not read as a dispatch.
-  assert.match(source, /EMAIL NOT SENT/, 'an unsent message must be logged as not sent');
-  assert.ok(
-    !source.includes('[EMAIL DISPATCH] To:') || source.includes('hasTransport'),
-    'the code must branch on whether a transport exists'
-  );
-
-  // There must be no unconditional "success: true" with a fabricated messageId.
-  const body = source.slice(source.indexOf('public static async sendEmail'));
-  assert.match(body, /if \(!this\.hasTransport\(\)\)/, 'the no-transport path must be explicit');
-  assert.match(body, /delivered: false/, 'the no-transport path must report delivered: false');
+  assert.match(source, /export interface EmailDispatchResult/);
+  assert.match(source, /accepted: boolean/, 'the result must say whether SMTP accepted the recipient');
+  assert.doesNotMatch(source, /delivered: boolean/, 'SMTP acceptance is not confirmed inbox delivery');
+  assert.match(source, /transport: 'smtp' \| 'log_only' \| 'disabled'/);
+  assert.match(source, /notice: string/);
+  assert.match(source, /SMTP_URL and EMAIL_FROM/);
+  assert.match(source, /info\.accepted/);
+  assert.match(source, /final inbox delivery is not confirmed/i);
 });
 
-test('EMAIL-2: the dispatch route surfaces the real delivery status', () => {
+test('EMAIL-2: the dispatch route passes SMTP acceptance through to the client', () => {
   const source = read('src/app/api/reports/dispatch/route.ts');
-  assert.match(source, /delivered: emailResult\.delivered/, 'the route must pass through the verdict');
+  assert.match(source, /accepted: emailResult\.accepted/);
   assert.match(source, /transport: emailResult\.transport/);
   assert.match(source, /notice: emailResult\.notice/);
+  assert.match(source, /messageId: string \| null/);
 });
 
-test('EMAIL-3: the reports UI never shows a green success for an undelivered email', () => {
+test('EMAIL-3: the reports UI never claims inbox delivery', () => {
   const source = read('src/app/dashboard/reports/page.tsx');
-
-  // The old unconditional green message is gone.
-  assert.ok(
-    !source.includes("Weekly recovery digest dispatched to"),
-    'the UI must not claim an email was dispatched when nothing was sent'
-  );
-
-  // Delivery is now branched on, and the not-delivered case is a warning.
-  assert.match(source, /email\?\.delivered/, 'the UI must check whether it was delivered');
-  assert.match(source, /type: 'warning'/, 'the undelivered case must not be styled as success');
-  assert.match(
-    source,
-    /this deployment has no outbound email/,
-    'the warning must say plainly why nothing arrived'
-  );
+  assert.match(source, /email\?\.accepted/, 'the UI must check SMTP acceptance');
+  assert.match(source, /SMTP server accepted the weekly report/);
+  assert.match(source, /Final inbox delivery is not confirmed/);
+  assert.match(source, /email\?\.notice/, 'the UI must show the reason when no server accepted it');
 });
 
-test('EMAIL-4: no real mail transport is wired up — the claim is documented, not faked', () => {
+test('EMAIL-4: provider-neutral SMTP is implemented but requires operator configuration', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-  const transports = ['nodemailer', 'postmark', '@sendgrid/mail', 'resend', 'aws-sdk', 'ses'];
-  for (const t of transports) {
-    assert.ok(!(t in deps), `${t} must not be listed as a dependency unless a transport is actually implemented`);
-  }
-  assert.match(
-    read('src/lib/email/email-service.ts'),
-    /There is no SMTP\/Postmark\/Nodemailer dependency in this project/,
-    'the code must state plainly that no transport exists'
-  );
+  assert.ok(pkg.dependencies.nodemailer, 'Nodemailer must be installed for the SMTP transport');
+  const source = read('src/lib/email/email-service.ts');
+  assert.match(source, /nodemailer\.createTransport/);
+  assert.match(source, /transportFactory\(smtpUrl\)/, 'tests must be able to inject a fake transport');
+  assert.match(source, /public static hasTransport\(\)/);
+  assert.match(source, /process\.env\.SMTP_URL/);
+  assert.match(source, /process\.env\.EMAIL_FROM/);
+});
+
+test('EMAIL-5: report dispatch has no fabricated recipient or caller ID fallback', () => {
+  const source = read('src/app/api/reports/dispatch/route.ts');
+  assert.doesNotMatch(source, /contractor@example\.com/);
+  assert.doesNotMatch(source, /\+12175550190/);
+  assert.match(source, /No account email address is configured/);
+  assert.match(source, /No MCR caller ID is configured/);
+  assert.match(source, /Report dispatch is disabled for demo sessions/);
+});
+
+test('EMAIL-6: compliance UI does not display invented pending carrier SIDs', () => {
+  const source = read('src/app/dashboard/compliance/page.tsx');
+  assert.doesNotMatch(source, /BN_pending|CM_pending/);
+  assert.match(source, /brand_sid \|\| 'Not assigned'/);
+  assert.match(source, /campaign_sid \|\| 'Not assigned'/);
+});
+
+test('EMAIL-7: an unimplemented email-verification flow cannot send a dead link', () => {
+  const source = read('src/lib/email/email-service.ts');
+  assert.match(source, /working email-verification flow is not implemented/);
+  assert.doesNotMatch(source, /\/verify\?token=/);
+  const preview = read('src/app/api/email/preview/route.ts');
+  assert.doesNotMatch(preview, /sample_verify_token|Pending Carrier Submission|amountPaidCents: 14900/);
 });
 
 // ============================================================================

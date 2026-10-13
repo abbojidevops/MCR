@@ -53,27 +53,34 @@ export default function ReportsPage() {
       if (!res.ok) {
         setDispatchToast({ type: 'error', message: data.error || 'Failed to dispatch report' });
       } else if (type === 'daily_sms') {
-        setDispatchToast({
-          type: 'success',
-          message: `Flash summary SMS dispatched to ${data.results?.sms?.to || 'contractor mobile'}`,
-        });
-      } else {
-        // Email has no real transport on this deployment. Saying "dispatched"
-        // here would tell the customer an email is on its way when nothing
-        // was ever sent — so state exactly what happened.
-        const email = data.results?.email;
-        if (email?.delivered) {
+        const sms = data.results?.sms;
+        if (sms?.status === 'sent' || sms?.status === 'queued') {
           setDispatchToast({
-            type: 'success',
-            message: `Weekly recovery digest sent to ${email.to}.`,
+            type: 'warning',
+            message: `Twilio accepted the summary SMS for ${sms.to}. Carrier and handset delivery are not confirmed.`,
+          });
+        } else if (sms?.status === 'mocked') {
+          setDispatchToast({
+            type: 'warning',
+            message: 'Preview only: SMS was not sent because Twilio is in mock mode.',
+          });
+        } else {
+          setDispatchToast({
+            type: 'error',
+            message: sms?.error || 'SMS was not accepted by the configured provider.',
+          });
+        }
+      } else {
+        const email = data.results?.email;
+        if (email?.accepted) {
+          setDispatchToast({
+            type: 'warning',
+            message: `The SMTP server accepted the weekly report for ${email.to}. Final inbox delivery is not confirmed.`,
           });
         } else {
           setDispatchToast({
             type: 'warning',
-            message:
-              'Weekly digest prepared, but not sent: this deployment has no outbound email ' +
-              'service configured, so nothing was delivered to your inbox. The SMS digest ' +
-              'and on-screen reports are unaffected.',
+            message: email?.notice || 'The weekly report was prepared but not sent.',
           });
         }
       }

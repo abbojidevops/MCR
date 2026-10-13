@@ -325,55 +325,26 @@ renders.
 
 ## 11. Operator polish pass (commit `a5dcf05`)
 
-Two defects found while reviewing the operator console, both of the same class
-as the rest of this audit: the product claiming something it does not do.
+Two defects were found while reviewing the operator console, both of the same
+class as the rest of this audit: the product claiming something it does not do.
 
 ### 11.1 Email dispatch reported delivery for messages never sent
 
-`EmailService.sendEmail()` logged to the console and returned
-`{ success: true, messageId }`. Its docstring claimed it "sends via
-SMTP/Postmark in prod". It does not — there is no nodemailer, Postmark,
-SendGrid or Resend dependency anywhere in the project.
+At the time of the original audit, `EmailService.sendEmail()` only logged the
+message, returned `{ success: true, messageId }`, and had no mail transport.
+The UI also showed a green "Weekly recovery digest dispatched" message. A
+customer could reasonably believe an email had reached their inbox when it had
+never left the application.
 
-The chain therefore lied three times over:
+The initial repair added an explicit no-transport outcome and changed the
+reports UI to show a warning instead of claiming delivery. Section 15 records
+the later implementation of optional SMTP and the updated acceptance-only
+status. **This section is historical; do not use its original `delivered`
+field or old provider-key list as current configuration guidance.**
 
-| Step | What it claimed |
-|---|---|
-| `sendEmail()` | success, with a message ID |
-| `/api/reports/dispatch` | `results.email = { messageId, to, subject }` |
-| Reports page | **green** toast: "Weekly recovery digest dispatched to …" |
-
-A customer could click "Send Test Weekly Email", get a green confirmation that
-it reached their inbox, and wait for mail that would never arrive.
-
-Fixed end to end:
-
-- `sendEmail` now returns `EmailDispatchResult` carrying `delivered`,
-  `transport` (`'smtp' | 'log_only'`) and a plain-language `notice`. The
-  no-transport path logs `[EMAIL NOT SENT — no transport configured]`.
-- `EmailService.hasTransport()` is the single switch for wiring a real
-  transport later (`SMTP_URL` / `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /
-  `RESEND_API_KEY`). If a key is set but no client is implemented it still
-  reports `delivered: false` rather than pretending.
-- The dispatch route passes `delivered`, `transport` and `notice` through.
-- The Reports page branches on `delivered`. An undelivered digest shows an
-  **amber** warning explaining that no outbound email service is configured —
-  never a green success.
-
-Live verification against the production build:
-
-```
-POST /api/reports/dispatch {"type":"weekly_email"}
-  "delivered": false,
-  "transport": "log_only",
-  "notice": "No outbound email transport is configured on this deployment,
-             so this message was rendered and logged but not sent…"
-```
-
-**Still unavailable, for the same reason:** self-service password reset. There
-is no transport to send a reset link through, so the flow is not built rather
-than stubbed. Adding it before a transport exists would repeat exactly this
-defect.
+Self-service password reset remains unavailable. SMTP alone does not provide a
+secure reset-token lifecycle, expiry, rate limits, or a working reset page, so
+no reset flow is claimed or stubbed.
 
 ### 11.2 Dialogs had no focus management
 
@@ -476,11 +447,10 @@ explicit product rule before storage or routing is added.
    (`a5dcf05`), 15 pairs fixed, now enforced by `CONTRAST-1/2/3`.
 6. **Weekly business-hour scheduling** remains unavailable by design for now;
    define the operational rules before adding a schedule or after-hours messages.
-7. **Outbound email transport**, if the weekly digest or a self-service
-   password reset is ever wanted. `EmailService.hasTransport()` is the single
-   switch; set `SMTP_URL` (or `POSTMARK_API_KEY` / `SENDGRID_API_KEY` /
-   `RESEND_API_KEY`) and implement the client. Until then the digest honestly
-   reports `delivered: false` and no reset flow exists.
+7. **Self-service password reset** remains unavailable. The SMTP transport
+   added in §15 can send configured transactional mail, but a secure reset flow
+   still needs expiring one-time tokens, rate limits, storage, and a working
+   reset page. No password-reset email is claimed or sent.
 
 
 ---
@@ -509,7 +479,55 @@ built and tested against the full app:
   actual authentication/database failures remain failures. CI has a PostgreSQL
   service and still runs the live checks.
 
-Latest validation: `npm run lint` clean; `npm run build` clean with 46/46 pages;
-`npm test` 307 of 310 passing and 3 skipped locally for the unavailable
-PostgreSQL server; `npm audit` clean; `npm run deploy:check` passed. The production
-preview is available on port 3100.
+Validation at the time of the modernization pass: `npm run lint` clean;
+`npm run build` clean with 46/46 pages; `npm test` 307 of 310 passing and 3
+skipped locally for the unavailable PostgreSQL server; `npm audit` clean;
+`npm run deploy:check` passed.
+
+## 15. SMTP transport and truthful transactional email (2026-10-13)
+
+The weekly report now has a provider-neutral SMTP transport using Nodemailer.
+Sending remains disabled unless the operator supplies **both** `SMTP_URL` and
+`EMAIL_FROM`; no credentials, sender address, or support domain are guessed or
+committed. Production `smtp://` connections require STARTTLS, `smtps://` starts
+with TLS, and the SMTP connection is closed after each send attempt. Only the
+weekly report dispatch is currently wired to send through this service; the
+other existing templates are not hooked up to application events.
+
+The result reports whether the SMTP server accepted the recipient for
+processing. It does **not** claim inbox delivery: spam filtering, later bounces,
+and final recipient delivery are outside this app's visibility. If SMTP is
+missing, invalid, rejects the recipient, or errors, the weekly report UI shows
+that outcome instead of a green sent message. No provider message ID is made up
+when no SMTP server was contacted.
+
+The email path was hardened before enabling real sending:
+
+- The templates no longer invent verification tokens, MCR phone numbers,
+  carrier details, brand IDs, payment amounts, trial dates/statistics, or
+  carrier deactivation codes. Missing facts are omitted or labelled unavailable.
+- Email verification is explicitly non-sendable until a real token lifecycle and
+  confirmation route exist; it cannot produce a dead `/verify` link.
+- Dynamic template values are HTML-escaped and email subjects are normalized
+  to prevent markup injection and header-line injection.
+- The preview endpoint no longer inserts sample tokens or fake payment values.
+- The compliance dashboard shows "Not assigned" instead of synthetic pending
+  brand/campaign SIDs.
+- Weekly dispatch no longer falls back to `contractor@example.com` or a sample
+  caller ID. Missing account recipient or MCR caller ID now fails before any
+  part of a combined dispatch is sent. Demo sessions cannot trigger external
+  SMS or email, protecting seeded sample accounts from live dispatch.
+- API/UI results distinguish mock SMS and SMTP acceptance from confirmed
+  recipient delivery.
+
+**Verification (2026-10-13):** all nine email-service tests use an injected
+fake SMTP transport; no live mail server or credentials were available, so
+external delivery was not attempted. The full suite passed **321 of 324 tests**,
+with 3 PostgreSQL checks skipped because no local PostgreSQL server was
+available. `npm run lint`, the production build (46/46 pages), `npm audit` (0
+vulnerabilities), and `npm run deploy:check` all passed. The preview returned
+HTTP 200 for `/` and `/api/health`; unauthenticated email-preview requests
+returned 401. Weekly dispatch remains log-only without operator SMTP
+configuration; the email-preview route only renders HTML and never sends. SMTP
+acceptance in a future deployment still will not confirm inbox delivery. Email
+verification and self-service password reset remain unimplemented.
