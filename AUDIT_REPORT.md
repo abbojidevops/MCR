@@ -531,3 +531,30 @@ returned 401. Weekly dispatch remains log-only without operator SMTP
 configuration; the email-preview route only renders HTML and never sends. SMTP
 acceptance in a future deployment still will not confirm inbox delivery. Email
 verification and self-service password reset remain unimplemented.
+
+## 16. Runtime session-signing secret enforcement (2026-10-13)
+
+Removed the predictable built-in session-signing key from both the server signer
+and Next.js proxy verifier. Both now resolve `SESSION_SECRET` when a session is
+signed or checked, using the shared `validateSessionSecret` policy in production.
+There is no application fallback: a missing key or a key below the existing
+256-bit entropy policy fails closed. Protected admin/dashboard pages and
+session-authenticated APIs return a clear 503 configuration error, and session
+issuance returns 503 without setting a cookie. The public sign-in screens remain
+reachable so operators can correct the runtime configuration.
+
+Secret validation is request-time rather than module-import/build-time. A
+separate production build from a clean temporary copy with all `.env*` files
+excluded and `SESSION_SECRET` unset compiled successfully (46/46 pages). Test
+and security-probe code now supplies an explicit test-only key instead of
+relying on an application default. `.env.example` leaves the value blank and
+points operators to `openssl rand -hex 32`; the runbook explains the 503
+behavior and runtime requirement.
+
+**Verification (2026-10-13):** `npm test` passed **325 tests**, with 3 PostgreSQL
+checks skipped because no local server was available; `npm run lint` and
+`npm run deploy:check` passed. The live preview returned 200 for `/` and
+`/api/health`; anonymous protected API requests returned 401 with a configured
+key, the dashboard redirected to sign-in, and the admin route remained locked.
+The local `.env.local` contents were not inspected or recorded. PR #4 remains
+open for the user's preview review.

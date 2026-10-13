@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  getSessionSecret,
+  getSessionSecretConfigurationError,
+} from '@/lib/security/session-secret';
 
 const SESSION_COOKIE_NAME = 'mcr_session';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'mcr-prod-secret-signing-key-f928a30d8c11e7';
 
 /** Public operator sign-in route. `/admin/login` is rewritten onto this route so
  *  the URL stays intuitive while the page itself lives outside the admin shell
@@ -25,7 +28,7 @@ async function verifySessionEdge(token?: string): Promise<SessionEdgePayload | n
   const [data, signature] = parts;
   try {
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(SESSION_SECRET);
+    const keyData = encoder.encode(getSessionSecret());
     const key = await crypto.subtle.importKey(
       'raw',
       keyData,
@@ -87,6 +90,17 @@ export async function proxy(req: NextRequest) {
   //    every other `/admin/*` path remains locked down.
   if (pathname === '/admin/login') {
     return NextResponse.rewrite(new URL(OPERATOR_LOGIN_ROUTE, req.url));
+  }
+
+  const requiresSessionSecret =
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/dashboard') ||
+    (pathname.startsWith('/api/admin') && pathname !== '/api/admin/login');
+  if (requiresSessionSecret) {
+    const configurationError = getSessionSecretConfigurationError();
+    if (configurationError) {
+      return jsonError(503, `Service Unavailable: ${configurationError}`, pathname);
+    }
   }
 
   // 1. Protect all /admin/* routes strictly

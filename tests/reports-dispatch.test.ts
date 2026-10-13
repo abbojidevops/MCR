@@ -1,4 +1,4 @@
-(process.env as any).NODE_ENV = 'test';
+import './test-env';
 process.env.TWILIO_MOCK_MODE = 'true';
 delete process.env.SMTP_URL;
 delete process.env.EMAIL_FROM;

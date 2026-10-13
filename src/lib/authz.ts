@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, SessionPayload } from '@/lib/session';
 import { db } from '@/db/repository';
+import { getSessionSecretConfigurationError } from '@/lib/security/session-secret';
 
 export interface AuthenticatedContext {
   session: SessionPayload;
@@ -10,14 +11,25 @@ export interface AuthenticatedContext {
   isDemo: boolean;
 }
 
+function sessionSecretUnavailable(configurationError: string): NextResponse {
+  return NextResponse.json(
+    { error: `Service Unavailable: ${configurationError}`, status: 503 },
+    { status: 503 }
+  );
+}
+
 /**
  * Enforce tenant authentication on API routes.
  * Derives account identity strictly from the verified session cookie.
- * Returns 401 Unauthorized if the caller is anonymous or has an invalid/revoked session.
+ * Returns 503 if session signing is misconfigured, or 401 if the caller is anonymous
+ * or has an invalid/revoked session.
  */
 export async function requireTenantAuth(
   req: NextRequest
 ): Promise<AuthenticatedContext | NextResponse> {
+  const configurationError = getSessionSecretConfigurationError();
+  if (configurationError) return sessionSecretUnavailable(configurationError);
+
   const session = await getSession(req);
 
   if (!session || !session.accountId) {
@@ -53,11 +65,15 @@ export async function requireTenantAuth(
 
 /**
  * Enforce platform operator / admin role on API routes.
- * Returns 403 Forbidden if caller does not possess role: 'admin'.
+ * Returns 503 if session signing is misconfigured, or 403 if the caller does not
+ * possess role: 'admin'.
  */
 export async function requireAdminAuth(
   req: NextRequest
 ): Promise<AuthenticatedContext | NextResponse> {
+  const configurationError = getSessionSecretConfigurationError();
+  if (configurationError) return sessionSecretUnavailable(configurationError);
+
   const session = await getSession(req);
 
   if (!session || session.role !== 'admin') {

@@ -41,7 +41,7 @@ This document details the operational, telecom, compliance, and disaster recover
 
 ## 2. Environment Configuration
 
-Copy `.env.example` to `.env.local` for production:
+Copy `.env.example` to `.env.local` for local development, or configure the listed variables in your production platform:
 
 ```bash
 # Server Configuration
@@ -49,11 +49,12 @@ PORT=3001
 NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://mcr.yourdomain.com
 
-# Platform Operator / Admin Boundary
-# MANDATORY: Must be supplied via environment (never baked into Docker image).
-# If unset or empty, /admin boundary strictly returns 503 Service Unavailable (no dev fallback).
+# Platform Operator / Admin Boundary and session signing
+# ADMIN_PASSWORD and SESSION_SECRET are supplied at runtime, never baked into the Docker image.
+# Generate SESSION_SECRET with `openssl rand -hex 32` (64 random hex characters).
+# Missing or weak SESSION_SECRET makes protected pages and APIs return 503; builds do not need it.
 ADMIN_PASSWORD=your-secure-random-admin-password
-SESSION_SECRET=your-secure-signing-secret-key-32bytes
+SESSION_SECRET=
 
 # Telephony (Twilio)
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -135,7 +136,7 @@ Railway builds this repository through `railway.json` + the root `Dockerfile`, a
 # 2. Set service variables (Railway reads railway.json automatically):
 #      DATABASE_URL=${{Postgres.DATABASE_URL}}
 #      ADMIN_PASSWORD=<openssl rand -base64 24>   (>=12 chars, upper+lower+digit)
-#      SESSION_SECRET=<openssl rand -hex 32>      (>=32 chars)
+#      SESSION_SECRET=<openssl rand -hex 32>      (64 hex chars / 32 random bytes)
 #      NEXT_PUBLIC_APP_URL=https://<your-service>.up.railway.app
 #      TWILIO_MOCK_MODE=true                      (staging)
 # 3. Verify every staging requirement (secrets, secrets entropy, PostgreSQL 16,

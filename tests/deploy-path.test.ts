@@ -1,4 +1,4 @@
-(process.env as any).NODE_ENV = 'test';
+import './test-env';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -90,6 +90,10 @@ test('DEP-2: Production Start Path — Uses NODE_ENV=production and npm start (N
     compose.includes('npm start'),
     'docker-compose.yml command must use npm start'
   );
+  assert.ok(
+    compose.includes('SESSION_SECRET=${SESSION_SECRET}'),
+    'docker-compose.yml must pass the runtime session signing secret into the app'
+  );
 });
 
 test('NODE-1: the declared Node requirement matches local, CI, and production runtimes', () => {
@@ -159,8 +163,10 @@ CREATE TABLE unclosed (
   );
 });
 
-test('DEP-5: Admin Boundary Fail-Closed — Middleware Returns 503 When ADMIN_PASSWORD Unset', async () => {
+test('DEP-5: Admin Boundary Fail-Closed — Middleware Returns 503 for Missing Operator or Session Secrets', async () => {
   const originalAdminPw = process.env.ADMIN_PASSWORD;
+  const originalSessionSecret = process.env.SESSION_SECRET;
+  const originalNodeEnv = process.env.NODE_ENV;
 
   try {
     // 1. When ADMIN_PASSWORD is unset
@@ -187,11 +193,37 @@ test('DEP-5: Admin Boundary Fail-Closed — Middleware Returns 503 When ADMIN_PA
       503,
       'Accessing /admin/* when ADMIN_PASSWORD is whitespace must fail closed with 503'
     );
+
+    // 3. Production admin and dashboard routes fail closed if the signing key is missing.
+    (process.env as any).NODE_ENV = 'production';
+    process.env.ADMIN_PASSWORD = 'ValidAdminPass2026!';
+    delete process.env.SESSION_SECRET;
+    const reqMissingSession = createMockRequest('http://localhost:3001/admin/concierge');
+    const resMissingSession = await middleware(reqMissingSession);
+    assert.equal(resMissingSession.status, 503);
+    assert.match((await resMissingSession.json()).error, /SESSION_SECRET must be configured/);
+
+    // 4. A long but predictable value is rejected by the shared production policy.
+    process.env.SESSION_SECRET = 'a'.repeat(64);
+    const reqWeakSession = createMockRequest('http://localhost:3001/dashboard');
+    const resWeakSession = await middleware(reqWeakSession);
+    assert.equal(resWeakSession.status, 503);
+    assert.match((await resWeakSession.json()).error, /at least 32 bytes .* entropy/);
   } finally {
     if (originalAdminPw !== undefined) {
       process.env.ADMIN_PASSWORD = originalAdminPw;
     } else {
       delete process.env.ADMIN_PASSWORD;
+    }
+    if (originalSessionSecret !== undefined) {
+      process.env.SESSION_SECRET = originalSessionSecret;
+    } else {
+      delete process.env.SESSION_SECRET;
+    }
+    if (originalNodeEnv !== undefined) {
+      (process.env as any).NODE_ENV = originalNodeEnv;
+    } else {
+      delete (process.env as any).NODE_ENV;
     }
   }
 });
@@ -268,6 +300,9 @@ test('DEP-8: Operator Documentation — RUNBOOK.md §2 Documents ADMIN_PASSWORD 
   const content = fs.readFileSync(runbookPath, 'utf-8');
 
   assert.ok(content.includes('ADMIN_PASSWORD'), 'RUNBOOK.md §2 must document ADMIN_PASSWORD');
+  assert.ok(content.includes('SESSION_SECRET'), 'RUNBOOK.md §2 must document the session signing secret');
+  assert.ok(content.includes('Missing or weak SESSION_SECRET makes protected pages and APIs return 503'));
+  assert.ok(content.includes('builds do not need it'), 'RUNBOOK.md must clarify the secret is runtime-only');
   assert.ok(content.includes('503 Service Unavailable'), 'RUNBOOK.md §2 must document 503 fail-closed guarantee');
   assert.ok(content.includes('db-init.mjs'), 'RUNBOOK.md §2 must document db-init.mjs');
 });
