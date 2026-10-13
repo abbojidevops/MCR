@@ -11,7 +11,7 @@ on:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # The PostgreSQL integration tests connect to 127.0.0.1:5433 using
     # the isolated credentials below. GitHub Actions service containers

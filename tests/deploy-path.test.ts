@@ -95,13 +95,17 @@ test('DEP-2: Production Start Path — Uses NODE_ENV=production and npm start (N
 test('NODE-1: the declared Node requirement matches local, CI, and production runtimes', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'));
   const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
-  const ciWorkflow = fs.readFileSync(path.join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf8');
+  const workflowsDir = path.join(process.cwd(), '.github', 'workflows');
+  const ciWorkflow = fs.readFileSync(path.join(workflowsDir, 'ci.yml'), 'utf8');
+  const stagingWorkflow = fs.readFileSync(path.join(workflowsDir, 'staging-smoke.yml'), 'utf8');
   const nodeVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
 
   assert.equal(packageJson.engines.node, '>=20.9.0');
   assert.equal(nodeVersion, '22');
   assert.match(dockerfile, /FROM node:22-alpine/);
   assert.match(ciWorkflow, /node-version:\s*22/);
+  assert.match(ciWorkflow, /runs-on:\s*ubuntu-24\.04/);
+  assert.match(stagingWorkflow, /runs-on:\s*ubuntu-24\.04/);
 });
 
 test('DEP-3: Database Initialization Tooling — scripts/db-init.mjs Exists and is Packaged in Image', () => {
