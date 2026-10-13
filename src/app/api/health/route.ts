@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/repository';
 import { getSession } from '@/lib/session';
+import { getSessionSecretConfigurationError } from '@/lib/security/session-secret';
 import { isCarrierVerifiedRegistration } from '@/lib/compliance-machine';
 
 export async function GET(req: NextRequest) {
+  // Keep the platform readiness signal honest without exposing why configuration failed.
+  // Protected routes return the detailed operator-facing explanation separately.
+  if (getSessionSecretConfigurationError()) {
+    return NextResponse.json(
+      {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        version: '1.0.0',
+      },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      }
+    );
+  }
+
   // 1. Operator session check
   const session = await getSession(req);
   const isOperator = Boolean(session && session.role === 'admin');

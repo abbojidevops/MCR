@@ -47,6 +47,32 @@ test('H1: Public Health Minimal Payload (Anonymous Visitor)', async () => {
   assert.equal(body.uptimeSeconds, undefined, 'Uptime must not be leaked');
 });
 
+test('H1a: Readiness Returns 503 for Missing or Weak Session Secrets Without Leaking Details', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousSessionSecret = process.env.SESSION_SECRET;
+
+  try {
+    (process.env as any).NODE_ENV = 'production';
+
+    for (const sessionSecret of [undefined, 'a'.repeat(64)]) {
+      if (sessionSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = sessionSecret;
+
+      const response = await healthGet(createMockRequest());
+      const body = await response.json();
+      assert.equal(response.status, 503);
+      assert.equal(body.status, 'unhealthy');
+      assert.deepEqual(Object.keys(body).sort(), ['status', 'timestamp', 'version'].sort());
+      assert.equal(JSON.stringify(body).includes('SESSION_SECRET'), false);
+    }
+  } finally {
+    if (previousNodeEnv === undefined) delete (process.env as any).NODE_ENV;
+    else (process.env as any).NODE_ENV = previousNodeEnv;
+    if (previousSessionSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = previousSessionSecret;
+  }
+});
+
 test('H2: Non-Operator Customer Receives Public Health Only (No Detailed Checks)', async () => {
   const customerToken = createSessionToken({
     accountId: 'acc-apex-plumbing',

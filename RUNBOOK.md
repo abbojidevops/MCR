@@ -52,7 +52,8 @@ NEXT_PUBLIC_APP_URL=https://mcr.yourdomain.com
 # Platform Operator / Admin Boundary and session signing
 # ADMIN_PASSWORD and SESSION_SECRET are supplied at runtime, never baked into the Docker image.
 # Generate SESSION_SECRET with `openssl rand -hex 32` (64 random hex characters).
-# Missing or weak SESSION_SECRET makes protected pages and APIs return 503; builds do not need it.
+# Missing or weak SESSION_SECRET makes protected pages and APIs return 503.
+# /api/health returns a generic 503 without revealing details; builds do not need it.
 ADMIN_PASSWORD=your-secure-random-admin-password
 SESSION_SECRET=
 

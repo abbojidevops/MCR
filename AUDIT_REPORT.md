@@ -541,7 +541,10 @@ There is no application fallback: a missing key or a key below the existing
 256-bit entropy policy fails closed. Protected admin/dashboard pages and
 session-authenticated APIs return a clear 503 configuration error, and session
 issuance returns 503 without setting a cookie. The public sign-in screens remain
-reachable so operators can correct the runtime configuration.
+reachable so operators can correct the runtime configuration. The public
+`/api/health` readiness check now returns a generic 503 when session signing is
+unavailable, without exposing the cause or any secret, so a broken deployment
+cannot be marked healthy.
 
 Secret validation is request-time rather than module-import/build-time. A
 separate production build from a clean temporary copy with all `.env*` files
