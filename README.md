@@ -89,8 +89,9 @@ npm run build  # Production build
 
 The regression suite covers authentication, tenant isolation, telecom and
 webhook handling, billing, compliance, dashboard metrics, deployment/security
-gates, profile persistence, accessibility, and SMTP outcome handling. The live
-PostgreSQL engine checks are skipped with an explicit reason when PostgreSQL is
+gates, profile and credential persistence, accessibility, and SMTP outcome
+handling. The live PostgreSQL engine checks are skipped with an explicit reason
+when PostgreSQL is
 not available at `127.0.0.1:5433`; CI runs them against PostgreSQL 16.
 
 Outbound email is disabled unless both `SMTP_URL` and `EMAIL_FROM` are set by

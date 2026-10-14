@@ -76,6 +76,8 @@ interface DatabaseState {
   processedWebhooks: Record<string, { processedAt: string; provider: string; eventType: string }>;
   auditLogs: { id: string; accountId: string; action: string; timestamp: string; details?: any }[];
   userCredentials: UserCredential[];
+  /** Credential IDs confirmed to have a PostgreSQL row; prevents stale JSON fallback after deletion. */
+  postgresCredentialIds: string[];
   revokedSessions: string[];
 }
 
@@ -213,6 +215,19 @@ function mapPostgresBusinessProfile(row: any): BusinessProfile {
   return profile;
 }
 
+function mapPostgresUserCredential(row: any): UserCredential {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    account_id: String(row.account_id),
+    email: String(row.email).trim().toLowerCase(),
+    password_hash: String(row.password_hash),
+    algorithm: 'scrypt',
+    created_at: postgresTimestampToIso(row.created_at),
+    updated_at: postgresTimestampToIso(row.updated_at),
+  };
+}
+
 class DatabaseRepository {
   private state: DatabaseState;
   private initialized = false;
@@ -252,6 +267,7 @@ class DatabaseRepository {
       processedWebhooks: {},
       auditLogs: [],
       userCredentials: [...SEED_USER_CREDENTIALS],
+      postgresCredentialIds: [],
       revokedSessions: [],
     };
   }
@@ -268,6 +284,9 @@ class DatabaseRepository {
           ...this.getInitialState(),
           ...parsed,
           userCredentials: parsed.userCredentials || [...SEED_USER_CREDENTIALS],
+          postgresCredentialIds: Array.isArray(parsed.postgresCredentialIds)
+            ? parsed.postgresCredentialIds.filter((id: unknown): id is string => typeof id === 'string')
+            : [],
           revokedSessions: parsed.revokedSessions || [],
         };
         // Normalize simulation provenance
@@ -319,6 +338,66 @@ class DatabaseRepository {
   public findCredentialByEmail(email: string): UserCredential | undefined {
     const normalized = email.trim().toLowerCase();
     return this.state.userCredentials.find((c) => c.email.toLowerCase() === normalized);
+  }
+
+  /**
+   * Read the shared PostgreSQL credential first when configured. A missing row
+   * falls back to legacy file-backed credentials so pre-migration accounts can
+   * still sign in, except for IDs previously confirmed as PostgreSQL-backed. A
+   * database error never falls back to stale credentials.
+   */
+  public async findCredentialByEmailPersistent(email: string): Promise<UserCredential | undefined> {
+    const normalized = email.trim().toLowerCase();
+    if (!this.isPostgresConfigured()) return this.findCredentialByEmail(normalized);
+
+    const pool = getPostgresPool();
+    if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+
+    try {
+      const result = await pool.query(
+        'SELECT * FROM user_credentials WHERE email = $1 LIMIT 1',
+        [normalized]
+      );
+      const row = result.rows?.[0];
+      if (!row) {
+        const cached = this.findCredentialByEmail(normalized);
+        if (!cached || this.state.postgresCredentialIds.includes(cached.id)) return undefined;
+        return cached;
+      }
+
+      const credential = mapPostgresUserCredential(row);
+      if (this.cacheUserCredential(credential, true)) this.saveToFile();
+      return credential;
+    } catch (err: any) {
+      console.error(`[Postgres credential read FAILED]: ${err?.message || 'unknown error'}`);
+      throw new Error('Credential lookup failed');
+    }
+  }
+
+  private cacheUserCredential(credential: UserCredential, postgresBacked = false): boolean {
+    const normalizedEmail = credential.email.toLowerCase();
+    const existingIndex = this.state.userCredentials.findIndex(
+      (item) => item.id === credential.id || item.email.toLowerCase() === normalizedEmail
+    );
+    const existing = existingIndex >= 0 ? this.state.userCredentials[existingIndex] : undefined;
+    let changed = !existing ||
+      existing.id !== credential.id ||
+      existing.user_id !== credential.user_id ||
+      existing.account_id !== credential.account_id ||
+      existing.email !== credential.email ||
+      existing.password_hash !== credential.password_hash ||
+      existing.algorithm !== credential.algorithm ||
+      existing.created_at !== credential.created_at ||
+      existing.updated_at !== credential.updated_at;
+
+    if (existingIndex >= 0 && changed) this.state.userCredentials[existingIndex] = credential;
+    else if (existingIndex < 0) this.state.userCredentials.push(credential);
+
+    if (postgresBacked && !this.state.postgresCredentialIds.includes(credential.id)) {
+      this.state.postgresCredentialIds.push(credential.id);
+      changed = true;
+    }
+    return changed;
   }
 
   public findCredentialByAccountId(accountId: string): UserCredential | undefined {
@@ -404,20 +483,89 @@ class DatabaseRepository {
     return entry;
   }
 
-  public createUserCredential(cred: Omit<UserCredential, 'id' | 'created_at' | 'updated_at'>): UserCredential {
-    const newCred: UserCredential = {
+  private buildUserCredential(
+    cred: Omit<UserCredential, 'id' | 'created_at' | 'updated_at'>
+  ): UserCredential {
+    const now = new Date().toISOString();
+    return {
       id: `cred-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       user_id: cred.user_id,
       account_id: cred.account_id,
       email: cred.email.trim().toLowerCase(),
       password_hash: cred.password_hash,
       algorithm: 'scrypt',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: now,
+      updated_at: now,
     };
+  }
+
+  public createUserCredential(cred: Omit<UserCredential, 'id' | 'created_at' | 'updated_at'>): UserCredential {
+    const newCred = this.buildUserCredential(cred);
     this.state.userCredentials.push(newCred);
     this.saveToFile();
     return newCred;
+  }
+
+  /** Persist new signup credentials to PostgreSQL before returning success. */
+  public async createUserCredentialPersistent(
+    cred: Omit<UserCredential, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<UserCredential> {
+    if (!this.isPostgresConfigured()) return this.createUserCredential(cred);
+
+    const pool = getPostgresPool();
+    if (!pool) throw new Error('PostgreSQL is configured but its connection pool is unavailable');
+
+    const account = this.getAccount(cred.account_id);
+    if (!account) throw new Error('Cannot persist credentials without their tenant account');
+
+    const newCred = this.buildUserCredential(cred);
+    try {
+      // Keep legacy/local account setup compatible without overwriting an
+      // account's status or plan if another process has already created it.
+      await pool.query(ACCOUNT_ENSURE_SQL, [
+        account.id,
+        account.name,
+        account.slug,
+        account.status,
+        account.plan_tier,
+        account.trial_ends_at,
+        account.created_at,
+        account.updated_at,
+      ]);
+
+      const result = await pool.query(
+        `INSERT INTO user_credentials
+          (id, user_id, account_id, email, password_hash, algorithm, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (email) DO NOTHING
+         RETURNING *`,
+        [
+          newCred.id,
+          newCred.user_id,
+          newCred.account_id,
+          newCred.email,
+          newCred.password_hash,
+          newCred.algorithm,
+          newCred.created_at,
+          newCred.updated_at,
+        ]
+      );
+
+      if (!result.rows?.[0]) {
+        const duplicate = new Error('An account with this email address already exists');
+        (duplicate as any).code = 'MCR_CREDENTIAL_EXISTS';
+        throw duplicate;
+      }
+
+      const persisted = mapPostgresUserCredential(result.rows[0]);
+      this.cacheUserCredential(persisted, true);
+      this.saveToFile();
+      return persisted;
+    } catch (err: any) {
+      if (err?.code === 'MCR_CREDENTIAL_EXISTS') throw err;
+      this.recordPostgresPersistFailure('createUserCredential', err?.message);
+      throw new Error('Credential persistence failed');
+    }
   }
 
   public revokeSession(tokenOrSignature: string): void {
@@ -830,6 +978,9 @@ class DatabaseRepository {
     }
 
     // Exact ID deletion across all collections
+    const removedCredentialIds = new Set(
+      this.state.userCredentials.filter((credential) => credential.account_id === cleanId).map((credential) => credential.id)
+    );
     this.state.accounts.splice(existingIndex, 1);
     this.state.profiles = this.state.profiles.filter((p) => p.account_id !== cleanId);
     this.state.phoneNumbers = this.state.phoneNumbers.filter((p) => p.account_id !== cleanId);
@@ -837,6 +988,7 @@ class DatabaseRepository {
     this.state.subscriptions = this.state.subscriptions.filter((s) => s.account_id !== cleanId);
     this.state.usage = this.state.usage.filter((u) => u.account_id !== cleanId);
     this.state.userCredentials = this.state.userCredentials.filter((c) => c.account_id !== cleanId);
+    this.state.postgresCredentialIds = this.state.postgresCredentialIds.filter((id) => !removedCredentialIds.has(id));
     this.state.auditLogs = this.state.auditLogs.filter((a) => a.accountId !== cleanId);
     this.state.jobs = this.state.jobs.filter((j) => j.account_id !== cleanId);
     this.state.conversations = this.state.conversations.filter((c) => c.account_id !== cleanId);
@@ -1720,6 +1872,7 @@ class DatabaseRepository {
     const idx = this.state.userCredentials.findIndex((c) => c.id === id);
     if (idx >= 0) {
       this.state.userCredentials.splice(idx, 1);
+      this.state.postgresCredentialIds = this.state.postgresCredentialIds.filter((credentialId) => credentialId !== id);
       this.saveToFile();
       return true;
     }

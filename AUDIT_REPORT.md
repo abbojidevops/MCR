@@ -434,9 +434,9 @@ explicit product rule before storage or routing is added.
 2. **Decide the demo-credentials policy for production.** Either set
    `MCR_DEMO_MODE=true` on staging, or accept that staging sign-in needs real
    seeded credentials.
-3. ~~**PostgreSQL profile persistence.**~~ Done in §12 for business profiles
-   only; the rest of application state remains file-backed unless separately
-   migrated.
+3. **Remaining PostgreSQL coverage.** Profile persistence is done in §12; new
+   signup credentials are now persisted and login checks PostgreSQL first (§20).
+   Other application state remains file-backed unless separately migrated.
 4. ~~**Modal focus management** — trap focus and restore it on close.~~
    **Done** in §11.2 (`7bc7ceb`).
 5. ~~**Colour-contrast audit** of the operator console.~~ **Done** in §11.3
@@ -444,9 +444,11 @@ explicit product rule before storage or routing is added.
 6. **Weekly business-hour scheduling** remains unavailable by design for now;
    define the operational rules before adding a schedule or after-hours messages.
 7. **Self-service password reset** remains unavailable. The SMTP transport
-   added in §15 can send configured transactional mail, but a secure reset flow
-   still needs expiring one-time tokens, rate limits, storage, and a working
-   reset page. No password-reset email is claimed or sent.
+   added in §15 can send configured transactional mail, and new credentials now
+   persist to PostgreSQL (§20), but a secure reset still needs expiring one-time
+   tokens with durable storage, rate limits, a working reset page, and a reliable
+   strategy to invalidate existing sessions after a password change. No
+   password-reset email is claimed or sent.
 
 
 ---
@@ -631,3 +633,37 @@ in the overview toolbar. GitHub CI run
 [38566703022](https://github.com/abbojidevops/MCR/actions/runs/38566703022)
 passed type-checking, the test suite, staging pre-flight, production build, and
 the deployment/hygiene/security gate.
+
+## 20. PostgreSQL-backed signup credentials (2026-10-14)
+
+New onboarding now awaits the credential write to `user_credentials` before it
+returns success. When PostgreSQL is configured, the email-uniqueness check and
+sign-in lookup query PostgreSQL first. The account parent is ensured without
+overwriting its existing status or plan, and the credential insert uses
+`ON CONFLICT (email) DO NOTHING`; a race is reported as HTTP 409. Failed SQL
+writes do not update the local credential cache or issue a session. Login fails
+closed if its PostgreSQL query errors instead of using a potentially stale local
+hash.
+
+A successful query with no row can still use a legacy file credential that has
+never been confirmed as PostgreSQL-backed. This preserves seeded and pre-migration
+accounts on existing deployments. Credential IDs confirmed in PostgreSQL are
+marked in the JSON state so a later missing SQL row does not revive that cached
+hash. For existing tenants, run `npm run db:migrate:postgres` against the existing
+`data/mcr_db.json` before retiring the file-backed compatibility path. The rest
+of application state continues to use its existing file-backed/read-through
+behavior; this change does not make PostgreSQL the universal repository.
+
+`tests/postgres-auth-credentials.test.ts` adds four fake-PostgreSQL checks:
+write-before-cache, SQL-first reads and legacy fallback, an onboarding-to-login
+round trip through SQL, and fail-closed behavior after a write error. The tests
+use an injected `pg.Pool` query seam and do not contact a real database.
+
+**Verification (2026-10-14):** `npm run lint` passed; `npm run test:postgres-auth`
+passed 4/4; `npm run test:auth` passed 12/12; `npm test` passed **339 tests**
+(336 passed, 3 live-PostgreSQL checks skipped because no local server was
+available). `npm run deploy:check` passed, including all seven green probes and
+the red-probe check. A production build with runtime auth secrets blank generated
+46/46 pages. The production preview returned HTTP 200 for `/`, `/api/health`, and
+`/login`; anonymous `/admin` was refused with HTTP 401. GitHub CI verification is
+pending. PR #4 remains open and unmerged for the user's preview review.

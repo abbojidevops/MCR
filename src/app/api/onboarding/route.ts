@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // 2. Uniqueness check for email
-    const existingCred = db.findCredentialByEmail(normalizedEmail);
+    // 2. Uniqueness check for email, consulting PostgreSQL when configured.
+    const existingCred = await db.findCredentialByEmailPersistent(normalizedEmail);
     if (existingCred) {
       return NextResponse.json(
         { error: 'An account with this email address already exists' },
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Store credentials in dedicated user_credentials table
     const userId = `usr-${account.id.replace('acc-', '')}`;
-    const credential = db.createUserCredential({
+    const credential = await db.createUserCredentialPersistent({
       user_id: userId,
       account_id: account.id,
       email: normalizedEmail,
@@ -127,6 +127,12 @@ export async function POST(req: NextRequest) {
       isDemo: false,
     });
   } catch (err: any) {
+    if (err?.code === 'MCR_CREDENTIAL_EXISTS') {
+      return NextResponse.json(
+        { error: 'An account with this email address already exists' },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: err.message || 'Onboarding failed' }, { status: 500 });
   }
 }

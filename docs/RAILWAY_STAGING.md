@@ -125,9 +125,18 @@ the real seeded account credentials.
 | Behaviour | Detail |
 | :--- | :--- |
 | **Schema on a fresh database** | The pre-deploy step creates all **36 tables**. A newly provisioned managed PostgreSQL contains **no rows**: the seeded demo tenants live in the file store that ships inside the image, not in SQL. |
-| **Reads** | Tenant reads are served from the in-memory/file store (`data/mcr_db.json`), not from SQL. |
-| **Writes** | Account creates/deletes are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes the truth under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
+| **Reads** | Most tenant reads are served from the in-memory/file store (`data/mcr_db.json`). Login checks `user_credentials` in PostgreSQL first; only legacy credentials not previously confirmed in SQL can fall back to the file cache when a successful query finds no row. A PostgreSQL error fails closed. |
+| **Writes** | Account creates/deletes and new signup credentials are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes persistence diagnostics under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
 | **Container filesystem** | Ephemeral. Without a volume, staging tenant data created through the UI is lost on the next deploy/restart and the image re-seeds itself. |
+
+New onboarding requests persist their credential to `user_credentials` before
+returning success, and sign-in reads that table first. A successful SQL query
+with no matching credential falls back only when that local credential has
+not previously been confirmed in SQL (for seeded and pre-migration accounts).
+This is a compatibility path, not a PostgreSQL-only identity store. Run
+`npm run db:migrate:postgres` against the existing
+`data/mcr_db.json` before retiring that file fallback. If the SQL query itself
+fails, sign-in does not use a potentially stale file credential.
 
 **Required for staging:** attach a Railway volume mounted at `/app/data`
 (service → *Settings → Volumes*) that is **writable by UID 1001** — the image runs as the
