@@ -627,4 +627,7 @@ red-probe check. The production build completed with 46/46 pages and no auth
 secrets in its environment. The live preview returned HTTP 200 for `/` and
 `/api/health`; anonymous `/admin` still redirects to operator sign-in. `OPS-5`
 asserts the section routes remain in the shared admin shell and are not duplicated
-in the overview toolbar. CI will be checked after the branch push.
+in the overview toolbar. GitHub CI run
+[38566703022](https://github.com/abbojidevops/MCR/actions/runs/38566703022)
+passed type-checking, the test suite, staging pre-flight, production build, and
+the deployment/hygiene/security gate.
