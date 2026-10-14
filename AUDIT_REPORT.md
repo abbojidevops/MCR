@@ -17,11 +17,11 @@ which were re-verified live.
 | | |
 |---|---|
 | Routes audited | 22 (10 tenant dashboard, 5 operator console, 7 public/legal) |
-| Regression coverage | 341 checks are registered in `npm test`; 338 passed and 3 live-PostgreSQL checks skipped locally |
+| Regression coverage | 342 checks are registered in `npm test`; 339 passed and 3 live-PostgreSQL checks skipped locally |
 | `npx tsc --noEmit` | clean |
 | `npm run build` | clean (Next.js 16.4.0, 46/46 pages) |
 | `npm audit` | 0 vulnerabilities |
-| `npm test` | **338 / 341 pass; 3 skipped** — live PostgreSQL checks skip when the local server is unavailable |
+| `npm test` | **339 / 342 pass; 3 skipped** — live PostgreSQL checks skip when the local server is unavailable |
 
 ---
 
@@ -180,10 +180,13 @@ Applied across the dashboard and console:
 ### Remaining gaps after the follow-up passes
 
 Modal focus management and console contrast were addressed in §§11.2–11.3, and
-a site-wide skip-to-content link is covered in §18. This pass adds an API test
-for missing-profile dashboard forwarding data and a React/jsdom interaction test
-for dashboard error recovery. Coverage across the other newer page interactions
-is still limited; the suites do not yet exercise every fetch-driven screen.
+a site-wide skip-to-content link is covered in §18. The dashboard stats API and
+main dashboard retry flow now have regression tests. A further React/jsdom test
+caught and fixed a misleading Jobs Kanban state: before the first response,
+empty columns were labelled “No jobs in this stage.” The board now announces its
+loading state and only shows empty columns after a successful empty response.
+Coverage across the other newer page interactions is still limited; the suites
+do not yet exercise every fetch-driven screen.
 
 ---
 
@@ -193,7 +196,7 @@ is still limited; the suites do not yet exercise every fetch-driven screen.
 npm run lint       → clean (tsc --noEmit)
 npm run build      → clean on Next.js 16.4.0 / Tailwind CSS 4.3.3, 46/46 pages
 npm audit          → 0 vulnerabilities
-npm test           → 338 / 341 pass; 3 skipped when local PostgreSQL is unavailable
+npm test           → 339 / 342 pass; 3 skipped when local PostgreSQL is unavailable
 ```
 
 ### Live PostgreSQL checks are environment-dependent
@@ -218,9 +221,9 @@ being hidden as skips.
 - `tests/dashboard-readability.test.ts`: **9/9 passing** — includes D9, which
   checks that an account with no business profile gets no made-up carrier or
   phone details in its dashboard stats response.
-- `tests/dashboard-ui-retry.test.ts`: **1/1 passing** — jsdom renders the actual
-  dashboard page, verifies an accessible load error, retries successfully, and
-  verifies that the error clears.
+- `tests/dashboard-ui-retry.test.ts`: **2/2 passing** — jsdom renders the actual
+  dashboard and Jobs pages, covering accessible load errors, retry recovery,
+  and the Jobs Kanban loading state.
 - `tests/skip-link.test.ts`: **2/2 passing** — keyboard-order skip link and
   focusable main-content target.
 - `tests/postgres-profile-persistence.test.ts`: **6/6 passing** — initial
@@ -716,3 +719,28 @@ suite, all seven green probes, and the red-probe check. `npm run build` generate
 preview returned HTTP 200 for `/` and `/api/health`; anonymous `/dashboard`
 redirected to sign-in. PR #4 remains open and unmerged for the user's live-preview
 review.
+
+## 22. Jobs board loading state is no longer mistaken for an empty board (2026-10-14)
+
+The Jobs page opened in Kanban mode with `jobs = []` while its first `/api/jobs`
+request was still pending. Each column displayed “No jobs in this stage,” so an
+owner could mistake a temporary wait for confirmation that there were no leads.
+The board now shows one `role="status"` loading message while no data has arrived;
+it only shows empty columns after a successful empty response. During a refresh
+with existing jobs, the current board remains visible and is marked `aria-busy`.
+
+`JOBSUI-1` in `tests/dashboard-ui-retry.test.ts` renders the actual Jobs page
+with a deferred first response. It checks the loading announcement and verifies
+that the empty-column copy is absent; then it simulates a failed request, checks
+the alert and retry action, and resolves the retry with an empty success response.
+The error clears and the normal empty-board state appears. The test runs as part
+of `npm test`.
+
+**Verification (2026-10-14):** `npm run test:dashboard-ui` passed 2/2;
+`npm run lint` passed; `npm test` passed **339 of 342 tests**, with 3 live-
+PostgreSQL checks skipped because no local server was available. `npm run
+deploy:check` passed, including the full suite and all seven green probes plus
+the red-probe check. `npm run build` generated 46/46 pages and `npm audit` found
+0 vulnerabilities. The refreshed preview returned HTTP 200 for `/` and
+`/api/health`; anonymous `/dashboard/jobs` redirected to sign-in. PR #4 remains
+open and unmerged for the user's live-preview review.

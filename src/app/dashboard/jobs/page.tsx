@@ -294,8 +294,17 @@ export default function JobsPage() {
       </div>
 
       {/* Kanban Board View */}
-      {viewMode === 'kanban' && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      {viewMode === 'kanban' && loading && jobs.length === 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-600"
+        >
+          Loading job cards...
+        </div>
+      )}
+      {viewMode === 'kanban' && (!loading || jobs.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" aria-busy={loading}>
           {columns.map((col) => {
             const colJobs = jobs.filter((j) => (j.status || '').toUpperCase() === col.status.toUpperCase());
             const totalColValue = colJobs.reduce((sum, j) => sum + (j.actual_value || j.estimated_value || 0), 0);
