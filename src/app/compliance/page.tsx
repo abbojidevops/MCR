@@ -29,7 +29,7 @@ export default function CompliancePage() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6 space-y-8">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12 sm:px-6 space-y-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm space-y-8">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 mb-3 border border-blue-200">
@@ -109,7 +109,7 @@ export default function CompliancePage() {
               </p>
               <ul className="list-disc pl-5 space-y-1 text-xs text-slate-600">
                 <li>If a customer misses a call and receives a text-back, subsequent missed calls from the same number within 4 hours are suppressed.</li>
-                <li>The suppression reason &ldquo;Deduplicated (Called within last 4 hours)&rdquo; is clearly documented in your dashboard.</li>
+                <li>The suppression reason &ldquo;Deduplicated (Called within last 2 hours)&rdquo; is clearly documented in your dashboard.</li>
               </ul>
             </section>
 

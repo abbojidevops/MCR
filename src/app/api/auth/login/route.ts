@@ -46,8 +46,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Lookup credential in user_credentials table
-    const credential = db.findCredentialByEmail(normalizedEmail);
+    // 4. Read the shared PostgreSQL credential first when configured; legacy
+    // file-backed credentials remain a fallback only if the query succeeds and
+    // the PostgreSQL row is not present.
+    const credential = await db.findCredentialByEmailPersistent(normalizedEmail);
     if (!credential) {
       recordFailedLogin(clientIp, normalizedEmail);
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });

@@ -40,6 +40,9 @@ export async function runDeployCheck() {
   if (!composeContent.includes('ADMIN_PASSWORD=${ADMIN_PASSWORD}')) {
     throw new Error('ADMIN_PASSWORD must be supplied by environment variable in docker-compose.yml');
   }
+  if (!composeContent.includes('SESSION_SECRET=${SESSION_SECRET}')) {
+    throw new Error('SESSION_SECRET must be supplied at runtime in docker-compose.yml');
+  }
   if (!composeContent.includes('NODE_ENV=production')) {
     throw new Error('NODE_ENV=production must be specified in docker-compose.yml');
   }
@@ -107,10 +110,14 @@ CREATE TABLE test_table (
   console.log('5. Checking RUNBOOK.md §2 environment documentation...');
   const runbookPath = path.join(process.cwd(), 'RUNBOOK.md');
   const runbookContent = fs.readFileSync(runbookPath, 'utf-8');
-  if (!runbookContent.includes('ADMIN_PASSWORD') || !runbookContent.includes('503 Service Unavailable')) {
-    throw new Error('RUNBOOK.md §2 must document ADMIN_PASSWORD and 503 fail-closed behavior');
+  if (
+    !runbookContent.includes('ADMIN_PASSWORD') ||
+    !runbookContent.includes('SESSION_SECRET') ||
+    !runbookContent.includes('Missing or weak SESSION_SECRET makes protected pages and APIs return 503')
+  ) {
+    throw new Error('RUNBOOK.md §2 must document runtime SESSION_SECRET validation and fail-closed behavior');
   }
-  console.log('   ✓ RUNBOOK.md §2 documents ADMIN_PASSWORD and fail-closed 503 guarantee.\n');
+  console.log('   ✓ RUNBOOK.md §2 documents runtime SESSION_SECRET validation and fail-closed behavior.\n');
 
   // 6. Test Suite & Multi-Table Gate Stability Invariance Check
   console.log('6. Running test suite and multi-table hygiene check...');

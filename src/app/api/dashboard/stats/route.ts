@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db/repository';
 import { computeMetrics, getSimulatedExclusions, DateRangePreset } from '@/lib/metrics';
 import { requireTenantAuth } from '@/lib/authz';
 
@@ -13,7 +12,6 @@ export async function GET(req: NextRequest) {
     const range = (searchParams.get('range') || 'month') as DateRangePreset;
 
     const metrics = computeMetrics(accountId, { preset: range });
-    const profile = db.getBusinessProfile(accountId);
     const simulatedExclusions = getSimulatedExclusions(accountId);
 
     return NextResponse.json({
@@ -38,12 +36,6 @@ export async function GET(req: NextRequest) {
         grossMarginAssumption: metrics.grossMarginAssumption,
         softwareReturnMultiple: metrics.revenuePerSubscriptionDollar,
         reportedRecoveredRevenue: metrics.confirmedRevenue,
-      },
-      forwardingStatus: {
-        configured: profile?.forwarding_configured ?? true,
-        carrierName: profile?.carrier_name || 'Verizon Wireless',
-        emergencyPhone: profile?.emergency_phone || '+12175550199',
-        notificationPhone: profile?.notification_phone || '+12175550144',
       },
     });
   } catch (err: any) {

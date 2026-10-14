@@ -242,6 +242,17 @@ test('SR-11: Requirements Report Fails Actionably on Missing Configuration', asy
   assert.ok(report.manualSteps.some((s) => s.includes('/app/data')));
 });
 
+test('ENV-1: local example config keeps PostgreSQL opt-in and explains demo disclosure', () => {
+  const example = fs.readFileSync(path.join(process.cwd(), '.env.example'), 'utf8');
+  const databaseUrl = /^DATABASE_URL=(.*)$/m.exec(example);
+
+  assert.ok(databaseUrl, 'DATABASE_URL must be explicit in .env.example');
+  assert.equal(databaseUrl[1], '', 'local example must use JSON storage until PostgreSQL is intentionally configured');
+  assert.match(example, /Leave DATABASE_URL empty to use \.\/data\/mcr_db\.json/);
+  assert.match(example, /Local development deliberately exposes demo credentials/);
+  assert.match(example, /NODE_ENV=production together with MCR_DEMO_MODE=false/);
+});
+
 test('SR-12: Requirements Report Passes a Fully Configured Staging Environment', async () => {
   const report = await runStagingRequirements(COMPLETE_ENV as Record<string, string>, {
     skipLiveChecks: false,

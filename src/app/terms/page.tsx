@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, FileText, PhoneCall, CheckCircle } from 'lucide-react';
+import { COMPANY_INFO } from '@/lib/constants';
 
 export const metadata = {
   title: 'Terms of Service — MCR (Missed Call Recovery)',
@@ -21,7 +22,7 @@ export default function TermsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 shadow-sm space-y-8">
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 mb-3 border border-indigo-200">
@@ -47,7 +48,7 @@ export default function TermsPage() {
               <li><strong>Cost:</strong> Message and data rates may apply depending on your cellular provider plan.</li>
               <li><strong>Frequency:</strong> Message frequency varies depending on your missed calls and conversation responses.</li>
               <li><strong>Opt-Out:</strong> Text <span className="font-bold">STOP</span>, <span className="font-bold">CANCEL</span>, or <span className="font-bold">UNSUBSCRIBE</span> at any time to permanently opt out. You will receive one final confirmation message.</li>
-              <li><strong>Help:</strong> Text <span className="font-bold">HELP</span> or contact our support team at <span className="font-bold">support@mcr-recovery.com</span>.</li>
+              <li><strong>Help:</strong> Text <span className="font-bold">HELP</span> or contact our support team at <span className="font-bold">{COMPANY_INFO.email}</span>.</li>
               <li><strong>Supported Carriers:</strong> AT&amp;T, Verizon Wireless, T-Mobile, Sprint, Boost Mobile, Cricket, MetroPCS, Virgin Mobile, and other major US carriers. Carriers are not liable for delayed or undelivered messages.</li>
             </ul>
           </div>

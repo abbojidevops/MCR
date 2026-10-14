@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { db } from '@/db/repository';
+import {
+  getSessionSecret,
+  getSessionSecretConfigurationError,
+} from '@/lib/security/session-secret';
 
 export interface SessionPayload {
   accountId: string;
@@ -12,7 +16,6 @@ export interface SessionPayload {
 }
 
 export const SESSION_COOKIE_NAME = 'mcr_session';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'mcr-prod-secret-signing-key-f928a30d8c11e7';
 const DEFAULT_ACCOUNT_ID = 'acc-apex-plumbing';
 const DEFAULT_USER_ID = 'usr-demo-owner';
 
@@ -20,6 +23,7 @@ const DEFAULT_USER_ID = 'usr-demo-owner';
  * Sign a payload into an HMAC-signed token
  */
 export function createSessionToken(payloadOrAccountId?: string | Partial<SessionPayload>): string {
+  const sessionSecret = getSessionSecret();
   const payload: Partial<SessionPayload> =
     typeof payloadOrAccountId === 'string'
       ? { accountId: payloadOrAccountId }
@@ -38,7 +42,7 @@ export function createSessionToken(payloadOrAccountId?: string | Partial<Session
   };
 
   const data = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
-  const hmac = crypto.createHmac('sha256', SESSION_SECRET);
+  const hmac = crypto.createHmac('sha256', sessionSecret);
   hmac.update(data);
   const signature = hmac.digest('base64url');
 
@@ -54,6 +58,14 @@ export function verifySessionToken(token: string): SessionPayload | null {
   const parts = token.split('.');
   if (parts.length !== 2) return null;
 
+  let sessionSecret: string;
+  try {
+    sessionSecret = getSessionSecret();
+  } catch {
+    // Authentication must fail closed when the signing key is missing or weak.
+    return null;
+  }
+
   const [data, signature] = parts;
 
   // Check if session has been revoked server-side
@@ -61,7 +73,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
     return null;
   }
 
-  const hmac = crypto.createHmac('sha256', SESSION_SECRET);
+  const hmac = crypto.createHmac('sha256', sessionSecret);
   hmac.update(data);
   const expectedSig = hmac.digest('base64url');
 
@@ -137,6 +149,14 @@ export async function getAuthenticatedAccountId(req?: NextRequest): Promise<stri
  * Attach signed session cookie to an outgoing response
  */
 export function setSessionCookie(res: NextResponse, payload: Partial<SessionPayload>): NextResponse {
+  const configurationError = getSessionSecretConfigurationError();
+  if (configurationError) {
+    return NextResponse.json(
+      { error: `Service Unavailable: ${configurationError}`, status: 503 },
+      { status: 503 }
+    );
+  }
+
   const token = createSessionToken(payload);
   res.cookies.set({
     name: SESSION_COOKIE_NAME,

@@ -65,9 +65,14 @@ Key properties:
 | Variable | Value / How to generate | Enforced by |
 | :--- | :--- | :--- |
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference) | `scripts/db-init.mjs` fails the deploy if unset in production |
-| `ADMIN_PASSWORD` | `openssl rand -base64 24` — must be ≥ 12 chars with upper, lower **and** numeric characters | pre-flight error; `/admin` returns 503 when unset |
+| `ADMIN_PASSWORD` | `openssl rand -base64 24` — must be ≥ 12 chars with upper, lower **and** numeric characters | pre-flight error; operator pages/login return 503 when missing or weak |
 | `SESSION_SECRET` | `openssl rand -hex 32` — at least 32 random bytes (256 bits). Length alone is not accepted: a long but patterned value is rejected | pre-flight error; signs session cookies |
 | `NEXT_PUBLIC_APP_URL` | The staging domain, e.g. `https://mcr-saas-app-staging.up.railway.app` | pre-flight warning when absent/relative |
+
+Operator login allows five failed passwords per client IP per 15 minutes. Its
+counter is in-memory and process-local: it resets on restart and is not shared
+across replicas. For a multi-replica deployment, add a shared-store or
+platform-level rate limit; this application does not distribute the counter.
 
 ### Staging telephony (simulation)
 
@@ -84,10 +89,34 @@ Key properties:
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_*` | Only needed to exercise live billing |
 | `CLOUDFLARE_TUNNEL_SECRET` | When staging is fronted by a Cloudflare Zero-Trust tunnel |
 | `ALERT_WEBHOOK_URL` / `ADMIN_NOTIFICATION_EMAIL` | Owner/operator alerting |
+| `SMTP_URL` + `EMAIL_FROM` | Optional outbound email pair. Leave both unset to keep sending disabled; SMTP acceptance does not confirm inbox delivery. Use only a sender domain you control. |
 | `NEXT_PUBLIC_STRIPE_LIVE` / `NEXT_PUBLIC_TWILIO_LIVE` / `NEXT_PUBLIC_POSTGRES_LIVE` | Launch-gate live-state overrides used by `/admin/launch-gate` |
+| `MCR_DEMO_MODE` (or the legacy `DEMO_MODE`) | Set to `true` **only** on a demo/staging box. Controls whether the `/login` screen may display the demonstration credentials. See the section below. |
 
 **Do not set** `PORT` manually (Railway injects it) and **do not** set `NODE_ENV`
 (the image already runs `NODE_ENV=production`).
+
+---
+
+### Demo credential disclosure (`MCR_DEMO_MODE`)
+
+The `/login` screen used to print the demonstration operator credentials
+(`demo@apexplumbing.com` / `ApexDemo2026!Secure`) on every deployment, including
+production. That is now gated.
+
+| Deployment state | Demo box on `/login` |
+| :--- | :--- |
+| `NODE_ENV=production`, no demo flag | **Hidden** — treated as real production |
+| `MCR_DEMO_MODE=true` (or `DEMO_MODE=true`) | Shown |
+| `MCR_ENVIRONMENT` / `APP_ENV` / `RAILWAY_ENVIRONMENT` / `VERCEL_ENV` = `staging` / `demo` / `dev` / `preview` / `test` | Shown |
+| `NODE_ENV` not `production` (local `npm run dev`) | Shown |
+
+`GET /api/auth/demo-credentials` returns `{ exposed: false, reason }` when the
+credentials are withheld, and never returns credential material in that case.
+
+**If you deploy staging without `MCR_DEMO_MODE=true`, the demo box will disappear
+from the login screen.** That is intentional. Either set the flag, or sign in with
+the real seeded account credentials.
 
 ---
 
@@ -96,9 +125,18 @@ Key properties:
 | Behaviour | Detail |
 | :--- | :--- |
 | **Schema on a fresh database** | The pre-deploy step creates all **36 tables**. A newly provisioned managed PostgreSQL contains **no rows**: the seeded demo tenants live in the file store that ships inside the image, not in SQL. |
-| **Reads** | Tenant reads are served from the in-memory/file store (`data/mcr_db.json`), not from SQL. |
-| **Writes** | Account creates/deletes are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes the truth under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
+| **Reads** | Most tenant reads are served from the in-memory/file store (`data/mcr_db.json`). Login checks `user_credentials` in PostgreSQL first; only legacy credentials not previously confirmed in SQL can fall back to the file cache when a successful query finds no row. A PostgreSQL error fails closed. |
+| **Writes** | Account creates/deletes and new signup credentials are dual-persisted to PostgreSQL *in addition to* the file store. Operator `/api/health` exposes persistence diagnostics under `checks.database.persistence` (`configured`, `poolAvailable`, `lastPersistError`). |
 | **Container filesystem** | Ephemeral. Without a volume, staging tenant data created through the UI is lost on the next deploy/restart and the image re-seeds itself. |
+
+New onboarding requests persist their credential to `user_credentials` before
+returning success, and sign-in reads that table first. A successful SQL query
+with no matching credential falls back only when that local credential has
+not previously been confirmed in SQL (for seeded and pre-migration accounts).
+This is a compatibility path, not a PostgreSQL-only identity store. Run
+`npm run db:migrate:postgres` against the existing
+`data/mcr_db.json` before retiring that file fallback. If the SQL query itself
+fails, sign-in does not use a potentially stale file credential.
 
 **Required for staging:** attach a Railway volume mounted at `/app/data`
 (service → *Settings → Volumes*) that is **writable by UID 1001** — the image runs as the
@@ -135,7 +173,7 @@ Escape hatch for deliberate ephemeral runs: `MCR_SKIP_DATA_DIR_CHECK=true`.
 | :-- | :--- | :--- | :--- |
 | 1 | PostgreSQL **16** | `staging:requirements` queries `server_version` | FAIL naming the detected major version |
 | 2 | `DATABASE_URL=${{Postgres.DATABASE_URL}}` | requirements + pre-flight | FAIL if unset; WARN if an unresolved placeholder |
-| 3 | `ADMIN_PASSWORD` ≥ 12 chars with upper, lower **and** digit | pre-flight + requirements + `/admin` 503 boundary | FAIL; the admin boundary returns 503 when unset |
+| 3 | `ADMIN_PASSWORD` ≥ 12 chars with upper, lower **and** digit | pre-flight + requirements + runtime admin boundary | FAIL; admin pages and login return 503 when missing or weak |
 | 4 | `SESSION_SECRET` ≥ 32 random bytes (256 bits) | pre-flight + requirements (length **and** entropy) | FAIL with the `openssl rand -hex 32` hint |
 | 5 | `NEXT_PUBLIC_APP_URL` = final HTTPS Railway domain | requirements + pre-flight (WARN) | FAIL when absent, localhost or non-HTTPS |
 | 6 | `TWILIO_MOCK_MODE=true`, live processing off | requirements (`findLiveProcessingSwitches`) | FAIL, listing each switch that would enable live processing |

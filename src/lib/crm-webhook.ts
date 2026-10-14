@@ -72,6 +72,7 @@ export async function dispatchCrmWebhook(options: {
 }): Promise<{ ok: boolean; status?: number; error?: string }> {
   const { accountId, event, job, customerPhone } = options;
 
+  await db.hydrateBusinessProfileFromPostgres(accountId);
   const profile = db.getBusinessProfile(accountId);
   if (!profile || !profile.crm_webhook_url) {
     return { ok: false, error: 'No CRM webhook URL configured' };

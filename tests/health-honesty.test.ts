@@ -1,4 +1,4 @@
-(process.env as any).NODE_ENV = 'test';
+import './test-env';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -45,6 +45,49 @@ test('H1: Public Health Minimal Payload (Anonymous Visitor)', async () => {
   assert.equal(body.storageEngine, undefined, 'Storage engine must not be leaked');
   assert.equal(body.mockMode, undefined, 'Mock mode must not be leaked');
   assert.equal(body.uptimeSeconds, undefined, 'Uptime must not be leaked');
+});
+
+test('H1a: Readiness Returns 503 for Missing or Weak Auth Configuration Without Leaking Details', async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousSessionSecret = process.env.SESSION_SECRET;
+  const previousAdminPassword = process.env.ADMIN_PASSWORD;
+
+  try {
+    (process.env as any).NODE_ENV = 'production';
+    process.env.ADMIN_PASSWORD = 'SuperSecureTestAdminPassword2026!';
+
+    for (const sessionSecret of [undefined, 'a'.repeat(64)]) {
+      if (sessionSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = sessionSecret;
+
+      const response = await healthGet(createMockRequest());
+      const body = await response.json();
+      assert.equal(response.status, 503);
+      assert.equal(body.status, 'unhealthy');
+      assert.deepEqual(Object.keys(body).sort(), ['status', 'timestamp', 'version'].sort());
+      assert.equal(JSON.stringify(body).includes('SESSION_SECRET'), false);
+    }
+
+    process.env.SESSION_SECRET = 'f4c1a9d83b27e65094af1d2c8b7e035af61c2938d405eb7a19c2f8d6470ba3e5';
+    for (const adminPassword of [undefined, 'short']) {
+      if (adminPassword === undefined) delete process.env.ADMIN_PASSWORD;
+      else process.env.ADMIN_PASSWORD = adminPassword;
+
+      const response = await healthGet(createMockRequest());
+      const body = await response.json();
+      assert.equal(response.status, 503);
+      assert.equal(body.status, 'unhealthy');
+      assert.deepEqual(Object.keys(body).sort(), ['status', 'timestamp', 'version'].sort());
+      assert.equal(JSON.stringify(body).includes('ADMIN_PASSWORD'), false);
+    }
+  } finally {
+    if (previousNodeEnv === undefined) delete (process.env as any).NODE_ENV;
+    else (process.env as any).NODE_ENV = previousNodeEnv;
+    if (previousSessionSecret === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = previousSessionSecret;
+    if (previousAdminPassword === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previousAdminPassword;
+  }
 });
 
 test('H2: Non-Operator Customer Receives Public Health Only (No Detailed Checks)', async () => {

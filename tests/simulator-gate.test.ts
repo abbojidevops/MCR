@@ -1,4 +1,4 @@
-(process.env as any).NODE_ENV = 'test';
+import './test-env';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

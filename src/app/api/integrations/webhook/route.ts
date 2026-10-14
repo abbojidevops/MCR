@@ -107,10 +107,13 @@ export async function POST(req: NextRequest) {
 
     // Save config if requested
     if (saveConfig) {
-      db.updateBusinessProfile(accountId, {
+      const updatedProfile = await db.updateBusinessProfilePersistent(accountId, {
         crm_webhook_url: webhookUrl,
         crm_webhook_secret: secret,
       });
+      if (!updatedProfile) {
+        return NextResponse.json({ error: 'Business profile not found' }, { status: 404 });
+      }
     }
 
     db.logAudit(accountId, 'TEST_WEBHOOK_DELIVERY', {

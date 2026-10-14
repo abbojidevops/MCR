@@ -7,6 +7,8 @@ import {
   TrendingUp,
   AlertCircle,
   Zap,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { Subscription, SubscriptionPlan, UsageRecord, PlanTier } from '@/types';
 
@@ -16,17 +18,37 @@ export default function BillingPage() {
   const [usage, setUsage] = useState<UsageRecord | null>(null);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [billingMode, setBillingMode] = useState<{
+    liveGateway: boolean;
+    gateway: string;
+    mode: string;
+    notice: string | null;
+  } | null>(null);
 
   const fetchBilling = async () => {
     try {
+      setLoading(true);
+      setLoadError(null);
       const res = await fetch('/api/billing');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Failed to load billing (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.subscription) setSubscription(data.subscription);
       if (data.currentPlan) setCurrentPlan(data.currentPlan);
       if (data.usage) setUsage(data.usage);
       if (data.availablePlans) setAvailablePlans(data.availablePlans);
-    } catch (err) {
+      if (data.billing) setBillingMode(data.billing);
+    } catch (err: any) {
       console.error(err);
+      setLoadError(err?.message || 'Unable to load billing information.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -36,6 +58,8 @@ export default function BillingPage() {
 
   const handlePlanChange = async (newTier: PlanTier) => {
     setIsUpgrading(true);
+    setActionError(null);
+    setActionNotice(null);
     try {
       const res = await fetch('/api/billing', {
         method: 'POST',
@@ -45,46 +69,154 @@ export default function BillingPage() {
           planTier: newTier,
         }),
       });
-      const data = await res.json();
-      if (data.url && data.url.startsWith('http')) {
-        window.location.href = data.url;
-      } else {
-        fetchBilling();
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || `Plan change failed (HTTP ${res.status})`);
       }
-    } catch (err) {
+      if (data.url.startsWith('http')) {
+        window.location.href = data.url;
+        return;
+      }
+      // Non-live deployments return a relative URL: the plan was recorded locally
+      // and no payment was taken. Say so instead of pretending a checkout ran.
+      setActionNotice(
+        billingMode?.liveGateway
+          ? 'Plan change recorded.'
+          : 'Plan change recorded locally. No card payment was processed because live Stripe billing is disabled on this deployment.'
+      );
+      await fetchBilling();
+    } catch (err: any) {
       console.error(err);
+      setActionError(err?.message || 'Could not change plan. Please try again.');
     } finally {
       setIsUpgrading(false);
     }
   };
 
   const handleOpenStripePortal = async () => {
+    setActionError(null);
+    setActionNotice(null);
     try {
       const res = await fetch('/api/billing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_portal_session' }),
       });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.url) {
+        throw new Error(data?.error || `Could not open the billing portal (HTTP ${res.status})`);
       }
-    } catch (e) {
-      console.error(e);
+      if (data.url.startsWith('http')) {
+        window.location.href = data.url;
+        return;
+      }
+      setActionNotice(
+        'The hosted Stripe billing portal is unavailable because live Stripe billing is disabled on this deployment. No payment method is stored.'
+      );
+    } catch (err: any) {
+      console.error(err);
+      setActionError(err?.message || 'Could not open the billing portal.');
     }
   };
 
   const callPercentage = currentPlan && usage ? Math.min(100, Math.round((usage.calls_count / currentPlan.included_calls) * 100)) : 0;
   const smsPercentage = currentPlan && usage ? Math.min(100, Math.round((usage.sms_count / currentPlan.included_sms) * 100)) : 0;
 
+  if (loadError) {
+    return (
+      <div className="space-y-6 max-w-5xl">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Subscription &amp; Usage Billing</h1>
+        </div>
+        <div
+          role="alert"
+          className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-800"
+        >
+          <AlertCircle className="h-8 w-8 mx-auto mb-2 text-rose-600" aria-hidden="true" />
+          <h2 className="font-bold text-base">Billing information could not be loaded.</h2>
+          <p className="mt-1 text-xs text-rose-700">{loadError}</p>
+          <button
+            type="button"
+            onClick={fetchBilling}
+            className="mt-4 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Subscription & Usage Billing</h1>
-        <p className="text-xs text-slate-500">
-          Manage your subscription tier, track metered monthly usage, and inspect overage rates.
-        </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Subscription &amp; Usage Billing</h1>
+          <p className="text-xs text-slate-500">
+            Manage your subscription tier, track metered monthly usage, and inspect overage rates.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={fetchBilling}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
+
+      {actionError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800"
+        >
+          <span className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {actionError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            aria-label="Dismiss error"
+            className="rounded px-2 py-0.5 font-bold text-rose-500 hover:text-rose-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {actionNotice && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-semibold text-blue-900">
+          <span>{actionNotice}</span>
+          <button
+            type="button"
+            onClick={() => setActionNotice(null)}
+            aria-label="Dismiss notice"
+            className="rounded px-2 py-0.5 font-bold text-blue-500 hover:text-blue-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {billingMode && !billingMode.liveGateway && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+          <div className="font-bold">Live payments disabled</div>
+          <p className="mt-1 leading-relaxed">
+            {billingMode.notice ||
+              'Card payments are disabled on this deployment. Plan changes are recorded locally and no charge is processed.'}
+          </p>
+        </div>
+      )}
+
+      {loading && !currentPlan && (
+        <div className="space-y-4" aria-hidden="true">
+          <div className="h-40 animate-pulse rounded-2xl bg-slate-200" />
+          <div className="h-64 animate-pulse rounded-2xl bg-slate-200" />
+        </div>
+      )}
 
       {/* Current Subscription Card */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -112,7 +244,8 @@ export default function BillingPage() {
                 onClick={handleOpenStripePortal}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
               >
-                <CreditCard className="h-3.5 w-3.5 text-slate-500" /> Manage Payment Method
+                <CreditCard className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                {billingMode?.liveGateway ? 'Manage Payment Method' : 'Payment Method (disabled)'}
               </button>
             </div>
           </div>
@@ -205,7 +338,16 @@ export default function BillingPage() {
                     : 'bg-blue-600 text-white hover:bg-blue-700 shadow'
                 }`}
               >
-                {isCurrent ? 'Current Plan' : `Switch to ${plan.name}`}
+                {isCurrent ? (
+                  'Current Plan'
+                ) : isUpgrading ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    Switching...
+                  </span>
+                ) : (
+                  `Switch to ${plan.name}`
+                )}
               </button>
             </div>
           );

@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ master, main ]
@@ -8,7 +11,7 @@ on:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # The PostgreSQL integration tests connect to 127.0.0.1:5433 using
     # the isolated credentials below. GitHub Actions service containers
@@ -30,16 +33,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Audit dependency tree
+        run: npm audit --audit-level=moderate
 
       - name: Type-check (tsc --noEmit)
         run: npm run lint

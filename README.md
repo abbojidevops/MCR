@@ -66,30 +66,38 @@ A 35-table PostgreSQL DDL is provided at [`src/db/schema.sql`](file:///c:/Users/
 ## 4. Getting Started
 
 ### Prerequisites
-- Node.js 18+ (tested on Node.js v24)
+- Node.js 20.9 or newer (Node.js 22 LTS is recommended and matches the production container)
 - npm
 
 ### Installation
 ```bash
-# Clone the repository and install dependencies
-npm install
+# Install the exact dependency versions recorded in package-lock.json
+npm ci
+
+# Optional: create local configuration, then replace the example secrets.
+# Leave DATABASE_URL empty when you want to use the local JSON development store.
+cp .env.example .env.local
 ```
 
-### Run Automated Tests
+### Quality checks
 ```bash
-npm test
+npm run lint   # TypeScript check
+npm test       # Full automated regression suite
+npm audit      # Dependency vulnerability check
+npm run build  # Production build
 ```
-All 10 automated unit & integration tests verify:
-1. Strict multi-tenant isolation
-2. Webhook idempotency
-3. Missed-call detection and text-back delivery
-4. 2-Hour deduplication window
-5. SMS suppression (STOP/UNSUBSCRIBE)
-6. TCPA quiet hours compliance
-7. Qualification state machine & emergency job card creation
-8. Carrier forwarding code generator
-9. Subscription billing states & usage tracking
-10. Daily & Weekly recovery report computation
+
+The regression suite covers authentication, tenant isolation, telecom and
+webhook handling, billing, compliance, dashboard metrics and retry behavior,
+deployment/security gates, profile and credential persistence, accessibility,
+and SMTP outcome handling. The live PostgreSQL engine checks are skipped with
+an explicit reason when PostgreSQL is not available at `127.0.0.1:5433`; CI
+runs them against PostgreSQL 16.
+
+Outbound email is disabled unless both `SMTP_URL` and `EMAIL_FROM` are set by
+the operator. The weekly report uses the configured SMTP server when available;
+MCR reports SMTP acceptance but cannot confirm final inbox delivery. No sender
+address or SMTP credentials are supplied by default.
 
 ### Run Development Server
 ```bash

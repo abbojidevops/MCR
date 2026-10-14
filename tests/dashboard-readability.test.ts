@@ -1,4 +1,4 @@
-(process.env as any).NODE_ENV = 'test';
+import './test-env';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,6 +13,7 @@ import { DEFAULT_AVERAGE_TICKET } from '@/lib/constants';
 
 // Route handlers
 import { GET as dashboardGet } from '@/app/api/dashboard/route';
+import { GET as dashboardStatsGet } from '@/app/api/dashboard/stats/route';
 import { GET as callsGet } from '@/app/api/calls/route';
 import { GET as setupStatusGet } from '@/app/api/setup-status/route';
 
@@ -173,9 +174,10 @@ test('D6: Email Service Honesty (No Fabricated 2,450 or 14 Fallbacks)', async ()
     'Email subject must not default to fabricated $2,450'
   );
   assert(
-    rendered.subject.includes('$0 in missed calls'),
-    'Email subject must report $0 when no value exists'
+    rendered.subject.includes('Weekly report: Zero Plumbing') && !rendered.subject.includes('$0'),
+    'Email subject must not turn a missing value into a reported $0'
   );
+  assert.match(rendered.html, /Estimated opportunity value:<\/strong> Not available/);
   assert(
     !rendered.html.includes('2,450'),
     'Email HTML must not contain fabricated $2,450'
@@ -238,4 +240,22 @@ test('D8: Dynamic Milestone Completion on Forwarding Toggle with State Invarianc
     // Restore pristine database state
     db.updateBusinessProfile(TENANT_A, { forwarding_configured: originalForwarding });
   }
+});
+
+test('D9: Dashboard stats do not invent forwarding setup details when a profile is missing', async () => {
+  const token = createSessionToken({ accountId: EMPTY_TENANT, role: 'owner', isDemo: false });
+  const req = createMockRequest(
+    'http://localhost:3001/api/dashboard/stats?range=month',
+    { token }
+  );
+  const res = await dashboardStatsGet(req);
+  assert.equal(res.status, 200);
+
+  const data = await res.json();
+  assert.deepEqual(data.forwardingStatus, {
+    configured: false,
+    carrierName: '',
+    emergencyPhone: '',
+    notificationPhone: '',
+  });
 });

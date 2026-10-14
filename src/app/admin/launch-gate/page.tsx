@@ -113,7 +113,7 @@ export default function LaunchGatePage() {
           </div>
 
           {isLaunchReady ? (
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-bold text-xs text-white shrink-0">
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 font-bold text-xs text-white shrink-0">
               <CheckCircle className="h-4 w-4" /> LAUNCH APPROVED
             </div>
           ) : (

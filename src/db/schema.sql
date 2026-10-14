@@ -86,9 +86,26 @@ CREATE TABLE IF NOT EXISTS business_profiles (
     notification_phone VARCHAR(30),
     carrier_name VARCHAR(100),
     forwarding_configured BOOLEAN DEFAULT FALSE,
+    is_demo BOOLEAN NOT NULL DEFAULT FALSE,
+    average_ticket NUMERIC(12, 2),
+    custom_emergency_keywords JSONB NOT NULL DEFAULT '[]'::jsonb,
+    custom_intake_question TEXT,
+    crm_webhook_url TEXT,
+    crm_webhook_secret TEXT,
+    crm_webhook_events JSONB NOT NULL DEFAULT '["job.created", "job.booked", "job.updated"]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- CREATE TABLE IF NOT EXISTS does not add columns to a table installed by an
+-- earlier release. Keep these additions safe to run on every deployment.
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS average_ticket NUMERIC(12, 2);
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS custom_emergency_keywords JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS custom_intake_question TEXT;
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS crm_webhook_url TEXT;
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS crm_webhook_secret TEXT;
+ALTER TABLE business_profiles ADD COLUMN IF NOT EXISTS crm_webhook_events JSONB NOT NULL DEFAULT '["job.created", "job.booked", "job.updated"]'::jsonb;
 
 -- 5. BUSINESS HOURS
 CREATE TABLE IF NOT EXISTS business_hours (

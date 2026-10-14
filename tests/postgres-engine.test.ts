@@ -11,8 +11,43 @@ import {
   closePostgresPool,
 } from '@/db/postgres';
 import { evaluateLaunchGates } from '@/lib/launch-gate';
+import { Pool } from 'pg';
 
 const LIVE_POSTGRES_URL = 'postgresql://mcr_user:McrSecurePostgresPass2026!DbEngine@127.0.0.1:5433/mcr_db';
+
+let livePostgresAvailability: Promise<boolean> | null = null;
+
+async function hasLivePostgres(): Promise<boolean> {
+  if (!livePostgresAvailability) {
+    livePostgresAvailability = (async () => {
+      const probe = new Pool({
+        connectionString: LIVE_POSTGRES_URL,
+        connectionTimeoutMillis: 750,
+        max: 1,
+      });
+      try {
+        await probe.query('SELECT 1');
+        return true;
+      } catch (error: any) {
+        // Missing local infrastructure is a skip; authentication, database, and
+        // schema errors remain failures so CI cannot hide a broken PostgreSQL job.
+        if (['ECONNREFUSED', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH'].includes(error?.code)) {
+          return false;
+        }
+        throw error;
+      } finally {
+        await probe.end().catch(() => undefined);
+      }
+    })();
+  }
+  return livePostgresAvailability;
+}
+
+async function requireLivePostgres(context: { skip: (message?: string) => void }): Promise<boolean> {
+  if (await hasLivePostgres()) return true;
+  context.skip('PostgreSQL is not running at 127.0.0.1:5433; live integration check skipped');
+  return false;
+}
 
 test('PG-1: Config Integrity & Burned Password Rejection', async () => {
   const originalUrl = process.env.DATABASE_URL;
@@ -59,7 +94,8 @@ test('PG-1: Config Integrity & Burned Password Rejection', async () => {
   }
 });
 
-test('PG-2: Live Database Engine Connectivity & Schema Structure', async () => {
+test('PG-2: Live Database Engine Connectivity & Schema Structure', async (t) => {
+  if (!(await requireLivePostgres(t))) return;
   const originalUrl = process.env.DATABASE_URL;
   process.env.DATABASE_URL = LIVE_POSTGRES_URL;
 
@@ -117,7 +153,8 @@ test('PG-2: Live Database Engine Connectivity & Schema Structure', async () => {
   }
 });
 
-test('PG-3: Dual-Persistence Operations & Cascade Lifecycle', async () => {
+test('PG-3: Dual-Persistence Operations & Cascade Lifecycle', async (t) => {
+  if (!(await requireLivePostgres(t))) return;
   const originalUrl = process.env.DATABASE_URL;
   process.env.DATABASE_URL = LIVE_POSTGRES_URL;
 
@@ -232,7 +269,8 @@ test('PG-4: Launch Gate Evaluation Dynamics (production_database_engine)', async
   }
 });
 
-test('PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL', async () => {
+test('PG-5: Application Dual-Persistence Writes Actually Reach PostgreSQL', async (t) => {
+  if (!(await requireLivePostgres(t))) return;
   // Regression guard for the production-build defect where src/db/repository.ts
   // reached the pool through a dynamic `require('./postgres')`. In the bundled
   // app that namespace has no materialized named exports, so getPostgresPool()
