@@ -44,6 +44,7 @@ export default function DashboardOverviewPage() {
   const fetchDashboardStats = async (selectedRange: DateRangePreset = range) => {
     try {
       setLoading(true);
+      setError(null);
       const res = await fetch(`/api/dashboard/stats?range=${selectedRange}`);
       if (!res.ok) throw new Error('Failed to load dashboard metrics');
       const json = await res.json();
@@ -131,11 +132,15 @@ export default function DashboardOverviewPage() {
 
   if (error || !data) {
     return (
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-red-800">
-        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" />
+      <div
+        role="alert"
+        className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-red-800"
+      >
+        <AlertTriangle className="h-8 w-8 mx-auto mb-2 text-red-600" aria-hidden="true" />
         <h3 className="font-bold text-base">Something went wrong while loading your dashboard.</h3>
         <p className="text-xs text-red-600 mt-1">Please check your connection and try again.</p>
         <button
+          type="button"
           onClick={() => fetchDashboardStats(range)}
           className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
         >

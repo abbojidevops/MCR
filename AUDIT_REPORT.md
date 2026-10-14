@@ -1,8 +1,8 @@
 # MCR — Authenticated Dashboard QA & Improvement Report
 
 **Branch:** `arena/e10e84e6-mcr`
-**Date:** 2026-10-13
-**Live preview:** production build of this branch, `next start -p 3100`
+**Date:** 2026-10-14
+**Live preview:** updated production build of this branch, `next start -p 3000`
 **Status:** PR #4 remains open and unmerged. Review the live preview before merging.
 
 ---
@@ -17,11 +17,11 @@ which were re-verified live.
 | | |
 |---|---|
 | Routes audited | 22 (10 tenant dashboard, 5 operator console, 7 public/legal) |
-| Regression coverage | 60 new or updated checks across the audit, modal, and PostgreSQL-profile suites |
+| Regression coverage | 341 checks are registered in `npm test`; 338 passed and 3 live-PostgreSQL checks skipped locally |
 | `npx tsc --noEmit` | clean |
 | `npm run build` | clean (Next.js 16.4.0, 46/46 pages) |
-| `npm audit` | no known vulnerabilities |
-| `npm test` | **307 / 310 pass; 3 skipped** — live PostgreSQL checks skip when the local server is unavailable |
+| `npm audit` | 0 vulnerabilities |
+| `npm test` | **338 / 341 pass; 3 skipped** — live PostgreSQL checks skip when the local server is unavailable |
 
 ---
 
@@ -180,19 +180,20 @@ Applied across the dashboard and console:
 ### Remaining gaps after the follow-up passes
 
 Modal focus management and console contrast were addressed in §§11.2–11.3, and
-a site-wide skip-to-content link is covered in §18. The existing
-`dashboard-readability` and other suites still have limited assertions for new
-surfaces beyond the honesty checks in §7.
+a site-wide skip-to-content link is covered in §18. This pass adds an API test
+for missing-profile dashboard forwarding data and a React/jsdom interaction test
+for dashboard error recovery. Coverage across the other newer page interactions
+is still limited; the suites do not yet exercise every fetch-driven screen.
 
 ---
 
 ## 7. Test results
 
 ```
-npx tsc --noEmit   → clean
+npm run lint       → clean (tsc --noEmit)
 npm run build      → clean on Next.js 16.4.0 / Tailwind CSS 4.3.3, 46/46 pages
 npm audit          → 0 vulnerabilities
-npm test           → 307 / 310 pass; 3 skipped when local PostgreSQL is unavailable
+npm test           → 338 / 341 pass; 3 skipped when local PostgreSQL is unavailable
 ```
 
 ### Live PostgreSQL checks are environment-dependent
@@ -210,10 +211,18 @@ being hidden as skips.
 
 ### Regression suites
 
-- `tests/audit-fixes.test.ts`: **47/47 passing** — tenant-editable settings,
-  access routing, honest email reporting, and WCAG contrast.
+- `tests/audit-fixes.test.ts`: **51/51 passing** — tenant-editable settings,
+  access routing, honest email reporting, WCAG contrast, and operator navigation.
 - `tests/modal-focus.test.ts`: **7/7 passing** — jsdom runtime checks for focus
   entry, tab cycling, Escape, focus restoration and accessible naming.
+- `tests/dashboard-readability.test.ts`: **9/9 passing** — includes D9, which
+  checks that an account with no business profile gets no made-up carrier or
+  phone details in its dashboard stats response.
+- `tests/dashboard-ui-retry.test.ts`: **1/1 passing** — jsdom renders the actual
+  dashboard page, verifies an accessible load error, retries successfully, and
+  verifies that the error clears.
+- `tests/skip-link.test.ts`: **2/2 passing** — keyboard-order skip link and
+  focusable main-content target.
 - `tests/postgres-profile-persistence.test.ts`: **6/6 passing** — initial
   account/profile write, targeted settings update, database-to-cache hydration,
   failed-write behavior, API error reporting, and schema/migration coverage.
@@ -261,9 +270,11 @@ hours are stored or applied.
 
 ## 9. Live preview
 
-The production build of this branch is running on port **3100** (Next.js 16.4.0,
-Tailwind CSS 4.3.3). The latest login, settings, and access-boundary smoke checks
-passed after the framework update.
+The refreshed production build of this branch is running on port **3000**
+(Next.js 16.4.0, Tailwind CSS 4.3.3). Smoke checks after the dashboard changes
+returned HTTP 200 for `/` and `/api/health`; anonymous `/dashboard` redirected
+to sign-in as expected. The live preview now includes the dashboard forwarding-
+status and retry-state fixes documented in §21.
 
 | Surface | URL | Session |
 |---|---|---|
@@ -670,3 +681,38 @@ the red-probe check. A production build with runtime auth secrets blank generate
 passed type-checking, the test suite, staging pre-flight, production build, and
 the deployment/hygiene/security gate. PR #4 remains open and unmerged for the
 user's preview review.
+
+## 21. Dashboard retry recovery and honest forwarding state (2026-10-14)
+
+The dashboard follow-up found and fixed two real defects:
+
+- `/api/dashboard/stats` replaced the forwarding status calculated by
+  `computeMetrics()` with a second profile lookup that defaulted missing profiles
+  to `configured: true`, `Verizon Wireless`, and sample phone numbers. Removed
+  the redundant lookup and override. The API now returns the metric-derived
+  setup state; when a non-demo account has no profile it reports
+  `configured: false` and blank carrier/phone fields. This is setup data, not
+  proof that a carrier has verified or activated forwarding.
+- The dashboard fetch set its loading state but did not clear a previous error.
+  After a request failed, a later successful retry could therefore remain stuck
+  on the error screen. Each fetch now clears the old error first. The error uses
+  `role="alert"`, its decorative icon is hidden from assistive technology, and
+  the retry control is explicitly `type="button"`.
+
+Regression tests cover both behaviors. D9 in
+`tests/dashboard-readability.test.ts` calls the stats route for an account with
+no business profile and rejects fabricated carrier/phone details.
+`DASHUI-1` in `tests/dashboard-ui-retry.test.ts` renders the actual dashboard in
+jsdom, makes the initial fetch fail and the retry succeed, then checks that the
+error is announced, fresh data was requested, and the error UI disappeared.
+Both tests are included in `npm test`.
+
+**Verification (2026-10-14):** `npm run test:dashboard` passed 9/9;
+`npm run test:dashboard-ui` passed 1/1; `npm run lint` passed; `npm test` passed
+**338 of 341 tests**, with 3 live-PostgreSQL checks skipped because no local
+server was available. `npm run deploy:check` passed, including the complete test
+suite, all seven green probes, and the red-probe check. `npm run build` generated
+46/46 pages and `npm audit` found 0 vulnerabilities. The refreshed production
+preview returned HTTP 200 for `/` and `/api/health`; anonymous `/dashboard`
+redirected to sign-in. PR #4 remains open and unmerged for the user's live-preview
+review.

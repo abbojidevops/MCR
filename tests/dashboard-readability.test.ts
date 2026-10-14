@@ -13,6 +13,7 @@ import { DEFAULT_AVERAGE_TICKET } from '@/lib/constants';
 
 // Route handlers
 import { GET as dashboardGet } from '@/app/api/dashboard/route';
+import { GET as dashboardStatsGet } from '@/app/api/dashboard/stats/route';
 import { GET as callsGet } from '@/app/api/calls/route';
 import { GET as setupStatusGet } from '@/app/api/setup-status/route';
 
@@ -239,4 +240,22 @@ test('D8: Dynamic Milestone Completion on Forwarding Toggle with State Invarianc
     // Restore pristine database state
     db.updateBusinessProfile(TENANT_A, { forwarding_configured: originalForwarding });
   }
+});
+
+test('D9: Dashboard stats do not invent forwarding setup details when a profile is missing', async () => {
+  const token = createSessionToken({ accountId: EMPTY_TENANT, role: 'owner', isDemo: false });
+  const req = createMockRequest(
+    'http://localhost:3001/api/dashboard/stats?range=month',
+    { token }
+  );
+  const res = await dashboardStatsGet(req);
+  assert.equal(res.status, 200);
+
+  const data = await res.json();
+  assert.deepEqual(data.forwardingStatus, {
+    configured: false,
+    carrierName: '',
+    emergencyPhone: '',
+    notificationPhone: '',
+  });
 });
