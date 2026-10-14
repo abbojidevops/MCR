@@ -72,7 +72,7 @@ export default function AuthShell({
       </header>
 
       {/* Body */}
-      <main className="flex flex-1 items-start justify-center px-4 py-10 sm:px-6 sm:py-14">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 items-start justify-center px-4 py-10 sm:px-6 sm:py-14">
         <div className="w-full max-w-md">
           {backLink && (
             <Link

@@ -334,7 +334,7 @@ export default function OnboardingWizard() {
       )}
 
       {/* Main Form Body */}
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-8 sm:px-6">
+      <main id="main-content" tabIndex={-1} className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-8 sm:px-6">
         {submitError && (
           <div
             role="alert"

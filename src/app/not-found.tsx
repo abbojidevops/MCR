@@ -26,7 +26,7 @@ export default function NotFound() {
         </div>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
         <div className="w-full max-w-md text-center">
           <p className="text-6xl font-black tracking-tight text-slate-200">404</p>
           <h1 className="mt-4 text-2xl font-extrabold tracking-tight text-slate-900">

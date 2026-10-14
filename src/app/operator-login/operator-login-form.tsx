@@ -81,7 +81,8 @@ export default function OperatorLoginForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col justify-center bg-slate-900 py-12 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col bg-slate-900 py-12 sm:px-6 lg:px-8">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col justify-center">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-600 text-white shadow-md">
@@ -177,6 +178,7 @@ export default function OperatorLoginForm() {
           </div>
         </div>
       </div>
+      </main>
 
       <footer className="mt-auto border-t border-slate-800 px-4 py-5 text-center text-[11px] text-slate-500">
         <p>

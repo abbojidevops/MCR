@@ -137,6 +137,7 @@ export default function LandingPage() {
         </div>
       </header>
 
+      <main id="main-content" tabIndex={-1}>
       {/* ---------------- HERO SECTION ---------------- */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50/60 via-white to-white py-16 sm:py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -775,6 +776,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      </main>
 
       {/* ---------------- FOOTER (PART 2.4 & PART 2.2) ---------------- */}
       <footer className="border-t border-slate-200 bg-slate-50 py-12 text-xs text-slate-500">

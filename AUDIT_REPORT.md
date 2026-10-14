@@ -177,12 +177,11 @@ Applied across the dashboard and console:
 - Toasts are dismissible with `aria-label`ed close buttons; `type="button"` on
   every non-submit control.
 
-### Known remaining gaps (not fixed — out of scope or needs a product decision)
+### Remaining gaps after the follow-up passes
 
-- Focus is not trapped inside modals and is not restored to the trigger on close.
-- No skip-to-content link.
-- Colour contrast on the dark operator console (`slate-950` / `slate-400`) was
-  not measured.
+Modal focus management and console contrast were addressed in §§11.2–11.3, and
+a site-wide skip-to-content link is now covered in §18. Remaining items:
+
 - `/admin` still renders both the new shell nav *and* its original emoji link
   row — redundant but harmless.
 - `dashboard-readability` and other existing suites were not extended for the
@@ -598,3 +597,21 @@ incorrect operator password returned 401. GitHub CI run
 passed type-checking, the test suite, staging pre-flight, production build, and
 the deployment/hygiene/security gate. PR #4 remains open and unmerged for the
 user's preview review.
+
+## 18. Site-wide skip-to-content access (2026-10-14)
+
+Added a first-in-keyboard-order "Skip to main content" link in the root layout.
+It is visually hidden until focused, then becomes a high-contrast fixed link.
+Each app surface now provides a programmatically focusable `<main id="main-content">`
+target: landing page, tenant dashboard, operator console, sign-in/onboarding,
+public legal/compliance pages, and the 404 page. This closes the skip-link gap
+noted earlier in §6.
+
+`tests/skip-link.test.ts` adds A11Y-SKIP-1/2 and is included in `npm test`.
+**Verification:** `npm run test:skip-link` passed 2/2; `npm run lint` passed;
+`npm run deploy:check` passed 334 tests (331 passed, 3 PostgreSQL checks skipped
+because no local server was available), all seven green security probes, and the
+red-probe check. The production build completed with 46/46 pages. Live production
+HTML on `/`, `/login`, `/operator-login`, `/compliance`, `/terms`, and `/privacy`
+contains both the keyboard skip link and its focusable main target; anonymous
+`/dashboard` still redirects to sign-in. The preview is available for review.

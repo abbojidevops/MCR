@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import SkipLink from '@/components/skip-link';
 
 export const metadata: Metadata = {
   title: 'MCR — Missed Call Revenue Recovery for Local Service Businesses',
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        <SkipLink />
         {children}
       </body>
     </html>
