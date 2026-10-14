@@ -665,5 +665,8 @@ passed 4/4; `npm run test:auth` passed 12/12; `npm test` passed **339 tests**
 available). `npm run deploy:check` passed, including all seven green probes and
 the red-probe check. A production build with runtime auth secrets blank generated
 46/46 pages. The production preview returned HTTP 200 for `/`, `/api/health`, and
-`/login`; anonymous `/admin` was refused with HTTP 401. GitHub CI verification is
-pending. PR #4 remains open and unmerged for the user's preview review.
+`/login`; anonymous `/admin` was refused with HTTP 401. GitHub CI run
+[38570701773](https://github.com/abbojidevops/MCR/actions/runs/38570701773)
+passed type-checking, the test suite, staging pre-flight, production build, and
+the deployment/hygiene/security gate. PR #4 remains open and unmerged for the
+user's preview review.
