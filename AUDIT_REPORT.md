@@ -180,12 +180,9 @@ Applied across the dashboard and console:
 ### Remaining gaps after the follow-up passes
 
 Modal focus management and console contrast were addressed in §§11.2–11.3, and
-a site-wide skip-to-content link is now covered in §18. Remaining items:
-
-- `/admin` still renders both the new shell nav *and* its original emoji link
-  row — redundant but harmless.
-- `dashboard-readability` and other existing suites were not extended for the
-  new surfaces beyond the honesty checks in §7.
+a site-wide skip-to-content link is covered in §18. The existing
+`dashboard-readability` and other suites still have limited assertions for new
+surfaces beyond the honesty checks in §7.
 
 ---
 
@@ -615,3 +612,19 @@ red-probe check. The production build completed with 46/46 pages. Live productio
 HTML on `/`, `/login`, `/operator-login`, `/compliance`, `/terms`, and `/privacy`
 contains both the keyboard skip link and its focusable main target; anonymous
 `/dashboard` still redirects to sign-in. The preview is available for review.
+
+## 19. Operator console navigation cleanup (2026-10-14)
+
+Removed the duplicate Carrier Matrix, Launch Gates, Risk Matrix, and Concierge
+links from the fleet-overview toolbar. These destinations remain in the shared
+operator navigation; the overview keeps its useful Refresh and Client Dashboard
+actions. `OPS-5` in `tests/audit-fixes.test.ts` protects that navigation contract.
+
+**Verification:** `npm run test:audit` passed 51/51; `npm run lint` passed;
+`npm run deploy:check` passed 335 tests (332 passed, 3 PostgreSQL checks skipped
+because no local server was available), all seven green security probes, and the
+red-probe check. The production build completed with 46/46 pages and no auth
+secrets in its environment. The live preview returned HTTP 200 for `/` and
+`/api/health`; anonymous `/admin` still redirects to operator sign-in. `OPS-5`
+asserts the section routes remain in the shared admin shell and are not duplicated
+in the overview toolbar. CI will be checked after the branch push.

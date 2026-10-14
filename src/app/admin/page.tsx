@@ -233,30 +233,6 @@ export default function AdminDashboardPage() {
               Refresh
             </button>
             <Link
-              href="/admin/carrier-matrix"
-              className="inline-flex items-center gap-1 rounded-xl border border-blue-700 bg-blue-950/60 px-3 py-2 text-xs font-semibold text-blue-300 hover:bg-blue-900/80 transition"
-            >
-              📡 Carrier Matrix
-            </Link>
-            <Link
-              href="/admin/launch-gate"
-              className="inline-flex items-center gap-1 rounded-xl border border-emerald-700 bg-emerald-950/60 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-900/80 transition"
-            >
-              🚀 Launch Gates
-            </Link>
-            <Link
-              href="/admin/risks"
-              className="inline-flex items-center gap-1 rounded-xl border border-amber-700 bg-amber-950/60 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-900/80 transition"
-            >
-              ⚠️ Risk Matrix
-            </Link>
-            <Link
-              href="/admin/concierge"
-              className="inline-flex items-center gap-1 rounded-xl border border-purple-700 bg-purple-950/60 px-3 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-900/80 transition"
-            >
-              👥 Concierge Pilots
-            </Link>
-            <Link
               href="/dashboard"
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition"
             >

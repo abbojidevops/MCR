@@ -251,6 +251,20 @@ test('OPS-4: every admin surface offers a sign-out affordance', () => {
   assert.match(shell, /Sign Out/i);
 });
 
+test('OPS-5: the admin shell is the only section navigation; overview keeps refresh and tenant dashboard actions', () => {
+  const shell = read('src/app/admin/admin-shell.tsx');
+  const overview = read('src/app/admin/page.tsx');
+  const sectionRoutes = ['/admin/concierge', '/admin/carrier-matrix', '/admin/risks', '/admin/launch-gate'];
+
+  for (const route of sectionRoutes) {
+    assert.ok(shell.includes(`href: '${route}'`), `operator shell must link to ${route}`);
+    assert.ok(!overview.includes(`href="${route}"`), `overview must not duplicate ${route}`);
+  }
+
+  assert.match(overview, /onClick=\{fetchFleetData\}/, 'fleet refresh must remain available');
+  assert.match(overview, /href="\/dashboard"/, 'operator must retain a route to the tenant dashboard');
+});
+
 // ============================================================================
 // 4. Honesty regressions in the tenant dashboard
 // ============================================================================
